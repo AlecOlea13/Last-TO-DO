@@ -18,8 +18,10 @@ app.use(cors({
     "https://last-to-do-u9vd.vercel.app",
     "http://localhost:5173"
   ],
-  credentials: true
-}));app.use(cors({ origin: "*" }));
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 
