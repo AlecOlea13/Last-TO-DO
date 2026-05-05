@@ -8,6 +8,11 @@ import dns from 'node:dns';
 import userRoutes from "./src/routes/user.routes.js";
 import authRoutes from './src/routes/auth.routes.js';
 import taskRoutes from './src/routes/task.routes.js';
+import clienteRoutes     from "./src/routes/cliente.routes.js";
+import montacargasRoutes from "./src/routes/montacargas.routes.js";
+import rentaRoutes       from "./src/routes/renta.routes.js";
+import servicioRoutes    from "./src/routes/servicio.routes.js";
+import facturaRoutes     from "./src/routes/factura.routes.js";
 
 dns.setServers(['1.1.1.1', '8.8.8.8']);
 dns.setDefaultResultOrder('ipv4first');
@@ -25,10 +30,15 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan('dev'));
 
-app.get('/', (req, res) => res.json({ ok: true, name: 'Alec Todo API' }));
+app.get('/', (req, res) => res.json({ ok: true, name: 'Control Pipsa API' }));
 app.use('/api/auth',  authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/clientes',    clienteRoutes);
+app.use('/api/montacargas', montacargasRoutes);
+app.use('/api/rentas',      rentaRoutes);
+app.use('/api/servicios',   servicioRoutes);
+app.use('/api/facturas',    facturaRoutes);
 
 // Conexión a MongoDB (sin app.listen — Vercel lo maneja)
 const MONGO_URI = process.env.MONGO_URI;
