@@ -84,7 +84,7 @@ body { margin: 0; background: #0b0d10; color: #e7eaee; }
 .ghost { border: 0; background: transparent; color: #b8c2cc; cursor: pointer; padding: 6px 8px; }
 
 .btn { border: 0; padding: 12px 14px; border-radius: 12px; cursor: pointer; }
-.btn.primary { background: #1f6feb; color: #fff; }
+.btn.primary { background: #ddff00; color: #000000; }
 .btn.primary:disabled { opacity: .6; cursor: not-allowed; }
 
 .alert {

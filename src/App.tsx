@@ -1,18 +1,23 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login      from "./pages/Login";
-import Register   from "./pages/Register";
-import Dashboard  from "./pages/Dashboard";
-import Profile    from "./pages/Profile";
-import VerifyEmail from "./pages/VerifyEmail"; // ← nuevo
+import Login        from "./pages/Login";
+import Register     from "./pages/Register";
+import Dashboard    from "./pages/Dashboard";
+import Profile      from "./pages/Profile";
+import VerifyEmail  from "./pages/VerifyEmail";
+import Clientes     from "./pages/Clientes";
+import Montacargas  from "./pages/Montacargas";
+import Rentas       from "./pages/Rentas";
+import Servicios    from "./pages/Servicios";
+import Facturas     from "./pages/Facturas";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"              element={<Login />} />
-        <Route path="/register"      element={<Register />} />
-        <Route path="/verify-email"  element={<VerifyEmail />} /> {/* ← nuevo */}
+        <Route path="/"             element={<Login />} />
+        <Route path="/register"     element={<Register />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
         <Route
           path="/dashboard"
@@ -21,22 +26,23 @@ function App() {
               <Dashboard />
             </ProtectedRoute>
           }
-        />
-        <Route
-          path="/dashboard/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        >
+          <Route path="profile"     element={<Profile />} />
+          <Route path="clientes"    element={<Clientes />} />
+          <Route path="montacargas" element={<Montacargas />} />
+          <Route path="rentas"      element={<Rentas />} />
+          <Route path="servicios"   element={<Servicios />} />
+          <Route path="facturas"    element={<Facturas />} />
+        </Route>
 
         <Route
           path="*"
           element={
-            localStorage.getItem("token")
-              ? <Navigate to="/dashboard" replace />
-              : <Navigate to="/" replace />
+            window.location.pathname === "/verify-email"
+              ? null
+              : localStorage.getItem("token")
+                ? <Navigate to="/dashboard" replace />
+                : <Navigate to="/" replace />
           }
         />
       </Routes>
@@ -45,4 +51,3 @@ function App() {
 }
 
 export default App;
-

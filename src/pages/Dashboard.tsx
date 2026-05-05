@@ -1,217 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
-import "../dashboard.css";
+import { useEffect, useState } from "react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
-import { Link, Outlet } from "react-router-dom";
-import {
-  cacheTasks,
-  getAllTasksLocal,
-  putTaskLocal,
-  removeTaskLocal,
-  queue,
-  type OutboxOp,
-} from "../offline/db";
-import { syncNow, setupOnlineSync } from "../offline/sync";
-
-type Status = "Pendiente" | "En Progreso" | "Completada";
-
-type Task = {
-  _id: string;
-  title: string;
-  description?: string;
-  status: Status;
-  clienteId?: string;
-  createdAt?: string;
-  deleted?: boolean;
-  pending?: boolean;
-};
-
-const isLocalId = (id: string) => !/^[a-f0-9]{24}$/i.test(id);
-
-/** Construye la URL base del servidor sin el segmento /api */
-function getBaseUrl(): string {
-  const raw = (import.meta.env.VITE_API_URL as string) ?? "";
-  return raw.replace(/\/api\/?$/, "");
-}
-
-function buildAvatarUrl(profileImage: string): string {
-  if (!profileImage) return "";
-  if (profileImage.startsWith("http")) return profileImage;
-  const base = getBaseUrl();
-  const clean = profileImage.replace(/^\//, "");
-  // Si el path ya incluye "uploads/" lo usamos directo,
-  // si no, lo añadimos porque el backend sirve los archivos ahí
-  const path = clean.startsWith("uploads/") ? clean : `uploads/${clean}`;
-  return `${base}/${path}`;
-}
-
-function normalizeTask(x: any): Task {
-  return {
-    _id: String(x?._id ?? x?.id),
-    title: String(x?.title ?? "(sin título)"),
-    description: x?.description ?? "",
-    status:
-      x?.status === "Completada" ||
-      x?.status === "En Progreso" ||
-      x?.status === "Pendiente"
-        ? x.status
-        : "Pendiente",
-    clienteId: x?.clienteId,
-    createdAt: x?.createdAt,
-    deleted: !!x?.deleted,
-    pending: !!x?.pending,
-  };
-}
-
-const STATUS_CONFIG: Record<Status, { label: string; color: string; bg: string }> = {
-  Pendiente:    { label: "Pendiente",   color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
-  "En Progreso":{ label: "En Progreso", color: "#3b82f6", bg: "rgba(59,130,246,0.12)"  },
-  Completada:   { label: "Completada",  color: "#22c55e", bg: "rgba(34,197,94,0.12)"   },
-};
+import "../dashboard.css";
 
 export default function Dashboard() {
-  const [loading, setLoading]               = useState(true);
-  const [tasks, setTasks]                   = useState<Task[]>([]);
-  const [title, setTitle]                   = useState("");
-  const [description, setDescription]       = useState("");
-  const [search, setSearch]                 = useState("");
-  const [filter, setFilter]                 = useState<"all" | "active" | "completed">("all");
-  const [editingId, setEditingId]           = useState<string | null>(null);
-  const [editingTitle, setEditingTitle]     = useState("");
-  const [editingDescription, setEditingDescription] = useState("");
-  const [online, setOnline]                 = useState<boolean>(navigator.onLine);
-  const [user, setUser]                     = useState<any>(null);
+  const [user, setUser]     = useState<any>(null);
+  const [stats, setStats]   = useState({ disponibles: 0, rentados: 0, taller: 0, serviciosAbiertos: 0, rentasVencer: 0, facturasPendientes: 0 });
+  const location            = useLocation();
+  const navigate            = useNavigate();
 
   useEffect(() => {
     setAuth(localStorage.getItem("token"));
-
-    (async () => {
-      try {
-        const { data } = await api.get("/users/me");
-        setUser(data);
-      } catch {}
-    })();
-
-    const unsubscribe = setupOnlineSync();
-    const on = async () => { setOnline(true); await syncNow(); await loadFromServer(); };
-    const off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-
-    (async () => {
-      const local = await getAllTasksLocal();
-      if (local?.length) setTasks(local.map(normalizeTask));
-      await loadFromServer();
-      await syncNow();
-      await loadFromServer();
-    })();
-
-    return () => {
-      unsubscribe?.();
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
+    api.get("/users/me").then(r => setUser(r.data)).catch(() => {});
+    loadStats();
   }, []);
 
-  async function loadFromServer() {
+  async function loadStats() {
     try {
-      const { data } = await api.get("/tasks");
-      const raw = Array.isArray(data?.items) ? data.items : [];
-      const list = raw.map(normalizeTask);
-      setTasks(list);
-      await cacheTasks(list);
+      const [montas, servicios, rentas, facturas] = await Promise.all([
+        api.get("/montacargas"),
+        api.get("/servicios"),
+        api.get("/rentas"),
+        api.get("/facturas"),
+      ]);
+      const montaList    = montas.data ?? [];
+      const servicioList = servicios.data ?? [];
+      const rentaList    = rentas.data ?? [];
+      const facturaList  = facturas.data ?? [];
+      const hoy          = new Date();
+      const en30dias     = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      setStats({
+        disponibles:        montaList.filter((m: any) => m.estatus === "disponible").length,
+        rentados:           montaList.filter((m: any) => m.estatus === "rentado").length,
+        taller:             montaList.filter((m: any) => m.estatus === "taller" || m.estatus === "mantenimiento").length,
+        serviciosAbiertos:  servicioList.filter((s: any) => s.estatus !== "cerrado").length,
+        rentasVencer:       rentaList.filter((r: any) => r.estatus === "activa" && r.fechaFin && new Date(r.fechaFin) <= en30dias).length,
+        facturasPendientes: facturaList.filter((f: any) => !f.pagado && new Date(f.fechaVencimiento) < hoy).length,
+      });
     } catch {}
-    finally { setLoading(false); }
-  }
-
-  async function addTask(e: React.FormEvent) {
-    e.preventDefault();
-    const t = title.trim();
-    const d = description.trim();
-    if (!t) return;
-
-    const clienteId = crypto.randomUUID();
-    const localTask = normalizeTask({ _id: clienteId, title: t, description: d, status: "Pendiente" as Status, pending: !navigator.onLine });
-    setTasks((prev) => [localTask, ...prev]);
-    await putTaskLocal(localTask);
-    setTitle("");
-    setDescription("");
-
-    if (!navigator.onLine) {
-      await queue({ id: "op-" + clienteId, op: "create", clienteId, data: localTask, ts: Date.now() });
-      return;
-    }
-    try {
-      const { data } = await api.post("/tasks", { title: t, description: d });
-      const created = normalizeTask(data?.task ?? data);
-      setTasks((prev) => prev.map((x) => (x._id === clienteId ? created : x)));
-      await putTaskLocal(created);
-    } catch {
-      await queue({ id: "op-" + clienteId, op: "create", clienteId, data: localTask, ts: Date.now() });
-    }
-  }
-
-  function startEdit(task: Task) {
-    setEditingId(task._id);
-    setEditingTitle(task.title);
-    setEditingDescription(task.description ?? "");
-  }
-
-  async function saveEdit(taskId: string) {
-    const newTitle = editingTitle.trim();
-    const newDesc  = editingDescription.trim();
-    if (!newTitle) return;
-
-    const before  = tasks.find((t) => t._id === taskId);
-    const patched = { ...before, title: newTitle, description: newDesc } as Task;
-    setTasks((prev) => prev.map((t) => (t._id === taskId ? patched : t)));
-    await putTaskLocal(patched);
-    setEditingId(null);
-
-    const opData = { title: newTitle, description: newDesc };
-    if (!navigator.onLine) {
-      await queue({ id: "upd-" + taskId, op: "update", clienteId: isLocalId(taskId) ? taskId : undefined, serverId: isLocalId(taskId) ? undefined : taskId, data: opData, ts: Date.now() } as OutboxOp);
-      return;
-    }
-    try {
-      await api.put(`/tasks/${taskId}`, opData);
-    } catch {
-      await queue({ id: "upd-" + taskId, op: "update", serverId: taskId, data: opData, ts: Date.now() } as OutboxOp);
-    }
-  }
-
-  async function handleStatusChange(task: Task, newStatus: Status) {
-    const updated = { ...task, status: newStatus };
-    setTasks((prev) => prev.map((x) => (x._id === task._id ? updated : x)));
-    await putTaskLocal(updated);
-
-    const opData = { status: newStatus };
-    if (!navigator.onLine) {
-      await queue({ id: "upd-" + task._id, op: "update", serverId: isLocalId(task._id) ? undefined : task._id, clienteId: isLocalId(task._id) ? task._id : undefined, data: opData, ts: Date.now() });
-      return;
-    }
-    try {
-      await api.put(`/tasks/${task._id}`, opData);
-    } catch {
-      await queue({ id: "upd-" + task._id, op: "update", serverId: task._id, data: opData, ts: Date.now() });
-    }
-  }
-
-  async function removeTask(taskId: string) {
-    const backup = tasks;
-    setTasks((prev) => prev.filter((t) => t._id !== taskId));
-    await removeTaskLocal(taskId);
-
-    if (!navigator.onLine) {
-      await queue({ id: "del-" + taskId, op: "delete", serverId: isLocalId(taskId) ? undefined : taskId, clienteId: isLocalId(taskId) ? taskId : undefined, ts: Date.now() });
-      return;
-    }
-    try {
-      await api.delete(`/tasks/${taskId}`);
-    } catch {
-      setTasks(backup);
-      for (const t of backup) await putTaskLocal(t);
-      await queue({ id: "del-" + taskId, op: "delete", serverId: taskId, clienteId: isLocalId(taskId) ? taskId : undefined, ts: Date.now() });
-    }
   }
 
   function logout() {
@@ -220,234 +46,143 @@ export default function Dashboard() {
     window.location.href = "/";
   }
 
-  const filtered = useMemo(() => {
-    let list = tasks;
-    if (search.trim()) {
-      const s = search.toLowerCase();
-      list = list.filter((t) => (t.title || "").toLowerCase().includes(s) || (t.description || "").toLowerCase().includes(s));
-    }
-    if (filter === "active")    list = list.filter((t) => t.status !== "Completada");
-    if (filter === "completed") list = list.filter((t) => t.status === "Completada");
-    return list;
-  }, [tasks, search, filter]);
+  const navItems = [
+    { to: "/dashboard",            icon: "📊", label: "Dashboard" },
+    { to: "/dashboard/montacargas",icon: "🏗️",  label: "Montacargas" },
+    { to: "/dashboard/clientes",   icon: "🏢", label: "Clientes" },
+    { to: "/dashboard/rentas",     icon: "📋", label: "Rentas" },
+    { to: "/dashboard/servicios",  icon: "🔧", label: "Servicios" },
+    { to: "/dashboard/facturas",   icon: "💰", label: "Cobranza" },
+  ];
 
-  const stats = useMemo(() => {
-    const total = tasks.length;
-    const done  = tasks.filter((t) => t.status === "Completada").length;
-    return { total, done, pending: total - done };
-  }, [tasks]);
-
-  const completionPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+  const isDashboard = location.pathname === "/dashboard";
 
   return (
     <div className="dash-root">
-      {/* ── SIDEBAR ── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-icon">🥪</span>
+          <span className="brand-icon">🏗️</span>
           <div>
-            <p className="brand-title">Lonches</p>
-            <p className="brand-sub">To-Do PWA</p>
+            <p className="brand-title">Control Pipsa</p>
+            <p className="brand-sub">Gestión de Flota</p>
           </div>
         </div>
 
-        {/* User card */}
         <div className="sidebar-user">
-          {user?.profileImage ? (
-            <img
-              src={buildAvatarUrl(user.profileImage)}
-              alt={user?.name ?? "Perfil"}
-              className="sidebar-avatar"
-              onError={(e) => {
-                // Si falla la imagen mostramos el placeholder inicial
-                const target = e.currentTarget;
-                target.style.display = "none";
-                const placeholder = target.nextElementSibling as HTMLElement | null;
-                if (placeholder) placeholder.style.display = "flex";
-              }}
-            />
-          ) : null}
-          <div
-            className="sidebar-avatar-placeholder"
-            style={{ display: user?.profileImage ? "none" : "flex" }}
-          >
+          <div className="sidebar-avatar-placeholder">
             {user?.name?.[0]?.toUpperCase() ?? "?"}
           </div>
-          <div className="sidebar-user-info">
+          <div>
             <p className="sidebar-user-name">{user?.name ?? "Usuario"}</p>
-            <Link to="profile" className="sidebar-profile-link">Editar perfil →</Link>
+            <p className="sidebar-user-role">Administrador</p>
           </div>
         </div>
 
-        {/* Connection */}
-        <div className={`sidebar-connection ${online ? "online" : "offline"}`}>
-          <span className="conn-dot" />
-          <span>{online ? "En línea" : "Sin conexión"}</span>
-        </div>
-
-        {/* Stats */}
-        <div className="sidebar-stats">
-          <div className="stat-card">
-            <p className="stat-num">{stats.total}</p>
-            <p className="stat-label">Total</p>
-          </div>
-          <div className="stat-card">
-            <p className="stat-num" style={{ color: "#22c55e" }}>{stats.done}</p>
-            <p className="stat-label">Hechas</p>
-          </div>
-          <div className="stat-card">
-            <p className="stat-num" style={{ color: "#f59e0b" }}>{stats.pending}</p>
-            <p className="stat-label">Pendientes</p>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="sidebar-progress">
-          <div className="progress-header">
-            <span>Progreso</span>
-            <span>{completionPct}%</span>
-          </div>
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${completionPct}%` }} />
-          </div>
-        </div>
+        <p className="nav-section-label">Menú</p>
+        {navItems.map(item => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className={`nav-item ${location.pathname === item.to ? "active" : ""}`}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            {item.label}
+          </Link>
+        ))}
 
         <div className="sidebar-spacer" />
-
         <button className="sidebar-logout" onClick={logout}>
           <span>↩</span> Cerrar sesión
         </button>
       </aside>
 
-      {/* ── MAIN ── */}
       <div className="dash-main">
-        <Outlet context={{ user }} />
-
-        {/* Add form */}
-        <section className="add-section">
-          <h2 className="section-title">Nueva tarea</h2>
-          <form className="add-form" onSubmit={addTask}>
-            <input
-              className="add-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="¿Qué necesitas hacer?"
-            />
-            <textarea
-              className="add-textarea"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Descripción opcional…"
-              rows={2}
-            />
-            <button className="add-btn" type="submit">
-              <span className="add-btn-icon">+</span> Agregar tarea
-            </button>
-          </form>
-        </section>
-
-        {/* Task list */}
-        <section className="list-section">
-          <div className="list-toolbar">
-            <input
-              className="search-input"
-              placeholder="🔍  Buscar tareas…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="filter-chips">
-              {(["all", "active", "completed"] as const).map((f) => (
-                <button
-                  key={f}
-                  className={`filter-chip ${filter === f ? "active" : ""}`}
-                  onClick={() => setFilter(f)}
-                >
-                  {{ all: "Todas", active: "Activas", completed: "Hechas" }[f]}
-                </button>
-              ))}
+        {isDashboard ? (
+          <>
+            <div className="page-header">
+              <div>
+                <h1 className="page-title">Dashboard</h1>
+                <p className="page-subtitle">Resumen general de la flota</p>
+              </div>
             </div>
-          </div>
+            <div className="page-content">
+              <div className="stats-grid">
+                <div className="stat-card" onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">✅</span>
+                  <p className="stat-card-value" style={{ color: "var(--green)" }}>{stats.disponibles}</p>
+                  <p className="stat-card-label">Disponibles</p>
+                  <div className="stat-card-accent" style={{ background: "var(--green)" }} />
+                </div>
+                <div className="stat-card" onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">📦</span>
+                  <p className="stat-card-value" style={{ color: "var(--blue)" }}>{stats.rentados}</p>
+                  <p className="stat-card-label">Rentados</p>
+                  <div className="stat-card-accent" style={{ background: "var(--blue)" }} />
+                </div>
+                <div className="stat-card" onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">🔧</span>
+                  <p className="stat-card-value" style={{ color: "var(--orange)" }}>{stats.taller}</p>
+                  <p className="stat-card-label">En Taller</p>
+                  <div className="stat-card-accent" style={{ background: "var(--orange)" }} />
+                </div>
+                <div className="stat-card" onClick={() => navigate("/dashboard/servicios")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">⚠️</span>
+                  <p className="stat-card-value" style={{ color: "var(--accent)" }}>{stats.serviciosAbiertos}</p>
+                  <p className="stat-card-label">Servicios Abiertos</p>
+                  <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
+                </div>
+                <div className="stat-card" onClick={() => navigate("/dashboard/rentas")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">📅</span>
+                  <p className="stat-card-value" style={{ color: "var(--purple)" }}>{stats.rentasVencer}</p>
+                  <p className="stat-card-label">Rentas por Vencer</p>
+                  <div className="stat-card-accent" style={{ background: "var(--purple)" }} />
+                </div>
+                <div className="stat-card" onClick={() => navigate("/dashboard/facturas")} style={{ cursor: "pointer" }}>
+                  <span className="stat-card-icon">💸</span>
+                  <p className="stat-card-value" style={{ color: "var(--red)" }}>{stats.facturasPendientes}</p>
+                  <p className="stat-card-label">Facturas Vencidas</p>
+                  <div className="stat-card-accent" style={{ background: "var(--red)" }} />
+                </div>
+              </div>
 
-          {loading ? (
-            <div className="loading-state">
-              <div className="spinner" />
-              <p>Cargando tareas…</p>
+              <div className="table-card">
+                <div className="table-card-header">
+                  <p className="table-card-title">Accesos rápidos</p>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 1 }}>
+                  {[
+                    { to: "/dashboard/montacargas", icon: "🏗️", label: "Ver todos los montacargas", color: "var(--blue)" },
+                    { to: "/dashboard/clientes",    icon: "🏢", label: "Gestionar clientes",         color: "var(--green)" },
+                    { to: "/dashboard/rentas",      icon: "📋", label: "Ver rentas activas",         color: "var(--purple)" },
+                    { to: "/dashboard/servicios",   icon: "🔧", label: "Servicios pendientes",       color: "var(--accent)" },
+                    { to: "/dashboard/facturas",    icon: "💰", label: "Cobranza pendiente",         color: "var(--red)" },
+                  ].map(item => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "16px 20px",
+                        borderBottom: "1px solid var(--border)",
+                        textDecoration: "none", color: "var(--text)",
+                        fontSize: "0.88rem", fontWeight: 500,
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span style={{ fontSize: "1.3rem" }}>{item.icon}</span>
+                      {item.label}
+                      <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.8rem" }}>→</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-icon">📋</span>
-              <p>Sin tareas por aquí</p>
-            </div>
-          ) : (
-            <ul className="task-list">
-              {filtered.map((t) => {
-                const cfg = STATUS_CONFIG[t.status];
-                return (
-                  <li
-                    key={t._id}
-                    className={`task-item ${t.status === "Completada" ? "is-done" : ""}`}
-                  >
-                    {/* Status pill / select */}
-                    <div className="task-status-wrap">
-                      <select
-                        value={t.status}
-                        onChange={(e) => handleStatusChange(t, e.target.value as Status)}
-                        className="status-select"
-                        style={{ color: cfg.color, background: cfg.bg, borderColor: cfg.color + "55" }}
-                      >
-                        <option value="Pendiente">Pendiente</option>
-                        <option value="En Progreso">En Progreso</option>
-                        <option value="Completada">Completada</option>
-                      </select>
-                    </div>
-
-                    {/* Content */}
-                    <div className="task-content">
-                      {editingId === t._id ? (
-                        <>
-                          <input
-                            className="edit-input"
-                            value={editingTitle}
-                            onChange={(e) => setEditingTitle(e.target.value)}
-                            autoFocus
-                          />
-                          <textarea
-                            className="edit-textarea"
-                            value={editingDescription}
-                            onChange={(e) => setEditingDescription(e.target.value)}
-                            rows={2}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <p className="task-title" onDoubleClick={() => startEdit(t)}>{t.title}</p>
-                          {t.description && <p className="task-desc">{t.description}</p>}
-                          {(t.pending || isLocalId(t._id)) && (
-                            <span className="sync-badge">⏳ Pendiente de sincronizar</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="task-actions">
-                      {editingId === t._id ? (
-                        <button className="action-save" onClick={() => saveEdit(t._id)}>Guardar</button>
-                      ) : (
-                        <button className="action-btn edit-btn" onClick={() => startEdit(t)} title="Editar">
-                          ✏️
-                        </button>
-                      )}
-                      <button className="action-btn delete-btn" onClick={() => removeTask(t._id)} title="Eliminar">
-                        🗑️
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+          </>
+        ) : (
+          <Outlet />
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
-import logo from '../assets/logogori.png';
+import logo from '../assets/logopip.png';
 
 export default function Login() {
 
@@ -33,7 +33,7 @@ export default function Login() {
         <div className="card">
             <div className="brand">
                 <img src={logo} alt="Logo" className="logo-img" />
-                <h2>LONCHES TO-DO PWA</h2>
+                <h2>Control Pipsa</h2>
                 <p className="muted">Bienvenido de vuelta, para ingresar inicie sesión</p>
             </div>
             <form className="form" onSubmit={onSubmit}>
