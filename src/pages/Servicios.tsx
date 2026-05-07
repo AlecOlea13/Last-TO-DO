@@ -22,17 +22,17 @@ const emptyForm = {
   problema: "", tecnicoAsignado: "", costoRefacciones: 0, costoManoObra: 0, horometro: 0,
 };
 
-const ESTATUS_BADGE: Record<string, string> = {
-  abierto:    "badge-red",
-  en_proceso: "badge-amber",
-  cerrado:    "badge-gray",
-};
+// const ESTATUS_BADGE: Record<string, string> = {
+//   abierto:    "badge-red",
+//   en_proceso: "badge-amber",
+//   cerrado:    "badge-gray",
+// };
 
-const ESTATUS_LABEL: Record<string, string> = {
-  abierto:    "Abierto",
-  en_proceso: "En proceso",
-  cerrado:    "Cerrado",
-};
+// const ESTATUS_LABEL: Record<string, string> = {
+//   abierto:    "Abierto",
+//   en_proceso: "En proceso",
+//   cerrado:    "Cerrado",
+// };
 
 export default function Servicios() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
