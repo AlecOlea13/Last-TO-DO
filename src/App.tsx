@@ -10,6 +10,7 @@ import Rentas       from "./pages/Rentas";
 import Servicios    from "./pages/Servicios";
 import Facturas     from "./pages/Facturas";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import Cotizaciones from "./pages/Cotizaciones";
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
           <Route path="rentas"      element={<Rentas />} />
           <Route path="servicios"   element={<Servicios />} />
           <Route path="facturas"    element={<Facturas />} />
+          <Route path="cotizaciones" element={<Cotizaciones />} />
         </Route>
 
         <Route
