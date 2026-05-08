@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login        from "./pages/Login";
 import Register     from "./pages/Register";
 import Dashboard    from "./pages/Dashboard";
@@ -20,29 +20,13 @@ function App() {
         <Route path="/verify-email" element={<VerifyEmail />} />
 
         <Route
-  path="/dashboard"
-  element={
-    <ProtectedRoute>
-      <Dashboard />
-    </ProtectedRoute>
-  }
->
-  <Route path="clientes"    element={<Clientes />} />
-  <Route path="montacargas" element={<Montacargas />} />
-  <Route path="rentas"      element={<Rentas />} />
-  <Route path="servicios"   element={<Servicios />} />
-  <Route path="facturas"    element={<Facturas />} />
-</Route>
-
-<Route
-  path="/dashboard/profile"
-  element={
-    <ProtectedRoute>
-      <Profile />
-    </ProtectedRoute>
-  }
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
         >
-          <Route path="profile"     element={<Profile />} />
           <Route path="clientes"    element={<Clientes />} />
           <Route path="montacargas" element={<Montacargas />} />
           <Route path="rentas"      element={<Rentas />} />
@@ -51,13 +35,11 @@ function App() {
         </Route>
 
         <Route
-          path="*"
+          path="/dashboard/profile"
           element={
-            window.location.pathname === "/verify-email"
-              ? null
-              : localStorage.getItem("token")
-                ? <Navigate to="/dashboard" replace />
-                : <Navigate to="/" replace />
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
           }
         />
       </Routes>
