@@ -187,4 +187,5 @@ export default function Dashboard() {
     </div>
   );
 }
-
+const isDashboard = location.pathname === "/dashboard";
+console.log("pathname:", location.pathname, "isDashboard:", isDashboard);
