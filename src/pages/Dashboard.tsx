@@ -181,7 +181,7 @@ export default function Dashboard() {
             </div>
           </>
         ) : (
-          <Outlet />
+          <Outlet context={{ user }} />
         )}
       </div>
     </div>
