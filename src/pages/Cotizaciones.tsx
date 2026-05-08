@@ -31,10 +31,10 @@ const emptyForm: any = {
 
 const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0 };
 
-const ESTATUS_BADGE: Record<string, string> = {
-  borrador: "badge-gray", enviada: "badge-blue",
-  aceptada: "badge-green", rechazada: "badge-red",
-};
+// const ESTATUS_BADGE: Record<string, string> = {
+//   borrador: "badge-gray", enviada: "badge-blue",
+//   aceptada: "badge-green", rechazada: "badge-red",
+// };
 
 const TIPO_BADGE: Record<string, string> = {
   servicio: "badge-amber", renta: "badge-blue", venta: "badge-green",
