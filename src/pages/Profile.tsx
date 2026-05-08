@@ -68,9 +68,9 @@ export default function Profile() {
   }
 
   return (
-    <div className="profile-overlay" onClick={(e) => { if (e.target === e.currentTarget) navigate(-1); }}>
+    <div className="profile-overlay" onClick={(e) => { if (e.target === e.currentTarget) navigate("/dashboard"); }}>
       <div className="profile-card">
-        <button className="profile-close" onClick={() => navigate(-1)}>✕</button>
+        <button className="profile-close" onClick={() => navigate("/dashboard")}>✕</button>
 
         <h2 className="profile-title">Mi Perfil</h2>
 
