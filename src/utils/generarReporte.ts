@@ -94,7 +94,7 @@ export function generarReporte(cot: CotizacionReporte) {
 `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
 "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial<br>",
 "45602, Zapopán, Jal.<br>",
-"www.pipsamontacargas.com",
+"www.pipsamontacargas.com<br>",
 "3338568329 / 3334400214",
 "</div>",
 "</div>",
