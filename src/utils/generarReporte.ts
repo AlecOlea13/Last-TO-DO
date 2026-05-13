@@ -5,11 +5,13 @@ export type ItemReporte = {
   total: number;
   imagen?: string;
 };
+
 export type CotizacionReporte = {
   folio: string;
   tipo: string;
   cliente?: { nombre: string };
   montacargas?: { marca: string; modelo: string };
+  asesor?: { nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
   lugar: string;
   descripcionServicio?: string;
@@ -20,20 +22,25 @@ export type CotizacionReporte = {
 };
 
 export function generarReporte(cot: CotizacionReporte) {
-  const fecha = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
+  const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
+  const asesorPuesto = cot.asesor?.puesto   ?? "Asesor comercial";
+  const asesorTel    = cot.asesor?.telefono ?? "33 1322 5453";
+  const asesorEmail  = cot.asesor?.email    ?? "juanpablo@pipsamontacargas.com";
+
   const itemsHtml = cot.items.map(item =>
-  `<tr>
-    <td style="text-align:center;padding:6px 8px;border:1px solid #ddd">${item.cantidad}</td>
-    <td style="padding:6px 8px;border:1px solid #ddd">
-      ${item.imagen ? `<img src="${item.imagen}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle" />` : ""}
-      ${item.descripcion}
-    </td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-  </tr>`
-).join("");
+    `<tr>
+      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd">${item.cantidad}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd">
+        ${item.imagen ? `<img src="${item.imagen}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle" />` : ""}
+        ${item.descripcion}
+      </td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+    </tr>`
+  ).join("");
 
   const html = [
     "<!DOCTYPE html>",
@@ -105,10 +112,10 @@ export function generarReporte(cot: CotizacionReporte) {
     "</div>",
     '<div class="signature">',
     "<strong>A T E N T A M E N T E.</strong>",
-    '<div class="name">Juan Pablo Montúfar Cruz.</div>',
-    "Asesor comercial.<br>",
-    "Cel. 33 1322 5453<br>",
-    "juanpablo@pipsamontacargas.com",
+    `<div class="name">${asesorNombre}.</div>`,
+    `${asesorPuesto}.<br>`,
+    `Cel. ${asesorTel}<br>`,
+    asesorEmail,
     "</div>",
     '<div class="footer">',
     "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial, 45602, Zapopán, Jal. &nbsp;|&nbsp; www.pipsamontacargas.com",
