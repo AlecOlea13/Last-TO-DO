@@ -15,7 +15,7 @@ export type CotizacionReporte = {
 
 export function generarReporte(cot: CotizacionReporte) {
   const fecha = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const logoUrl = "/Pipsa_logo_png.png";
+  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
   const itemsHtml = cot.items.map(item =>
     `<tr>
