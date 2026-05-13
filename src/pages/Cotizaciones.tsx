@@ -338,6 +338,8 @@ export default function Cotizaciones() {
 // Generador de reporte PDF en nueva ventana
 function generarReporte(cot: Cotizacion) {
   const fecha = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const logoBase64 = "data:image/jpeg;base64,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";
+
   const itemsHtml = cot.items.map(item => `
     <tr>
       <td style="text-align:center;padding:6px 8px;border:1px solid #ddd">${item.cantidad}</td>
@@ -354,31 +356,36 @@ function generarReporte(cot: Cotizacion) {
   <title>${cot.folio}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 800px; margin: auto; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #222; padding-bottom: 12px; }
-    .company-name { font-size: 13pt; font-weight: bold; max-width: 400px; }
-    .client-block { text-align: right; font-size: 10pt; line-height: 1.6; }
-    .subject { background: #f5f5f5; padding: 10px 14px; margin: 16px 0; font-weight: bold; border-left: 4px solid #222; }
-    .intro { margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
+    body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 820px; margin: auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #222; }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }
+    .company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }
+    .client-block { text-align: right; font-size: 10pt; line-height: 1.7; }
+    .subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; }
+    .intro { margin-bottom: 10px; font-size: 10pt; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
     thead { background: #222; color: white; }
     thead th { padding: 8px; text-align: left; }
-    thead th:first-child { text-align: center; }
-    thead th:last-child, thead th:nth-child(3) { text-align: right; }
+    thead th:first-child { text-align: center; width: 60px; }
+    thead th:last-child, thead th:nth-child(3) { text-align: right; width: 110px; }
     .totals { margin-top: 8px; text-align: right; font-size: 10pt; }
-    .totals .total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }
-    .totals .grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }
-    .conditions { margin-top: 20px; font-size: 9pt; line-height: 1.7; color: #444; }
+    .total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }
+    .grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }
+    .conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }
     .conditions strong { color: #222; }
-    .signature { margin-top: 32px; text-align: center; font-size: 10pt; }
-    .signature .name { font-weight: bold; font-size: 11pt; margin-top: 8px; }
-    .footer { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 10px; font-size: 9pt; color: #666; text-align: center; }
+    .signature { margin-top: 28px; text-align: center; font-size: 10pt; }
+    .signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 9pt; color: #666; text-align: center; }
     @media print { body { padding: 16px; } }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>
+    <div class="header-left">
+      <img src="${logoBase64}" class="logo" alt="Pipsa Logo" />
+      <div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>
+    </div>
     <div class="client-block">
       <strong>${cot.lugar}; ${fecha}.</strong><br>
       ${cot.cliente?.nombre ?? ""}.<br>
@@ -393,15 +400,13 @@ function generarReporte(cot: Cotizacion) {
   <table>
     <thead>
       <tr>
-        <th style="width:60px">CANTIDAD</th>
+        <th>CANTIDAD</th>
         <th>DESCRIPCIÓN</th>
-        <th style="width:110px">PRECIO U.</th>
-        <th style="width:110px">TOTAL</th>
+        <th>PRECIO U.</th>
+        <th>TOTAL</th>
       </tr>
     </thead>
-    <tbody>
-      ${itemsHtml}
-    </tbody>
+    <tbody>${itemsHtml}</tbody>
   </table>
 
   <div class="totals">
@@ -432,10 +437,18 @@ function generarReporte(cot: Cotizacion) {
     Bahías de Huatulco No. 99-A, Col. Agua blanca industrial, 45602, Zapopán, Jal. &nbsp;|&nbsp; www.pipsamontacargas.com
   </div>
 
-  <script>window.onload = () => window.print();</script>
+  <script>
+    window.onload = () => {
+      setTimeout(() => window.print(), 500);
+      window.onafterprint = () => window.close();
+    };
+  </script>
 </body>
 </html>`;
 
-  const win = window.open("", "_blank");
-  if (win) { win.document.write(html); win.document.close(); }
+  const blob = new Blob([html], { type: "text/html" });
+  const url  = URL.createObjectURL(blob);
+  const win  = window.open(url, "_blank");
+  if (win) win.focus();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
