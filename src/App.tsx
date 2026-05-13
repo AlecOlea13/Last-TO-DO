@@ -11,6 +11,7 @@ import Servicios    from "./pages/Servicios";
 import Facturas     from "./pages/Facturas";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import Cotizaciones from "./pages/Cotizaciones";
+import Asesores from "./pages/Asesores";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="servicios"   element={<Servicios />} />
           <Route path="facturas"    element={<Facturas />} />
           <Route path="cotizaciones" element={<Cotizaciones />} />
+          <Route path="asesores" element={<Asesores />} />
         </Route>
 
         <Route

@@ -54,6 +54,7 @@ export default function Dashboard() {
     { to: "/dashboard/servicios",  icon: "🔧", label: "Servicios" },
     { to: "/dashboard/facturas",   icon: "💰", label: "Cobranza" },
     { to: "/dashboard/cotizaciones", icon: "📄", label: "Cotizaciones" },
+    { to: "/dashboard/asesores", icon: "👤", label: "Asesores" },
   ];
 
   const isDashboard = location.pathname === "/dashboard";
