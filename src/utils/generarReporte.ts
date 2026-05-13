@@ -149,9 +149,9 @@ export function generarReporte(cot: CotizacionReporte) {
     asesorEmail,
     "</div>",
 
-    '<div class="footer">',
-    "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial, 45602, Zapopán, Jal. &nbsp;|&nbsp; www.pipsamontacargas.com",
-    "</div>",
+    // '<div class="footer">',
+    // "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial, 45602, Zapopán, Jal. &nbsp;|&nbsp; www.pipsamontacargas.com",
+    // "</div>",
 
     "<script>",
     "window.onload = function() { document.title = '" + cot.folio + "'; };",
