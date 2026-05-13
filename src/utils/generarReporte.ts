@@ -85,15 +85,19 @@ export function generarReporte(cot: CotizacionReporte) {
     "<body>",
 
     // Header
-    '<div class="header">',
-    '<div class="header-left">',
-    `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
-    '<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
-    "</div>",
-    '<div class="header-right">',
-    `<strong>${cot.lugar}; ${fecha}.</strong>`,
-    "</div>",
-    "</div>",
+'<div class="header">',
+'<div class="header-left">',
+`<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
+'<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
+"</div>",
+'<div class="header-right">',
+`<strong>${cot.lugar}; ${fecha}.</strong><br>`,
+"Bahías de Huatulco No. 99-A, Col. Agua blanca industrial<br>",
+"45602, Zapopán, Jal.<br>",
+"www.pipsamontacargas.com",
+"3338568329 / 3334400214",
+"</div>",
+"</div>",
 
     // Info cliente debajo del header
     '<div class="client-info">',
