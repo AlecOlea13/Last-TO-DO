@@ -9,7 +9,7 @@ export type ItemReporte = {
 export type CotizacionReporte = {
   folio: string;
   tipo: string;
-  cliente?: { nombre: string };
+  cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: { marca: string; modelo: string };
   asesor?: { nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
@@ -29,6 +29,11 @@ export function generarReporte(cot: CotizacionReporte) {
   const asesorPuesto = cot.asesor?.puesto   ?? "Asesor comercial";
   const asesorTel    = cot.asesor?.telefono ?? "33 1322 5453";
   const asesorEmail  = cot.asesor?.email    ?? "juanpablo@pipsamontacargas.com";
+
+  const clienteNombre   = cot.cliente?.nombre    ?? "";
+  const clienteDirec    = cot.cliente?.direccion ?? "";
+  const clienteTel      = cot.cliente?.telefono  ?? "";
+  const clienteContacto = cot.cliente?.contacto  ?? "";
 
   const itemsHtml = cot.items.map(item =>
     `<tr>
@@ -55,7 +60,7 @@ export function generarReporte(cot: CotizacionReporte) {
     ".header-left { display: flex; align-items: center; gap: 14px; }",
     ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
-    ".client-block { text-align: right; font-size: 10pt; line-height: 1.7; }",
+    ".client-block { text-align: right; font-size: 10pt; line-height: 1.8; }",
     ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; }",
     ".intro { margin-bottom: 10px; font-size: 10pt; }",
     "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }",
@@ -82,8 +87,11 @@ export function generarReporte(cot: CotizacionReporte) {
     "</div>",
     '<div class="client-block">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    `${cot.cliente?.nombre ?? ""}.<br>`,
-    `${cot.montacargas ? cot.montacargas.marca + " " + cot.montacargas.modelo + "." : ""}`,
+    `<strong>${clienteNombre}.</strong><br>`,
+    clienteDirec    ? clienteDirec + ".<br>"            : "",
+    clienteTel      ? "Tel. " + clienteTel + "<br>"     : "",
+    clienteContacto ? "At&#39;n: " + clienteContacto + "<br>" : "",
+    cot.montacargas ? "<strong>Montacargas " + cot.montacargas.marca + " " + cot.montacargas.modelo + ".</strong>" : "",
     "</div>",
     "</div>",
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio}</div>` : "",
@@ -101,14 +109,19 @@ export function generarReporte(cot: CotizacionReporte) {
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     "</div>",
-    '<div class="conditions">',
-    "<strong>Condiciones comerciales:</strong><br>",
-    "<strong>Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.</strong>",
-    " El servicio solo incluye lo señalado en esta cotización. De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.",
-    " Vigencia de la cotización, es de 15 días naturales.",
-    " <strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong>",
-    " Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados. En partes eléctricas no hay garantía. Las existencias son salvo previa venta.",
-    " <em>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</em>",
+   '<div class="conditions">',
+    "<strong>Condiciones comerciales:</strong>",
+    "<ul style='margin-top:6px;padding-left:18px;'>",
+    "<li><strong>Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.</strong></li>",
+    "<li>El servicio solo incluye lo señalado en esta cotización.</li>",
+    "<li>De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.</li>",
+    "<li>Vigencia de la cotización, es de 15 días naturales.</li>",
+    "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
+    "<li>Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.</li>",
+    "<li>En partes eléctricas no hay garantía.</li>",
+    "<li>Las existencias son salvo previa venta.</li>",
+    "</ul>",
+    "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
     "</div>",
     '<div class="signature">',
     "<strong>A T E N T A M E N T E.</strong>",
@@ -121,7 +134,7 @@ export function generarReporte(cot: CotizacionReporte) {
     "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial, 45602, Zapopán, Jal. &nbsp;|&nbsp; www.pipsamontacargas.com",
     "</div>",
     "<script>",
-    "window.onload = function() { setTimeout(function() { window.print(); }, 500); window.onafterprint = function() { window.close(); }; };",
+    "window.onload = function() { document.title = '" + cot.folio + "'; };",
     "</script>",
     "</body>",
     "</html>",
