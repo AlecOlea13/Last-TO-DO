@@ -36,16 +36,16 @@ export function generarReporte(cot: CotizacionReporte) {
   const clienteContacto = cot.cliente?.contacto  ?? "";
 
   const itemsHtml = cot.items.map(item =>
-    `<tr>
-      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd">${item.cantidad}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd">
-        ${item.imagen ? `<img src="${item.imagen}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle" />` : ""}
-        ${item.descripcion}
-      </td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-    </tr>`
-  ).join("");
+  `<tr>
+    <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
+    <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
+      ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
+    </td>
+    <td style="padding:6px 8px;border:1px solid #ddd">${item.descripcion}</td>
+    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+  </tr>`
+).join("");
 
   const html = [
     "<!DOCTYPE html>",
@@ -109,7 +109,7 @@ export function generarReporte(cot: CotizacionReporte) {
 
     "<table>",
     "<thead><tr>",
-    "<th>CANTIDAD</th><th>DESCRIPCIÓN</th><th>IMAGEN</th><th>PRECIO U.</th><th>TOTAL</th>",
+    "<th style='width:60px'>CANTIDAD</th><th style='width:60px'>IMAGEN</th><th>DESCRIPCIÓN</th><th style='width:110px;text-align:right'>PRECIO U.</th><th style='width:110px;text-align:right'>TOTAL</th>",
     "</tr></thead>",
     "<tbody>",
     itemsHtml,
