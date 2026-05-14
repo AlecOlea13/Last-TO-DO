@@ -9,7 +9,19 @@ type Cotizacion = {
   folio: string;
   tipo: "servicio" | "renta" | "venta";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
-  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo: string };
+  montacargas?: { 
+  _id: string; 
+  numeroEconomico: string; 
+  marca: string; 
+  modelo: string;
+  capacidad?: string;
+  alturaColapsada?: string;
+  alturaLevante?: string;
+  voltajeBateria?: string;
+  tipo?: string;
+  motor?: string;
+  serie?: string;
+};
   asesor?: { _id: string; nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
   lugar: string;
