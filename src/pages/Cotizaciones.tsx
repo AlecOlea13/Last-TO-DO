@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { generarReporte } from "../utils/generarReporte";
+import { generarReporte, imprimirReporte } from "../utils/generarReporte";
 
 type Item = { cantidad: number; descripcion: string; precioUnitario: number; total: number; imagen?: string };
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
@@ -245,12 +245,11 @@ export default function Cotizaciones() {
                         <option value="rechazada">Rechazada</option>
                       </select>
                     </td>
-                    <td>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-primary btn-sm" onClick={() => generarReporte(c)}>📄 PDF</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
-                      </div>
-                    </td>
+                      <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
+                      <button className="btn btn-primary btn-sm" onClick={() => imprimirReporte(c)} title="Imprimir / Descargar PDF">🖨️</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
+                    </div>
                   </tr>
                 ))}
               </tbody>
