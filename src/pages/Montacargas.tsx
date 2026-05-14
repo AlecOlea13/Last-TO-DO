@@ -7,13 +7,22 @@ type Monta = {
   marca?: string;
   modelo?: string;
   serie?: string;
-  motor?: string;
   capacidad?: string;
   tipo?: string;
   alturaColapsada?: string;
   alturaLevante?: string;
+  horquillas?: string;
+  desplazadorLateral?: boolean;
   tipoLlantas?: string;
-  voltajeBateria?: string;
+  voltaje?: string;
+  tipoBateria?: string;
+  incluyeCargador?: boolean;
+  equipoSeguridad?: {
+    alarmaReversa?: boolean;
+    torretaAmbar?: boolean;
+    luces?: boolean;
+    extintor?: boolean;
+  };
   horometroActual?: number;
   horasRestantesServicio?: number;
   estatus: "disponible" | "rentado" | "taller" | "mantenimiento";
@@ -30,10 +39,16 @@ type Monta = {
 type Cliente = { _id: string; nombre: string };
 
 const emptyForm = {
-  numeroEconomico: "", marca: "", modelo: "", serie: "", motor: "",
-  capacidad: "", tipo: "electrico", alturaColapsada: "", alturaLevante: "",
-  tipoLlantas: "", voltajeBateria: "", horometroActual: 0, horasRestantesServicio: 0,
-  estatus: "disponible", costoDia: 0, costoSemana: 0, costoMes: 0,
+  numeroEconomico: "", marca: "", modelo: "", serie: "",
+  capacidad: "", tipo: "electrico",
+  alturaColapsada: "", alturaLevante: "",
+  horquillas: "", desplazadorLateral: false,
+  tipoLlantas: "",
+  voltaje: "", tipoBateria: "", incluyeCargador: false,
+  equipoSeguridad: { alarmaReversa: false, torretaAmbar: false, luces: false, extintor: false },
+  horometroActual: 0, horasRestantesServicio: 0,
+  estatus: "disponible",
+  costoDia: 0, costoSemana: 0, costoMes: 0,
   fechaUltimoMantenimiento: "", proximoMantenimiento: "",
   fechaUltimoServicio: "", proximoServicio: "",
 };
@@ -47,19 +62,62 @@ const TIPO_BADGE: Record<string, string> = {
   electrico: "badge-blue", gas: "badge-amber", diesel: "badge-gray",
 };
 
+// ─── Toggle helper ────────────────────────────────────────────────────────────
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      onClick={() => onChange(!checked)}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+        border: "1.5px solid", borderColor: checked ? "var(--accent)" : "var(--border)",
+        background: checked ? "rgba(255,180,0,0.08)" : "var(--input-bg)",
+        transition: "all 0.15s",
+      }}
+    >
+      <span style={{ fontSize: "0.87rem", color: checked ? "var(--accent)" : "var(--text-muted)", fontWeight: checked ? 600 : 400 }}>
+        {label}
+      </span>
+      <div style={{
+        width: 36, height: 20, borderRadius: 10, position: "relative", transition: "background 0.2s",
+        background: checked ? "var(--accent)" : "var(--border)",
+      }}>
+        <div style={{
+          position: "absolute", top: 3, left: checked ? 19 : 3,
+          width: 14, height: 14, borderRadius: "50%", background: "#fff",
+          transition: "left 0.2s",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Section label ────────────────────────────────────────────────────────────
+function SectionLabel({ text }: { text: string }) {
+  return (
+    <p style={{
+      fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700,
+      textTransform: "uppercase", letterSpacing: "0.09em", marginTop: 16, marginBottom: 4,
+    }}>{text}</p>
+  );
+}
+
 export default function Montacargas() {
-  const [montas, setMontas]     = useState<Monta[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [search, setSearch]     = useState("");
-  const [filtroEstatus, setFiltro] = useState("todos");
-  const [modal, setModal]       = useState(false);
-  const [editing, setEditing]   = useState<Monta | null>(null);
-  const [form, setForm]         = useState<any>(emptyForm);
-  const [saving, setSaving]     = useState(false);
+  const [montas, setMontas]         = useState<Monta[]>([]);
+  const [clientes, setClientes]     = useState<Cliente[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [filtroEstatus, setFiltro]  = useState("todos");
+  const [modal, setModal]           = useState(false);
+  const [editing, setEditing]       = useState<Monta | null>(null);
+  const [form, setForm]             = useState<any>(emptyForm);
+  const [saving, setSaving]         = useState(false);
   const [asignarModal, setAsignarModal] = useState<Monta | null>(null);
   const [clienteSel, setClienteSel]     = useState("");
   const [detalleModal, setDetalleModal] = useState<Monta | null>(null);
+
+  const isElectrico = form.tipo === "electrico";
+  const isGasDiesel = form.tipo === "gas" || form.tipo === "diesel";
 
   useEffect(() => { load(); }, []);
 
@@ -73,22 +131,42 @@ export default function Montacargas() {
   }
 
   function openNew() { setEditing(null); setForm(emptyForm); setModal(true); }
+
   function openEdit(m: Monta) {
     setEditing(m);
     setForm({
-      numeroEconomico: m.numeroEconomico, marca: m.marca ?? "", modelo: m.modelo ?? "",
-      serie: m.serie ?? "", motor: m.motor ?? "", capacidad: m.capacidad ?? "",
-      tipo: m.tipo ?? "electrico", alturaColapsada: m.alturaColapsada ?? "",
-      alturaLevante: m.alturaLevante ?? "", tipoLlantas: m.tipoLlantas ?? "",
-      voltajeBateria: m.voltajeBateria ?? "", horometroActual: m.horometroActual ?? 0,
-      horasRestantesServicio: m.horasRestantesServicio ?? 0, estatus: m.estatus,
+      numeroEconomico: m.numeroEconomico,
+      marca: m.marca ?? "", modelo: m.modelo ?? "", serie: m.serie ?? "",
+      capacidad: m.capacidad ?? "", tipo: m.tipo ?? "electrico",
+      alturaColapsada: m.alturaColapsada ?? "", alturaLevante: m.alturaLevante ?? "",
+      horquillas: m.horquillas ?? "", desplazadorLateral: m.desplazadorLateral ?? false,
+      tipoLlantas: m.tipoLlantas ?? "",
+      voltaje: m.voltaje ?? "", tipoBateria: m.tipoBateria ?? "",
+      incluyeCargador: m.incluyeCargador ?? false,
+      equipoSeguridad: {
+        alarmaReversa: m.equipoSeguridad?.alarmaReversa ?? false,
+        torretaAmbar:  m.equipoSeguridad?.torretaAmbar  ?? false,
+        luces:         m.equipoSeguridad?.luces         ?? false,
+        extintor:      m.equipoSeguridad?.extintor      ?? false,
+      },
+      horometroActual: m.horometroActual ?? 0,
+      horasRestantesServicio: m.horasRestantesServicio ?? 0,
+      estatus: m.estatus,
       costoDia: m.costoDia ?? 0, costoSemana: m.costoSemana ?? 0, costoMes: m.costoMes ?? 0,
       fechaUltimoMantenimiento: m.fechaUltimoMantenimiento ? m.fechaUltimoMantenimiento.split("T")[0] : "",
-      proximoMantenimiento: m.proximoMantenimiento ? m.proximoMantenimiento.split("T")[0] : "",
-      fechaUltimoServicio: m.fechaUltimoServicio ? m.fechaUltimoServicio.split("T")[0] : "",
-      proximoServicio: m.proximoServicio ? m.proximoServicio.split("T")[0] : "",
+      proximoMantenimiento:     m.proximoMantenimiento     ? m.proximoMantenimiento.split("T")[0]     : "",
+      fechaUltimoServicio:      m.fechaUltimoServicio      ? m.fechaUltimoServicio.split("T")[0]      : "",
+      proximoServicio:          m.proximoServicio          ? m.proximoServicio.split("T")[0]          : "",
     });
     setModal(true);
+  }
+
+  function setF(field: string, val: any) {
+    setForm((p: any) => ({ ...p, [field]: val }));
+  }
+
+  function setSeg(field: string, val: boolean) {
+    setForm((p: any) => ({ ...p, equipoSeguridad: { ...p.equipoSeguridad, [field]: val } }));
   }
 
   async function save() {
@@ -132,15 +210,14 @@ export default function Montacargas() {
   }
 
   const filtered = montas.filter(m => {
-    const matchSearch = m.numeroEconomico.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch =
+      m.numeroEconomico.toLowerCase().includes(search.toLowerCase()) ||
       (m.marca ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (m.modelo ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (m.clienteActual?.nombre ?? "").toLowerCase().includes(search.toLowerCase());
     const matchEstatus = filtroEstatus === "todos" || m.estatus === filtroEstatus;
     return matchSearch && matchEstatus;
   });
-
-  // const = (p: any) => ({ ...form, [p.field]: p.val });
 
   return (
     <>
@@ -242,68 +319,55 @@ export default function Montacargas() {
         </div>
       </div>
 
-      {/* Modal nuevo/editar */}
+      {/* ── Modal nuevo / editar ── */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth: 680 }}>
+          <div className="modal" style={{ maxWidth: 700 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar equipo" : "Nuevo montacargas"}</h2>
 
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Datos generales</p>
+            {/* ── Datos generales ── */}
+            <SectionLabel text="Datos generales" />
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">No. Económico *</label>
-                <input className="form-input" value={form.numeroEconomico} onChange={e => setForm((p: any) => ({ ...p, numeroEconomico: e.target.value }))} placeholder="#01" />
+                <input className="form-input" value={form.numeroEconomico} onChange={e => setF("numeroEconomico", e.target.value)} placeholder="#01" />
               </div>
               <div className="form-group">
                 <label className="form-label">Marca</label>
-                <input className="form-input" value={form.marca} onChange={e => setForm((p: any) => ({ ...p, marca: e.target.value }))} placeholder="Crown, Hyster..." />
+                <input className="form-input" value={form.marca} onChange={e => setF("marca", e.target.value)} placeholder="Crown, Yale, Hyster..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Modelo</label>
-                <input className="form-input" value={form.modelo} onChange={e => setForm((p: any) => ({ ...p, modelo: e.target.value }))} placeholder="RR5200" />
+                <input className="form-input" value={form.modelo} onChange={e => setF("modelo", e.target.value)} placeholder="GLP050, RC5500..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Serie</label>
-                <input className="form-input" value={form.serie} onChange={e => setForm((p: any) => ({ ...p, serie: e.target.value }))} placeholder="1A268108" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Motor</label>
-                <input className="form-input" value={form.motor} onChange={e => setForm((p: any) => ({ ...p, motor: e.target.value }))} placeholder="Ej. GAS LPG" />
+                <input className="form-input" value={form.serie} onChange={e => setF("serie", e.target.value)} placeholder="1A268108" />
               </div>
               <div className="form-group">
                 <label className="form-label">Tipo</label>
-                <select className="form-select" value={form.tipo} onChange={e => setForm((p: any) => ({ ...p, tipo: e.target.value }))}>
+                <select className="form-select" value={form.tipo} onChange={e => setF("tipo", e.target.value)}>
                   <option value="electrico">Eléctrico</option>
-                  <option value="gas">Gas</option>
+                  <option value="gas">Gas LP</option>
                   <option value="diesel">Diésel</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Capacidad</label>
-                <input className="form-input" value={form.capacidad} onChange={e => setForm((p: any) => ({ ...p, capacidad: e.target.value }))} placeholder="4 mil libras" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tipo de llantas</label>
-                <input className="form-input" value={form.tipoLlantas} onChange={e => setForm((p: any) => ({ ...p, tipoLlantas: e.target.value }))} placeholder="Ej. Sólida, Pneumática" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Altura colapsada</label>
-                <input className="form-input" value={form.alturaColapsada} onChange={e => setForm((p: any) => ({ ...p, alturaColapsada: e.target.value }))} placeholder="Ej. 2.10 m" />
+                <label className="form-label">Capacidad de carga</label>
+                <input className="form-input" value={form.capacidad} onChange={e => setF("capacidad", e.target.value)} placeholder="5000 lbs, 2.2 tn..." />
               </div>
               <div className="form-group">
                 <label className="form-label">Altura de levante</label>
-                <input className="form-input" value={form.alturaLevante} onChange={e => setForm((p: any) => ({ ...p, alturaLevante: e.target.value }))} placeholder="Ej. 4.80 m" />
+                <input className="form-input" value={form.alturaLevante} onChange={e => setF("alturaLevante", e.target.value)} placeholder="4.80 mts" />
               </div>
-              {form.tipo === "electrico" && (
-                <div className="form-group">
-                  <label className="form-label">Voltaje / Batería</label>
-                  <input className="form-input" value={form.voltajeBateria} onChange={e => setForm((p: any) => ({ ...p, voltajeBateria: e.target.value }))} placeholder="Ej. 48V / 18-125-15" />
-                </div>
-              )}
+              <div className="form-group">
+                <label className="form-label">Tipo de llantas</label>
+                <input className="form-input" value={form.tipoLlantas} onChange={e => setF("tipoLlantas", e.target.value)} placeholder="Sólida, Pneumática..." />
+              </div>
               <div className="form-group">
                 <label className="form-label">Estatus</label>
-                <select className="form-select" value={form.estatus} onChange={e => setForm((p: any) => ({ ...p, estatus: e.target.value }))}>
+                <select className="form-select" value={form.estatus} onChange={e => setF("estatus", e.target.value)}>
                   <option value="disponible">Disponible</option>
                   <option value="rentado">Rentado</option>
                   <option value="taller">Taller</option>
@@ -312,47 +376,98 @@ export default function Montacargas() {
               </div>
             </div>
 
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 8 }}>Horómetro y mantenimiento</p>
+            {/* ── Campos eléctrico ── */}
+            {isElectrico && (
+              <>
+                <SectionLabel text="Eléctrico" />
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Voltaje</label>
+                    <input className="form-input" value={form.voltaje} onChange={e => setF("voltaje", e.target.value)} placeholder="36v, 48v..." />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tipo de batería</label>
+                    <input className="form-input" value={form.tipoBateria} onChange={e => setF("tipoBateria", e.target.value)} placeholder="Ácido plomo, Litio..." />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                    <Toggle label="Incluye cargador" checked={form.incluyeCargador} onChange={v => setF("incluyeCargador", v)} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Campos gas / diesel ── */}
+            {isGasDiesel && (
+              <>
+                <SectionLabel text="Gas / Diésel" />
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Altura contraído</label>
+                    <input className="form-input" value={form.alturaColapsada} onChange={e => setF("alturaColapsada", e.target.value)} placeholder="2.30 mts" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Horquillas</label>
+                    <input className="form-input" value={form.horquillas} onChange={e => setF("horquillas", e.target.value)} placeholder='42" (1.06 mts)' />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                    <Toggle label="Desplazador lateral de horquillas" checked={form.desplazadorLateral} onChange={v => setF("desplazadorLateral", v)} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Equipo de seguridad ── */}
+            <SectionLabel text="Equipo de seguridad" />
+            <div className="form-grid">
+              <Toggle label="Alarma de reversa"  checked={form.equipoSeguridad.alarmaReversa} onChange={v => setSeg("alarmaReversa", v)} />
+              <Toggle label="Torreta ámbar"       checked={form.equipoSeguridad.torretaAmbar}  onChange={v => setSeg("torretaAmbar",  v)} />
+              <Toggle label="Luces"               checked={form.equipoSeguridad.luces}         onChange={v => setSeg("luces",         v)} />
+              <Toggle label="Extintor"            checked={form.equipoSeguridad.extintor}      onChange={v => setSeg("extintor",      v)} />
+            </div>
+
+            {/* ── Horómetro y mantenimiento ── */}
+            <SectionLabel text="Horómetro y mantenimiento" />
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Horómetro actual</label>
-                <input className="form-input" type="number" value={form.horometroActual} onChange={e => setForm((p: any) => ({ ...p, horometroActual: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.horometroActual} onChange={e => setF("horometroActual", +e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Horas restantes para servicio</label>
-                <input className="form-input" type="number" value={form.horasRestantesServicio} onChange={e => setForm((p: any) => ({ ...p, horasRestantesServicio: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.horasRestantesServicio} onChange={e => setF("horasRestantesServicio", +e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Último mantenimiento</label>
-                <input className="form-input" type="date" value={form.fechaUltimoMantenimiento} onChange={e => setForm((p: any) => ({ ...p, fechaUltimoMantenimiento: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaUltimoMantenimiento} onChange={e => setF("fechaUltimoMantenimiento", e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Próximo mantenimiento</label>
-                <input className="form-input" type="date" value={form.proximoMantenimiento} onChange={e => setForm((p: any) => ({ ...p, proximoMantenimiento: e.target.value }))} />
+                <input className="form-input" type="date" value={form.proximoMantenimiento} onChange={e => setF("proximoMantenimiento", e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Último servicio</label>
-                <input className="form-input" type="date" value={form.fechaUltimoServicio} onChange={e => setForm((p: any) => ({ ...p, fechaUltimoServicio: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaUltimoServicio} onChange={e => setF("fechaUltimoServicio", e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Próximo servicio</label>
-                <input className="form-input" type="date" value={form.proximoServicio} onChange={e => setForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
+                <input className="form-input" type="date" value={form.proximoServicio} onChange={e => setF("proximoServicio", e.target.value)} />
               </div>
             </div>
 
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 8 }}>Costos de renta</p>
+            {/* ── Costos de renta ── */}
+            <SectionLabel text="Costos de renta" />
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Costo por día ($)</label>
-                <input className="form-input" type="number" value={form.costoDia} onChange={e => setForm((p: any) => ({ ...p, costoDia: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.costoDia} onChange={e => setF("costoDia", +e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Costo por semana ($)</label>
-                <input className="form-input" type="number" value={form.costoSemana} onChange={e => setForm((p: any) => ({ ...p, costoSemana: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.costoSemana} onChange={e => setF("costoSemana", +e.target.value)} />
               </div>
               <div className="form-group">
                 <label className="form-label">Costo por mes ($)</label>
-                <input className="form-input" type="number" value={form.costoMes} onChange={e => setForm((p: any) => ({ ...p, costoMes: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.costoMes} onChange={e => setF("costoMes", +e.target.value)} />
               </div>
             </div>
 
@@ -364,7 +479,7 @@ export default function Montacargas() {
         </div>
       )}
 
-      {/* Modal detalle */}
+      {/* ── Modal detalle ── */}
       {detalleModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetalleModal(null)}>
           <div className="modal" style={{ maxWidth: 560 }}>
@@ -372,24 +487,31 @@ export default function Montacargas() {
             <h2 className="modal-title">{detalleModal.numeroEconomico} — {detalleModal.marca} {detalleModal.modelo}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px" }}>
               {[
-                { label: "Serie", val: detalleModal.serie },
-                { label: "Motor", val: detalleModal.motor },
-                { label: "Tipo", val: detalleModal.tipo },
-                { label: "Capacidad", val: detalleModal.capacidad },
-                { label: "Altura colapsada", val: detalleModal.alturaColapsada },
-                { label: "Altura de levante", val: detalleModal.alturaLevante },
-                { label: "Tipo de llantas", val: detalleModal.tipoLlantas },
-                { label: "Voltaje / Batería", val: detalleModal.voltajeBateria },
-                { label: "Horómetro", val: detalleModal.horometroActual ? `${detalleModal.horometroActual} hr` : null },
-                { label: "Horas restantes", val: detalleModal.horasRestantesServicio ? `${detalleModal.horasRestantesServicio} hr` : null },
-                { label: "Último mantenimiento", val: fmt(detalleModal.fechaUltimoMantenimiento) },
-                { label: "Próximo mantenimiento", val: fmt(detalleModal.proximoMantenimiento) },
-                { label: "Último servicio", val: fmt(detalleModal.fechaUltimoServicio) },
-                { label: "Próximo servicio", val: fmt(detalleModal.proximoServicio) },
-                { label: "Costo día", val: detalleModal.costoDia ? `$${detalleModal.costoDia.toLocaleString()}` : null },
-                { label: "Costo semana", val: detalleModal.costoSemana ? `$${detalleModal.costoSemana.toLocaleString()}` : null },
-                { label: "Costo mes", val: detalleModal.costoMes ? `$${detalleModal.costoMes.toLocaleString()}` : null },
-                { label: "Cliente actual", val: detalleModal.clienteActual?.nombre },
+                { label: "Serie",              val: detalleModal.serie },
+                { label: "Tipo",               val: detalleModal.tipo },
+                { label: "Capacidad",          val: detalleModal.capacidad },
+                { label: "Altura levante",     val: detalleModal.alturaLevante },
+                { label: "Altura contraído",   val: detalleModal.alturaColapsada },
+                { label: "Horquillas",         val: detalleModal.horquillas },
+                { label: "Desplazador lat.",   val: detalleModal.desplazadorLateral ? "Sí" : null },
+                { label: "Tipo de llantas",    val: detalleModal.tipoLlantas },
+                { label: "Voltaje",            val: detalleModal.voltaje },
+                { label: "Tipo batería",       val: detalleModal.tipoBateria },
+                { label: "Incluye cargador",   val: detalleModal.incluyeCargador ? "Sí" : null },
+                { label: "Alarma reversa",     val: detalleModal.equipoSeguridad?.alarmaReversa ? "✅" : null },
+                { label: "Torreta ámbar",      val: detalleModal.equipoSeguridad?.torretaAmbar  ? "✅" : null },
+                { label: "Luces",              val: detalleModal.equipoSeguridad?.luces         ? "✅" : null },
+                { label: "Extintor",           val: detalleModal.equipoSeguridad?.extintor      ? "✅" : null },
+                { label: "Horómetro",          val: detalleModal.horometroActual ? `${detalleModal.horometroActual} hr` : null },
+                { label: "Horas restantes",    val: detalleModal.horasRestantesServicio ? `${detalleModal.horasRestantesServicio} hr` : null },
+                { label: "Últ. mantenimiento", val: fmt(detalleModal.fechaUltimoMantenimiento) },
+                { label: "Próx. mantenimiento",val: fmt(detalleModal.proximoMantenimiento) },
+                { label: "Últ. servicio",      val: fmt(detalleModal.fechaUltimoServicio) },
+                { label: "Próx. servicio",     val: fmt(detalleModal.proximoServicio) },
+                { label: "Costo día",          val: detalleModal.costoDia    ? `$${detalleModal.costoDia.toLocaleString()}`    : null },
+                { label: "Costo semana",       val: detalleModal.costoSemana ? `$${detalleModal.costoSemana.toLocaleString()}` : null },
+                { label: "Costo mes",          val: detalleModal.costoMes    ? `$${detalleModal.costoMes.toLocaleString()}`    : null },
+                { label: "Cliente actual",     val: detalleModal.clienteActual?.nombre },
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
@@ -404,7 +526,7 @@ export default function Montacargas() {
         </div>
       )}
 
-      {/* Modal asignar cliente */}
+      {/* ── Modal asignar cliente ── */}
       {asignarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAsignarModal(null)}>
           <div className="modal" style={{ maxWidth: 380 }}>
