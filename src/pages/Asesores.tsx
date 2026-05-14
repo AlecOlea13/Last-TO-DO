@@ -76,7 +76,7 @@ export default function Asesores() {
       <div className="page-content">
         <div className="table-card">
           <div className="table-card-header">
-            <p className="table-card-title">Equipo de ventas</p>
+            <p className="table-card-title">Equipo de Pipsa</p>
           </div>
 
           {loading ? (

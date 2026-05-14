@@ -7,17 +7,19 @@ type Renta = {
   montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo: string };
   fechaInicio: string;
   fechaFin?: string;
+  tipoPeriodo?: "semanal" | "mensual" | "anual";
   precioMensual: number;
   flete?: number;
   deposito?: number;
   estatus: "activa" | "vencida" | "terminada";
 };
 
-type Cliente    = { _id: string; nombre: string };
+type Cliente     = { _id: string; nombre: string };
 type Montacargas = { _id: string; numeroEconomico: string; marca: string; modelo: string; estatus: string };
 
 const emptyForm = {
   cliente: "", montacargas: "", fechaInicio: "", fechaFin: "",
+  tipoPeriodo: "mensual",
   precioMensual: 0, flete: 0, deposito: 0, estatus: "activa",
 };
 
@@ -27,22 +29,32 @@ const ESTATUS_BADGE: Record<string, string> = {
   terminada: "badge-gray",
 };
 
+const PERIODO_LABEL: Record<string, string> = {
+  semanal: "📅 Semanal",
+  mensual: "🗓️ Mensual",
+  anual:   "📆 Anual",
+};
+
 export default function Rentas() {
-  const [rentas, setRentas]       = useState<Renta[]>([]);
-  const [clientes, setClientes]   = useState<Cliente[]>([]);
-  const [montas, setMontas]       = useState<Montacargas[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [filtro, setFiltro]       = useState("todos");
-  const [modal, setModal]         = useState(false);
-  const [form, setForm]           = useState<any>(emptyForm);
-  const [saving, setSaving]       = useState(false);
+  const [rentas, setRentas]     = useState<Renta[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [montas, setMontas]     = useState<Montacargas[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [search, setSearch]     = useState("");
+  const [filtro, setFiltro]     = useState("todos");
+  const [modal, setModal]       = useState(false);
+  const [form, setForm]         = useState<any>(emptyForm);
+  const [saving, setSaving]     = useState(false);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [r, c, m] = await Promise.all([api.get("/rentas"), api.get("/clientes"), api.get("/montacargas")]);
+      const [r, c, m] = await Promise.all([
+        api.get("/rentas"),
+        api.get("/clientes"),
+        api.get("/montacargas"),
+      ]);
       setRentas(r.data);
       setClientes(c.data.filter((cl: any) => cl.estatus === "activo"));
       setMontas(m.data.filter((mt: any) => mt.estatus === "disponible"));
@@ -57,7 +69,7 @@ export default function Rentas() {
       const { data } = await api.post("/rentas", form);
       setRentas(prev => [data, ...prev]);
       setModal(false);
-      load(); // reload para traer populate
+      load();
     } catch {}
     finally { setSaving(false); }
   }
@@ -83,9 +95,14 @@ export default function Rentas() {
 
   function diasRestantes(fechaFin?: string) {
     if (!fechaFin) return null;
-    const diff = Math.ceil((new Date(fechaFin).getTime() - Date.now()) / 86400000);
-    return diff;
+    return Math.ceil((new Date(fechaFin).getTime() - Date.now()) / 86400000);
   }
+
+  const precioLabel = form.tipoPeriodo === "semanal"
+    ? "Precio semanal"
+    : form.tipoPeriodo === "anual"
+    ? "Precio anual"
+    : "Precio mensual";
 
   return (
     <>
@@ -94,7 +111,9 @@ export default function Rentas() {
           <h1 className="page-title">Rentas</h1>
           <p className="page-subtitle">{rentas.filter(r => r.estatus === "activa").length} rentas activas</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nueva renta</button>
+        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
+          + Nueva renta
+        </button>
       </div>
 
       <div className="page-content">
@@ -102,8 +121,18 @@ export default function Rentas() {
           <div className="table-card-header">
             <p className="table-card-title">Todas las rentas</p>
             <div className="table-toolbar">
-              <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtro} onChange={e => setFiltro(e.target.value)}>
+              <input
+                className="search-input"
+                placeholder="🔍 Buscar..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              <select
+                className="form-select"
+                style={{ width: "auto", padding: "8px 14px" }}
+                value={filtro}
+                onChange={e => setFiltro(e.target.value)}
+              >
                 <option value="todos">Todas</option>
                 <option value="activa">Activas</option>
                 <option value="vencida">Vencidas</option>
@@ -115,7 +144,10 @@ export default function Rentas() {
           {loading ? (
             <div className="loading-state"><div className="spinner" /></div>
           ) : filtered.length === 0 ? (
-            <div className="empty-state"><span className="empty-icon">📋</span><p>Sin rentas{search ? " con ese filtro" : " registradas"}</p></div>
+            <div className="empty-state">
+              <span className="empty-icon">📋</span>
+              <p>Sin rentas{search ? " con ese filtro" : " registradas"}</p>
+            </div>
           ) : (
             <table>
               <thead>
@@ -124,7 +156,8 @@ export default function Rentas() {
                   <th>Equipo</th>
                   <th>Inicio</th>
                   <th>Fin</th>
-                  <th>Precio/mes</th>
+                  <th>Periodo</th>
+                  <th>Precio</th>
                   <th>Flete</th>
                   <th>Depósito</th>
                   <th>Días restantes</th>
@@ -144,12 +177,18 @@ export default function Rentas() {
                       </td>
                       <td>{fmt(r.fechaInicio)}</td>
                       <td>{fmt(r.fechaFin)}</td>
+                      <td style={{ textTransform: "capitalize" }}>
+                        {r.tipoPeriodo ?? "mensual"}
+                      </td>
                       <td>${r.precioMensual.toLocaleString()}</td>
                       <td>{r.flete ? `$${r.flete.toLocaleString()}` : "—"}</td>
                       <td>{r.deposito ? `$${r.deposito.toLocaleString()}` : "—"}</td>
                       <td>
                         {dias !== null ? (
-                          <span style={{ color: dias <= 7 ? "var(--red)" : dias <= 30 ? "var(--accent)" : "var(--green)", fontWeight: 600 }}>
+                          <span style={{
+                            color: dias <= 7 ? "var(--red)" : dias <= 30 ? "var(--accent)" : "var(--green)",
+                            fontWeight: 600,
+                          }}>
                             {dias > 0 ? `${dias} días` : "Vencida"}
                           </span>
                         ) : "—"}
@@ -175,44 +214,126 @@ export default function Rentas() {
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">Nueva renta</h2>
             <div className="form-grid">
+
+              {/* Cliente */}
               <div className="form-group">
                 <label className="form-label">Cliente *</label>
-                <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
+                <select
+                  className="form-select"
+                  value={form.cliente}
+                  onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}
+                >
                   <option value="">Selecciona cliente...</option>
                   {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
                 </select>
               </div>
+
+              {/* Montacargas */}
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
-                <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
+                <select
+                  className="form-select"
+                  value={form.montacargas}
+                  onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}
+                >
                   <option value="">Selecciona equipo...</option>
-                  {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
+                  {montas.map(m => (
+                    <option key={m._id} value={m._id}>
+                      {m.numeroEconomico} — {m.marca} {m.modelo}
+                    </option>
+                  ))}
                 </select>
               </div>
+
+              {/* Tipo de periodo — fila completa */}
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Tipo de periodo *</label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  {(["semanal", "mensual", "anual"] as const).map(tipo => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => setForm((p: any) => ({ ...p, tipoPeriodo: tipo }))}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        border: "2px solid",
+                        borderColor: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)",
+                        background: form.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)",
+                        color: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)",
+                        fontWeight: form.tipoPeriodo === tipo ? 700 : 400,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {PERIODO_LABEL[tipo]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fecha inicio */}
               <div className="form-group">
                 <label className="form-label">Fecha inicio *</label>
-                <input className="form-input" type="date" value={form.fechaInicio} onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
+                <input
+                  className="form-input"
+                  type="date"
+                  value={form.fechaInicio}
+                  onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))}
+                />
               </div>
+
+              {/* Fecha fin */}
               <div className="form-group">
                 <label className="form-label">Fecha fin</label>
-                <input className="form-input" type="date" value={form.fechaFin} onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))} />
+                <input
+                  className="form-input"
+                  type="date"
+                  value={form.fechaFin}
+                  onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))}
+                />
               </div>
+
+              {/* Precio dinámico */}
               <div className="form-group">
-                <label className="form-label">Precio mensual *</label>
-                <input className="form-input" type="number" value={form.precioMensual} onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
+                <label className="form-label">{precioLabel} *</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  value={form.precioMensual}
+                  onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))}
+                />
               </div>
+
+              {/* Flete */}
               <div className="form-group">
                 <label className="form-label">Flete</label>
-                <input className="form-input" type="number" value={form.flete} onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))} />
+                <input
+                  className="form-input"
+                  type="number"
+                  value={form.flete}
+                  onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))}
+                />
               </div>
+
+              {/* Depósito */}
               <div className="form-group">
                 <label className="form-label">Depósito</label>
-                <input className="form-input" type="number" value={form.deposito} onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))} />
+                <input
+                  className="form-input"
+                  type="number"
+                  value={form.deposito}
+                  onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))}
+                />
               </div>
+
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
             </div>
           </div>
         </div>
