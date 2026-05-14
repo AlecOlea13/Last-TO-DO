@@ -9,19 +9,29 @@ type Cotizacion = {
   folio: string;
   tipo: "servicio" | "renta" | "venta";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
-  montacargas?: { 
-  _id: string; 
-  numeroEconomico: string; 
-  marca: string; 
-  modelo: string;
-  capacidad?: string;
-  alturaColapsada?: string;
-  alturaLevante?: string;
-  voltajeBateria?: string;
-  tipo?: string;
-  motor?: string;
-  serie?: string;
-};
+  montacargas?: {
+    _id: string;
+    numeroEconomico: string;
+    marca: string;
+    modelo: string;
+    capacidad?: string;
+    tipo?: string;
+    serie?: string;
+    alturaColapsada?: string;
+    alturaLevante?: string;
+    horquillas?: string;
+    desplazadorLateral?: boolean;
+    tipoLlantas?: string;
+    voltaje?: string;
+    tipoBateria?: string;
+    incluyeCargador?: boolean;
+    equipoSeguridad?: {
+      alarmaReversa?: boolean;
+      torretaAmbar?: boolean;
+      luces?: boolean;
+      extintor?: boolean;
+    };
+  };
   asesor?: { _id: string; nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
   lugar: string;
@@ -35,7 +45,29 @@ type Cotizacion = {
 };
 
 type Cliente     = { _id: string; nombre: string };
-type Montacargas = { _id: string; numeroEconomico: string; marca: string; modelo: string };
+type Montacargas = {
+  _id: string;
+  numeroEconomico: string;
+  marca: string;
+  modelo: string;
+  capacidad?: string;
+  tipo?: string;
+  serie?: string;
+  alturaColapsada?: string;
+  alturaLevante?: string;
+  horquillas?: string;
+  desplazadorLateral?: boolean;
+  tipoLlantas?: string;
+  voltaje?: string;
+  tipoBateria?: string;
+  incluyeCargador?: boolean;
+  equipoSeguridad?: {
+    alarmaReversa?: boolean;
+    torretaAmbar?: boolean;
+    luces?: boolean;
+    extintor?: boolean;
+  };
+};
 
 const emptyForm: any = {
   folio: "", tipo: "servicio", cliente: "", montacargas: "", asesor: "",

@@ -1,7 +1,7 @@
-export type ItemReporte = { 
-  cantidad: number; 
-  descripcion: string; 
-  precioUnitario: number; 
+export type ItemReporte = {
+  cantidad: number;
+  descripcion: string;
+  precioUnitario: number;
   total: number;
   imagen?: string;
 };
@@ -10,11 +10,27 @@ export type CotizacionReporte = {
   folio: string;
   tipo: string;
   cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
-  montacargas?: { 
-    marca: string; modelo: string; capacidad?: string;
-    alturaColapsada?: string; alturaLevante?: string;
-    voltajeBateria?: string; tipo?: string; motor?: string; serie?: string;
+  montacargas?: {
     numeroEconomico?: string;
+    marca: string;
+    modelo: string;
+    capacidad?: string;
+    tipo?: string;
+    serie?: string;
+    alturaColapsada?: string;
+    alturaLevante?: string;
+    horquillas?: string;
+    desplazadorLateral?: boolean;
+    tipoLlantas?: string;
+    voltaje?: string;
+    tipoBateria?: string;
+    incluyeCargador?: boolean;
+    equipoSeguridad?: {
+      alarmaReversa?: boolean;
+      torretaAmbar?: boolean;
+      luces?: boolean;
+      extintor?: boolean;
+    };
   };
   asesor?: { nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
@@ -27,7 +43,20 @@ export type CotizacionReporte = {
   flete?: number;
 };
 
-// ── GENERADORES DE HTML ───────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+
+function si(val?: boolean) { return val ? "Sí" : "No"; }
+
+function specRow(label: string, val?: string | boolean | null) {
+  if (!val && val !== false) return "";
+  const display = typeof val === "boolean" ? si(val) : val;
+  return `<tr>
+    <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px">${label}</td>
+    <td style="padding:5px 10px;border:1px solid #ddd">${display}</td>
+  </tr>`;
+}
+
+// ── HTML SERVICIO ─────────────────────────────────────────────────────────────
 
 function htmlServicio(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -150,6 +179,8 @@ function htmlServicio(cot: CotizacionReporte): string {
   ].join("\n");
 }
 
+// ── HTML VENTA / RENTA ────────────────────────────────────────────────────────
+
 function htmlVentaRenta(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
@@ -162,18 +193,42 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
   const clienteNombre = cot.cliente?.nombre ?? "";
   const m = cot.montacargas;
   const tipoLabel = cot.tipo === "renta" ? "RENTA" : "VENTA";
+  const esElectrico = m?.tipo === "electrico";
 
+  // ── Specs del equipo ──
   const specsRows = [
-    m?.marca           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:200px">Marca</td><td style="padding:5px 10px;border:1px solid #ddd">${m.marca}</td></tr>` : "",
-    m?.modelo          ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Modelo</td><td style="padding:5px 10px;border:1px solid #ddd">${m.modelo}</td></tr>` : "",
-    m?.serie           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Serie</td><td style="padding:5px 10px;border:1px solid #ddd">${m.serie}</td></tr>` : "",
-    m?.tipo            ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Sistema</td><td style="padding:5px 10px;border:1px solid #ddd">${m.tipo}</td></tr>` : "",
-    m?.motor           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Motor</td><td style="padding:5px 10px;border:1px solid #ddd">${m.motor}</td></tr>` : "",
-    m?.capacidad       ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Capacidad de carga</td><td style="padding:5px 10px;border:1px solid #ddd">${m.capacidad}</td></tr>` : "",
-    m?.alturaColapsada ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Altura colapsada</td><td style="padding:5px 10px;border:1px solid #ddd">${m.alturaColapsada}</td></tr>` : "",
-    m?.alturaLevante   ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Altura de levante</td><td style="padding:5px 10px;border:1px solid #ddd">${m.alturaLevante}</td></tr>` : "",
-    m?.voltajeBateria  ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Voltaje / Batería</td><td style="padding:5px 10px;border:1px solid #ddd">${m.voltajeBateria}</td></tr>` : "",
+    specRow("Marca",                    m?.marca),
+    specRow("Modelo",                   m?.modelo),
+    specRow("Serie",                    m?.serie),
+    specRow("Sistema",                  m?.tipo ? (m.tipo === "electrico" ? "Eléctrico" : m.tipo === "gas" ? "Gas LP" : "Diésel") : null),
+    specRow("Capacidad de carga",       m?.capacidad),
+    specRow("Altura de levante",        m?.alturaLevante),
+    // Gas / Diesel
+    !esElectrico ? specRow("Altura contraído",        m?.alturaColapsada)   : "",
+    !esElectrico ? specRow("Horquillas",              m?.horquillas)        : "",
+    !esElectrico ? specRow("Desplazador lateral",     m?.desplazadorLateral !== undefined ? (m.desplazadorLateral ? "Sí" : null) : null) : "",
+    // Eléctrico
+    esElectrico  ? specRow("Voltaje",                 m?.voltaje)           : "",
+    esElectrico  ? specRow("Tipo de batería",         m?.tipoBateria)       : "",
+    esElectrico  ? specRow("Incluye cargador",        m?.incluyeCargador ? "Sí" : null) : "",
+    // Llantas
+    specRow("Tipo de llantas",          m?.tipoLlantas),
   ].join("");
+
+  // ── Equipo de seguridad ──
+  const segItems = [
+    m?.equipoSeguridad?.alarmaReversa ? "Alarma de reversa" : "",
+    m?.equipoSeguridad?.torretaAmbar  ? "Torreta ámbar"     : "",
+    m?.equipoSeguridad?.luces         ? "Luces"             : "",
+    m?.equipoSeguridad?.extintor      ? "Extintor"          : "",
+  ].filter(Boolean);
+
+  const segHtml = segItems.length > 0
+    ? `<tr>
+        <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px;vertical-align:top">Equipo de seguridad</td>
+        <td style="padding:5px 10px;border:1px solid #ddd">${segItems.join(", ")}</td>
+      </tr>`
+    : "";
 
   const itemsHtml = cot.items.map(item =>
     `<tr>
@@ -233,7 +288,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     "</div>",
 
     m ? '<div class="section-title">Datos del Equipo</div>' : "",
-    m ? `<table><tbody>${specsRows}</tbody></table>` : "",
+    m ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
 
     cot.items.length > 0 ? '<div class="section-title">Conceptos Adicionales</div>' : "",
     cot.items.length > 0 ? `<table><thead><tr><th>DESCRIPCIÓN</th><th style='width:80px;text-align:center'>CANTIDAD</th><th style='width:120px;text-align:right'>PRECIO U.</th><th style='width:120px;text-align:right'>SUBTOTAL</th></tr></thead><tbody>${itemsHtml}</tbody></table>` : "",
@@ -272,6 +327,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 }
 
 // ── EXPORTS PÚBLICOS ──────────────────────────────────────────────────────────
+
 export function generarReporte(cot: CotizacionReporte) {
   const html = cot.tipo === "venta" || cot.tipo === "renta"
     ? htmlVentaRenta(cot)
