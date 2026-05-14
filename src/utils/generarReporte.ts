@@ -27,15 +27,9 @@ export type CotizacionReporte = {
   flete?: number;
 };
 
-export function generarReporte(cot: CotizacionReporte) {
-  if (cot.tipo === "venta" || cot.tipo === "renta") {
-    return generarReporteVentaRenta(cot);
-  }
-  return generarReporteServicio(cot);
-}
+// ── GENERADORES DE HTML ───────────────────────────────────────────────────────
 
-// ── FORMATO SERVICIO ─────────────────────────────────────────────────────────
-function generarReporteServicio(cot: CotizacionReporte) {
+function htmlServicio(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
@@ -61,7 +55,7 @@ function generarReporteServicio(cot: CotizacionReporte) {
     </tr>`
   ).join("");
 
-  const html = [
+  return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
     `<title>${cot.folio}</title>`,
     "<style>",
@@ -78,7 +72,6 @@ function generarReporteServicio(cot: CotizacionReporte) {
     "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
-    "thead th:first-child { text-align: center; width: 60px; }",
     "thead th:last-child, thead th:nth-child(4) { text-align: right; }",
     ".totals { margin-top: 8px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
@@ -114,7 +107,7 @@ function generarReporteServicio(cot: CotizacionReporte) {
     "</div>",
 
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio}</div>` : "",
-    `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente ${cot.tipo === "servicio" ? "propuesta" : "información"}:</p>`,
+    `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
 
     "<table>",
     "<thead><tr>",
@@ -152,15 +145,12 @@ function generarReporteServicio(cot: CotizacionReporte) {
     asesorEmail,
     "</div>",
 
-    "<script>window.onload = function() { document.title = '" + cot.folio + "'; };</script>",
+    `<script>window.onload = function() { document.title = '${cot.folio}'; };</script>`,
     "</body>", "</html>",
   ].join("\n");
-
-  abrirVentana(html);
 }
 
-// ── FORMATO VENTA / RENTA ────────────────────────────────────────────────────
-function generarReporteVentaRenta(cot: CotizacionReporte) {
+function htmlVentaRenta(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
@@ -171,21 +161,20 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
 
   const clienteNombre = cot.cliente?.nombre ?? "";
   const m = cot.montacargas;
+  const tipoLabel = cot.tipo === "renta" ? "RENTA" : "VENTA";
 
-  // Specs del montacargas
   const specsRows = [
-    m?.marca        ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Marca</td><td style="padding:4px 8px;border:1px solid #ddd">${m.marca}</td></tr>` : "",
-    m?.modelo       ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Modelo</td><td style="padding:4px 8px;border:1px solid #ddd">${m.modelo}</td></tr>` : "",
-    m?.serie        ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Serie</td><td style="padding:4px 8px;border:1px solid #ddd">${m.serie}</td></tr>` : "",
-    m?.tipo         ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Sistema</td><td style="padding:4px 8px;border:1px solid #ddd">${m.tipo}</td></tr>` : "",
-    m?.motor        ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Motor</td><td style="padding:4px 8px;border:1px solid #ddd">${m.motor}</td></tr>` : "",
-    m?.capacidad    ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Capacidad de carga</td><td style="padding:4px 8px;border:1px solid #ddd">${m.capacidad}</td></tr>` : "",
-    m?.alturaColapsada ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Altura colapsada</td><td style="padding:4px 8px;border:1px solid #ddd">${m.alturaColapsada}</td></tr>` : "",
-    m?.alturaLevante   ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Altura de levante</td><td style="padding:4px 8px;border:1px solid #ddd">${m.alturaLevante}</td></tr>` : "",
-    m?.voltajeBateria  ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:600">Voltaje / Batería</td><td style="padding:4px 8px;border:1px solid #ddd">${m.voltajeBateria}</td></tr>` : "",
+    m?.marca           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:200px">Marca</td><td style="padding:5px 10px;border:1px solid #ddd">${m.marca}</td></tr>` : "",
+    m?.modelo          ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Modelo</td><td style="padding:5px 10px;border:1px solid #ddd">${m.modelo}</td></tr>` : "",
+    m?.serie           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Serie</td><td style="padding:5px 10px;border:1px solid #ddd">${m.serie}</td></tr>` : "",
+    m?.tipo            ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Sistema</td><td style="padding:5px 10px;border:1px solid #ddd">${m.tipo}</td></tr>` : "",
+    m?.motor           ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Motor</td><td style="padding:5px 10px;border:1px solid #ddd">${m.motor}</td></tr>` : "",
+    m?.capacidad       ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Capacidad de carga</td><td style="padding:5px 10px;border:1px solid #ddd">${m.capacidad}</td></tr>` : "",
+    m?.alturaColapsada ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Altura colapsada</td><td style="padding:5px 10px;border:1px solid #ddd">${m.alturaColapsada}</td></tr>` : "",
+    m?.alturaLevante   ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Altura de levante</td><td style="padding:5px 10px;border:1px solid #ddd">${m.alturaLevante}</td></tr>` : "",
+    m?.voltajeBateria  ? `<tr><td style="padding:5px 10px;border:1px solid #ddd;font-weight:600">Voltaje / Batería</td><td style="padding:5px 10px;border:1px solid #ddd">${m.voltajeBateria}</td></tr>` : "",
   ].join("");
 
-  // Items adicionales (flete, accesorios, etc.)
   const itemsHtml = cot.items.map(item =>
     `<tr>
       <td style="padding:6px 8px;border:1px solid #ddd">${item.descripcion}</td>
@@ -195,9 +184,7 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
     </tr>`
   ).join("");
 
-  const tipoLabel = cot.tipo === "renta" ? "RENTA" : "VENTA";
-
-  const html = [
+  return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
     `<title>${cot.folio}</title>`,
     "<style>",
@@ -215,7 +202,7 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
     "thead th { padding: 8px; text-align: left; }",
     "thead th:last-child, thead th:nth-child(3) { text-align: right; }",
     "thead th:nth-child(2) { text-align: center; }",
-    ".totals { margin-top: 8px; text-align: right; font-size: 10pt; }",
+    ".totals { margin-top: 12px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
     ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
@@ -240,7 +227,7 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
     "</div>",
     "</div>",
 
-    `<div class="saludo">`,
+    '<div class="saludo">',
     `<strong># ${clienteNombre}</strong><br><br>`,
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
@@ -249,7 +236,7 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
     m ? `<table><tbody>${specsRows}</tbody></table>` : "",
 
     cot.items.length > 0 ? '<div class="section-title">Conceptos Adicionales</div>' : "",
-    cot.items.length > 0 ? "<table><thead><tr><th>DESCRIPCIÓN</th><th style='width:80px;text-align:center'>CANTIDAD</th><th style='width:120px;text-align:right'>PRECIO U.</th><th style='width:120px;text-align:right'>SUBTOTAL</th></tr></thead><tbody>" + itemsHtml + "</tbody></table>" : "",
+    cot.items.length > 0 ? `<table><thead><tr><th>DESCRIPCIÓN</th><th style='width:80px;text-align:center'>CANTIDAD</th><th style='width:120px;text-align:right'>PRECIO U.</th><th style='width:120px;text-align:right'>SUBTOTAL</th></tr></thead><tbody>${itemsHtml}</tbody></table>` : "",
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
@@ -279,14 +266,30 @@ function generarReporteVentaRenta(cot: CotizacionReporte) {
     asesorEmail,
     "</div>",
 
-    "<script>window.onload = function() { document.title = '" + cot.folio + "'; };</script>",
+    `<script>window.onload = function() { document.title = '${cot.folio}'; };</script>`,
     "</body>", "</html>",
   ].join("\n");
+}
 
+// ── EXPORTS PÚBLICOS ──────────────────────────────────────────────────────────
+export function generarReporte(cot: CotizacionReporte) {
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? htmlVentaRenta(cot)
+    : htmlServicio(cot);
   abrirVentana(html);
 }
 
-// ── HELPER ───────────────────────────────────────────────────────────────────
+export function imprimirReporte(cot: CotizacionReporte) {
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? htmlVentaRenta(cot)
+    : htmlServicio(cot);
+  const htmlConPrint = html.replace(
+    `window.onload = function() { document.title = '${cot.folio}'; };`,
+    `window.onload = function() { document.title = '${cot.folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
+  );
+  abrirVentana(htmlConPrint);
+}
+
 function abrirVentana(html: string) {
   const blob = new Blob([html], { type: "text/html" });
   const url  = URL.createObjectURL(blob);
