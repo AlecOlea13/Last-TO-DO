@@ -93,6 +93,7 @@ export default function Cotizaciones() {
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState("");
   const [filtro, setFiltro]             = useState("todos");
+  const [filtroAsesor, setFiltroAsesor] = useState("todos"); // ← NUEVO
   const [modal, setModal]               = useState(false);
   const [form, setForm]                 = useState<any>(emptyForm);
   const [saving, setSaving]             = useState(false);
@@ -183,13 +184,15 @@ export default function Cotizaciones() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
+  // ── Filtrado con asesor ────────────────────────────────────────────────────
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
       (c.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (c.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchFiltro = filtro === "todos" || c.tipo === filtro || c.estatus === filtro;
-    return matchSearch && matchFiltro;
+      (c.asesor?.nombre  ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchFiltro  = filtro      === "todos" || c.tipo === filtro || c.estatus === filtro;
+    const matchAsesor  = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
+    return matchSearch && matchFiltro && matchAsesor;
   });
 
   return (
@@ -205,10 +208,10 @@ export default function Cotizaciones() {
       <div className="page-content">
         <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
           {[
-            { label: "Borradores", val: cotizaciones.filter(c => c.estatus === "borrador").length, color: "var(--text-muted)", icon: "📝" },
-            { label: "Enviadas",   val: cotizaciones.filter(c => c.estatus === "enviada").length,  color: "var(--blue)",       icon: "📤" },
-            { label: "Aceptadas",  val: cotizaciones.filter(c => c.estatus === "aceptada").length, color: "var(--green)",      icon: "✅" },
-            { label: "Rechazadas", val: cotizaciones.filter(c => c.estatus === "rechazada").length,color: "var(--red)",        icon: "❌" },
+            { label: "Borradores", val: cotizaciones.filter(c => c.estatus === "borrador").length,  color: "var(--text-muted)", icon: "📝" },
+            { label: "Enviadas",   val: cotizaciones.filter(c => c.estatus === "enviada").length,   color: "var(--blue)",       icon: "📤" },
+            { label: "Aceptadas",  val: cotizaciones.filter(c => c.estatus === "aceptada").length,  color: "var(--green)",      icon: "✅" },
+            { label: "Rechazadas", val: cotizaciones.filter(c => c.estatus === "rechazada").length, color: "var(--red)",        icon: "❌" },
           ].map(s => (
             <div key={s.label} className="stat-card">
               <span className="stat-card-icon">{s.icon}</span>
@@ -223,8 +226,19 @@ export default function Cotizaciones() {
           <div className="table-card-header">
             <p className="table-card-title">Todas las cotizaciones</p>
             <div className="table-toolbar">
-              <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtro} onChange={e => setFiltro(e.target.value)}>
+              <input
+                className="search-input"
+                placeholder="🔍 Buscar..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {/* Filtro tipo / estatus */}
+              <select
+                className="form-select"
+                style={{ width: "auto", padding: "8px 14px" }}
+                value={filtro}
+                onChange={e => setFiltro(e.target.value)}
+              >
                 <option value="todos">Todas</option>
                 <option value="servicio">Servicio</option>
                 <option value="renta">Renta</option>
@@ -233,6 +247,18 @@ export default function Cotizaciones() {
                 <option value="enviada">Enviada</option>
                 <option value="aceptada">Aceptada</option>
                 <option value="rechazada">Rechazada</option>
+              </select>
+              {/* Filtro asesor ← NUEVO */}
+              <select
+                className="form-select"
+                style={{ width: "auto", padding: "8px 14px" }}
+                value={filtroAsesor}
+                onChange={e => setFiltroAsesor(e.target.value)}
+              >
+                <option value="todos">Todos los asesores</option>
+                {asesores.map(a => (
+                  <option key={a._id} value={a._id}>{a.nombre}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -277,11 +303,13 @@ export default function Cotizaciones() {
                         <option value="rechazada">Rechazada</option>
                       </select>
                     </td>
+                    <td>
                       <div style={{ display: "flex", gap: 4 }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
-                      <button className="btn btn-primary btn-sm" onClick={() => imprimirReporte(c)} title="Imprimir / Descargar PDF">🖨️</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
-                    </div>
+                        <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => imprimirReporte(c)} title="Imprimir / Descargar PDF">🖨️</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -351,7 +379,6 @@ export default function Cotizaciones() {
                 <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar línea</button>
               </div>
 
-              {/* Headers */}
               <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, marginBottom: 4 }}>
                 {["Foto", "Cant.", "Descripción", "Precio U.", "Total", ""].map(h => (
                   <p key={h} style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{h}</p>
@@ -361,7 +388,6 @@ export default function Cotizaciones() {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {form.items.map((item: Item, i: number) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", background: "var(--surface2)", padding: 8, borderRadius: "var(--radius-sm)" }}>
-                    {/* Imagen */}
                     <label style={{ cursor: "pointer", position: "relative" }}>
                       {item.imagen ? (
                         <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
@@ -370,14 +396,8 @@ export default function Cotizaciones() {
                           {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
                         </div>
                       )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }}
-                      />
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
                     </label>
-
                     <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
                     <input className="form-input" value={item.descripcion} onChange={e => updateItem(i, "descripcion", e.target.value)} placeholder="Descripción del concepto" />
                     <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} />

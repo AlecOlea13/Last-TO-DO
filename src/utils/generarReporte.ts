@@ -45,14 +45,11 @@ export type CotizacionReporte = {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
-function si(val?: boolean) { return val ? "Sí" : "No"; }
-
-function specRow(label: string, val?: string | boolean | null) {
-  if (!val && val !== false) return "";
-  const display = typeof val === "boolean" ? si(val) : val;
+function specRow(label: string, val?: string | null) {
+  if (!val) return "";
   return `<tr>
     <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px">${label}</td>
-    <td style="padding:5px 10px;border:1px solid #ddd">${display}</td>
+    <td style="padding:5px 10px;border:1px solid #ddd">${val}</td>
   </tr>`;
 }
 
@@ -192,27 +189,24 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 
   const clienteNombre = cot.cliente?.nombre ?? "";
   const m = cot.montacargas;
-  const tipoLabel = cot.tipo === "renta" ? "RENTA" : "VENTA";
+  const tipoLabel  = cot.tipo === "renta" ? "RENTA" : "VENTA";
   const esElectrico = m?.tipo === "electrico";
 
   // ── Specs del equipo ──
   const specsRows = [
-    specRow("Marca",                    m?.marca),
-    specRow("Modelo",                   m?.modelo),
-    specRow("Serie",                    m?.serie),
-    specRow("Sistema",                  m?.tipo ? (m.tipo === "electrico" ? "Eléctrico" : m.tipo === "gas" ? "Gas LP" : "Diésel") : null),
-    specRow("Capacidad de carga",       m?.capacidad),
-    specRow("Altura de levante",        m?.alturaLevante),
-    // Gas / Diesel
-    !esElectrico ? specRow("Altura contraído",        m?.alturaColapsada)   : "",
-    !esElectrico ? specRow("Horquillas",              m?.horquillas)        : "",
-    !esElectrico ? specRow("Desplazador lateral",     m?.desplazadorLateral !== undefined ? (m.desplazadorLateral ? "Sí" : null) : null) : "",
-    // Eléctrico
-    esElectrico  ? specRow("Voltaje",                 m?.voltaje)           : "",
-    esElectrico  ? specRow("Tipo de batería",         m?.tipoBateria)       : "",
-    esElectrico  ? specRow("Incluye cargador",        m?.incluyeCargador ? "Sí" : null) : "",
-    // Llantas
-    specRow("Tipo de llantas",          m?.tipoLlantas),
+    specRow("Marca",             m?.marca),
+    specRow("Modelo",            m?.modelo),
+    specRow("Serie",             m?.serie),
+    specRow("Sistema",           m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
+    specRow("Capacidad de carga",m?.capacidad),
+    specRow("Altura de levante", m?.alturaLevante),
+    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)              : "",
+    !esElectrico ? specRow("Horquillas",          m?.horquillas)                   : "",
+    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null) : "",
+    esElectrico  ? specRow("Voltaje",             m?.voltaje)                      : "",
+    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                  : "",
+    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null): "",
+    specRow("Tipo de llantas",   m?.tipoLlantas),
   ].join("");
 
   // ── Equipo de seguridad ──
@@ -230,12 +224,18 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
       </tr>`
     : "";
 
+  // ── Items con foto ← FIXED ──
   const itemsHtml = cot.items.map(item =>
     `<tr>
+      <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center;vertical-align:middle">
+        ${item.imagen
+          ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
+          : `<span style="color:#aaa;font-size:9pt">—</span>`}
+      </td>
       <td style="padding:6px 8px;border:1px solid #ddd">${item.descripcion}</td>
-      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd">${item.cantidad}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     </tr>`
   ).join("");
 
@@ -255,11 +255,10 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
-    "thead th:last-child, thead th:nth-child(3) { text-align: right; }",
-    "thead th:nth-child(2) { text-align: center; }",
     ".totals { margin-top: 12px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
+    ".precio-nota { margin-top: 10px; font-size: 9pt; color: #555; font-style: italic; }",
     ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
     ".conditions strong { color: #222; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
@@ -290,13 +289,28 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     m ? '<div class="section-title">Datos del Equipo</div>' : "",
     m ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
 
-    cot.items.length > 0 ? '<div class="section-title">Conceptos Adicionales</div>' : "",
-    cot.items.length > 0 ? `<table><thead><tr><th>DESCRIPCIÓN</th><th style='width:80px;text-align:center'>CANTIDAD</th><th style='width:120px;text-align:right'>PRECIO U.</th><th style='width:120px;text-align:right'>SUBTOTAL</th></tr></thead><tbody>${itemsHtml}</tbody></table>` : "",
+    // ── Conceptos con foto ──
+    cot.items.length > 0 ? '<div class="section-title">Conceptos</div>' : "",
+    cot.items.length > 0 ? `<table>
+      <thead><tr>
+        <th style="width:60px">FOTO</th>
+        <th>DESCRIPCIÓN</th>
+        <th style="width:60px;text-align:center">CANT.</th>
+        <th style="width:120px;text-align:right">PRECIO U.</th>
+        <th style="width:120px;text-align:right">SUBTOTAL</th>
+      </tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>` : "",
 
+    // ── Totales ──
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    // Nota precio mensual para renta ← NUEVO
+    cot.tipo === "renta"
+      ? `<p class="precio-nota">* El precio indicado corresponde a la renta mensual del equipo.</p>`
+      : "",
     "</div>",
 
     '<div class="conditions">',
