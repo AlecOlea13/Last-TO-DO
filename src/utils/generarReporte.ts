@@ -189,24 +189,27 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 
   const clienteNombre = cot.cliente?.nombre ?? "";
   const m = cot.montacargas;
-  const tipoLabel  = cot.tipo === "renta" ? "RENTA" : "VENTA";
+  const tipoLabel   = cot.tipo === "renta" ? "RENTA" : "VENTA";
   const esElectrico = m?.tipo === "electrico";
+
+  // ── Foto principal del equipo (primer item con imagen) ── NUEVO
+  const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
 
   // ── Specs del equipo ──
   const specsRows = [
-    specRow("Marca",             m?.marca),
-    specRow("Modelo",            m?.modelo),
-    specRow("Serie",             m?.serie),
-    specRow("Sistema",           m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
-    specRow("Capacidad de carga",m?.capacidad),
-    specRow("Altura de levante", m?.alturaLevante),
-    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)              : "",
-    !esElectrico ? specRow("Horquillas",          m?.horquillas)                   : "",
-    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null) : "",
-    esElectrico  ? specRow("Voltaje",             m?.voltaje)                      : "",
-    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                  : "",
-    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null): "",
-    specRow("Tipo de llantas",   m?.tipoLlantas),
+    specRow("Marca",              m?.marca),
+    specRow("Modelo",             m?.modelo),
+    specRow("Serie",              m?.serie),
+    specRow("Sistema",            m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
+    specRow("Capacidad de carga", m?.capacidad),
+    specRow("Altura de levante",  m?.alturaLevante),
+    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                   : "",
+    !esElectrico ? specRow("Horquillas",          m?.horquillas)                        : "",
+    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null)  : "",
+    esElectrico  ? specRow("Voltaje",             m?.voltaje)                           : "",
+    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                       : "",
+    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)     : "",
+    specRow("Tipo de llantas",    m?.tipoLlantas),
   ].join("");
 
   // ── Equipo de seguridad ──
@@ -224,8 +227,12 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
       </tr>`
     : "";
 
-  // ── Items con foto ← FIXED ──
-  const itemsHtml = cot.items.map(item =>
+  // ── Items — solo los que NO tienen imagen principal (o todos si no hay foto grande) ──
+  const itemsFiltrados = fotoEquipo
+    ? cot.items.filter((_, idx) => idx !== cot.items.findIndex(i => i.imagen))
+    : cot.items;
+
+  const itemsHtml = itemsFiltrados.map(item =>
     `<tr>
       <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center;vertical-align:middle">
         ${item.imagen
@@ -252,6 +259,10 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
     ".saludo { font-size: 10pt; margin: 16px 0; line-height: 1.7; }",
     ".section-title { font-weight: bold; font-size: 11pt; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
+    // ── Foto grande ──
+    ".foto-equipo { text-align: center; margin: 16px 0; }",
+    ".foto-equipo img { width: 100%; max-width: 680px; max-height: 420px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; display: block; margin: 0 auto; }",
+    ".foto-caption { font-size: 9pt; color: #888; margin-top: 6px; font-style: italic; }",
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
@@ -265,7 +276,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".conditions li { margin-bottom: 4px; }",
     ".signature { margin-top: 28px; font-size: 10pt; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
-    "@media print { body { padding: 16px; } }",
+    "@media print { body { padding: 16px; } .foto-equipo img { max-height: 380px; } }",
     "</style>", "</head>", "<body>",
 
     '<div class="header">',
@@ -286,12 +297,21 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
 
+    // ── Foto grande del equipo ── NUEVO
+    fotoEquipo
+      ? `<div class="section-title">Fotografía del Equipo</div>
+         <div class="foto-equipo">
+           <img src="${fotoEquipo}" alt="${m?.marca ?? ""} ${m?.modelo ?? ""}" />
+           <p class="foto-caption">${m?.marca ?? ""} ${m?.modelo ?? ""} ${m?.capacidad ? "— " + m.capacidad : ""}</p>
+         </div>`
+      : "",
+
     m ? '<div class="section-title">Datos del Equipo</div>' : "",
     m ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
 
-    // ── Conceptos con foto ──
-    cot.items.length > 0 ? '<div class="section-title">Conceptos</div>' : "",
-    cot.items.length > 0 ? `<table>
+    // ── Conceptos restantes ──
+    itemsFiltrados.length > 0 ? '<div class="section-title">Conceptos</div>' : "",
+    itemsFiltrados.length > 0 ? `<table>
       <thead><tr>
         <th style="width:60px">FOTO</th>
         <th>DESCRIPCIÓN</th>
@@ -307,7 +327,6 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    // Nota precio mensual para renta ← NUEVO
     cot.tipo === "renta"
       ? `<p class="precio-nota">* El precio indicado corresponde a la renta mensual del equipo.</p>`
       : "",
