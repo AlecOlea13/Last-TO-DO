@@ -3,15 +3,26 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
 import "../dashboard.css";
 
+const ROL_LABEL: Record<string, string> = {
+  developer: "Developer",
+  gerencia:  "Gerencia",
+  oficina:   "Oficina",
+  tecnico:   "Técnico",
+};
+
 export default function Dashboard() {
-  const [user, setUser]     = useState<any>(null);
-  const [stats, setStats]   = useState({ disponibles: 0, rentados: 0, taller: 0, serviciosAbiertos: 0, rentasVencer: 0, facturasPendientes: 0 });
-  const location            = useLocation();
-  const navigate            = useNavigate();
+  const [stats, setStats] = useState({
+    disponibles: 0, rentados: 0, taller: 0,
+    serviciosAbiertos: 0, rentasVencer: 0, facturasPendientes: 0,
+  });
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const nombre = localStorage.getItem("nombre") ?? "Usuario";
+  const rol    = localStorage.getItem("rol") ?? "";
 
   useEffect(() => {
     setAuth(localStorage.getItem("token"));
-    api.get("/users/me").then(r => setUser(r.data)).catch(() => {});
     loadStats();
   }, []);
 
@@ -23,12 +34,12 @@ export default function Dashboard() {
         api.get("/rentas"),
         api.get("/facturas"),
       ]);
-      const montaList    = montas.data ?? [];
+      const montaList    = montas.data    ?? [];
       const servicioList = servicios.data ?? [];
-      const rentaList    = rentas.data ?? [];
-      const facturaList  = facturas.data ?? [];
-      const hoy          = new Date();
-      const en30dias     = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const rentaList    = rentas.data    ?? [];
+      const facturaList  = facturas.data  ?? [];
+      const hoy      = new Date();
+      const en30dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       setStats({
         disponibles:        montaList.filter((m: any) => m.estatus === "disponible").length,
         rentados:           montaList.filter((m: any) => m.estatus === "rentado").length,
@@ -42,21 +53,26 @@ export default function Dashboard() {
 
   function logout() {
     localStorage.removeItem("token");
+    localStorage.removeItem("rol");
+    localStorage.removeItem("nombre");
     setAuth(null);
     window.location.href = "/";
   }
 
-  const navItems = [
-    { to: "/dashboard",            icon: "📊", label: "Dashboard" },
-    { to: "/dashboard/montacargas",icon: "🏗️",  label: "Montacargas" },
-    { to: "/dashboard/clientes",   icon: "🏢", label: "Clientes" },
-    { to: "/dashboard/rentas",     icon: "📋", label: "Rentas" },
-    { to: "/dashboard/servicios",  icon: "🔧", label: "Servicios" },
-    { to: "/dashboard/facturas",   icon: "💰", label: "Cobranza" },
-    { to: "/dashboard/cotizaciones", icon: "📄", label: "Cotizaciones" },
-    { to: "/dashboard/asesores", icon: "👤", label: "Asesores" },
+  // ── Menú dinámico por rol ──────────────────────────────────────────────────
+  const allNav = [
+    { to: "/dashboard",               icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico"] },
+    { to: "/dashboard/montacargas",   icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico"] },
+    { to: "/dashboard/servicios",     icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico"] },
+    { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
+    { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
   ];
 
+  const navItems = allNav.filter(item => item.roles.includes(rol));
   const isDashboard = location.pathname === "/dashboard";
 
   return (
@@ -72,11 +88,11 @@ export default function Dashboard() {
 
         <div className="sidebar-user">
           <div className="sidebar-avatar-placeholder">
-            {user?.name?.[0]?.toUpperCase() ?? "?"}
+            {nombre?.[0]?.toUpperCase() ?? "?"}
           </div>
           <div>
-            <p className="sidebar-user-name">{user?.name ?? "Usuario"}</p>
-            <p className="sidebar-user-role">Administrador</p>
+            <p className="sidebar-user-name">{nombre}</p>
+            <p className="sidebar-user-role">{ROL_LABEL[rol] ?? rol}</p>
           </div>
         </div>
 
@@ -152,13 +168,7 @@ export default function Dashboard() {
                   <p className="table-card-title">Accesos rápidos</p>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 1 }}>
-                  {[
-                    { to: "/dashboard/montacargas", icon: "🏗️", label: "Ver todos los montacargas", color: "var(--blue)" },
-                    { to: "/dashboard/clientes",    icon: "🏢", label: "Gestionar clientes",         color: "var(--green)" },
-                    { to: "/dashboard/rentas",      icon: "📋", label: "Ver rentas activas",         color: "var(--purple)" },
-                    { to: "/dashboard/servicios",   icon: "🔧", label: "Servicios pendientes",       color: "var(--accent)" },
-                    { to: "/dashboard/facturas",    icon: "💰", label: "Cobranza pendiente",         color: "var(--red)" },
-                  ].map(item => (
+                  {navItems.filter(i => i.to !== "/dashboard").map(item => (
                     <Link
                       key={item.to}
                       to={item.to}
@@ -183,11 +193,9 @@ export default function Dashboard() {
             </div>
           </>
         ) : (
-          <Outlet context={{ user }} />
+          <Outlet context={{ nombre, rol }} />
         )}
       </div>
     </div>
   );
 }
-const isDashboard = location.pathname === "/dashboard";
-console.log("pathname:", location.pathname, "isDashboard:", isDashboard);
