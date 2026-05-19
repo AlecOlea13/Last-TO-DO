@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
+
+type OrdenRefaccionItem = {
+  refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string; precio?: number };
+  cantidadSolicitada: number;
+  cantidadSurtida: number;
+  confirmado: boolean;
+};
 
 type Servicio = {
   _id: string;
   folio: string;
-  montacargas?: { _id: string; numeroEconomico: string; marca: string };
+  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string };
   cliente?: { _id: string; nombre: string };
   tipoServicio?: { _id: string; nombre: string };
   tecnicoAsignado?: { _id: string; nombre: string };
@@ -15,7 +23,12 @@ type Servicio = {
   costoManoObra?: number;
   horometro?: number;
   horometroCierre?: number;
-  ordenRefaccion?: { _id: string; folio: string; estatus: string };
+  ordenRefaccion?: {
+    _id: string;
+    folio: string;
+    estatus: string;
+    items?: OrdenRefaccionItem[];
+  };
   notasCierre?: string;
 };
 
@@ -58,7 +71,12 @@ export default function Servicios() {
 
   async function load() {
     try {
-      const calls: any[] = [api.get("/servicios"), api.get("/montacargas"), api.get("/clientes"), api.get("/tipos-servicio")];
+      const calls: any[] = [
+        api.get("/servicios"),
+        api.get("/montacargas"),
+        api.get("/clientes"),
+        api.get("/tipos-servicio"),
+      ];
       if (["developer","gerencia","oficina"].includes(rol)) calls.push(api.get("/users"));
       const [s, m, c, t, u] = await Promise.all(calls);
       setServicios(s.data);
@@ -104,6 +122,36 @@ export default function Servicios() {
     setForm((p: any) => ({ ...p, montacargas: montaId, cliente: monta?.clienteActual?._id ?? p.cliente }));
   }
 
+  function buildOrdenTrabajo(s: Servicio): OrdenTrabajoReporte {
+    return {
+      folio:       s.folio,
+      fecha:       s.fechaReporte,
+      cliente:     s.cliente ? { nombre: s.cliente.nombre } : undefined,
+      montacargas: s.montacargas ? {
+        numeroEconomico: s.montacargas.numeroEconomico,
+        marca:           s.montacargas.marca,
+        modelo:          s.montacargas.modelo ?? "",
+        serie:           s.montacargas.serie  ?? "",
+        horometro:       s.horometro,
+        horometroCierre: s.horometroCierre,
+      } : undefined,
+      tipoServicio: s.tipoServicio?.nombre,
+      tecnico:      s.tecnicoAsignado?.nombre,
+      problema:     s.problema,
+      notasCierre:  s.notasCierre,
+      refacciones:  s.ordenRefaccion?.items
+        ?.filter(i => i.cantidadSurtida > 0)
+        .map(i => ({
+          cantidad:    i.cantidadSurtida,
+          descripcion: i.refaccion.nombre,
+          precio:      i.refaccion.precio,
+        })) ?? [],
+      costoRefacciones: s.costoRefacciones,
+      costoManoObra:    s.costoManoObra,
+      observaciones:    s.notasCierre,
+    };
+  }
+
   const filtered = servicios.filter(s => {
     const matchSearch =
       (s.folio ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -128,7 +176,9 @@ export default function Servicios() {
           <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos</p>
         </div>
         {canCreate && (
-          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nuevo servicio</button>
+          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
+            + Nuevo servicio
+          </button>
         )}
       </div>
 
@@ -171,7 +221,10 @@ export default function Servicios() {
                   <tr key={s._id}>
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{s.folio}</td>
                     <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{fmt(s.fechaReporte)}</td>
-                    <td style={{ fontWeight: 600 }}>{s.montacargas?.numeroEconomico} <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.8rem" }}>{s.montacargas?.marca}</span></td>
+                    <td style={{ fontWeight: 600 }}>
+                      {s.montacargas?.numeroEconomico}
+                      <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.8rem" }}> {s.montacargas?.marca}</span>
+                    </td>
                     <td>{s.cliente?.nombre ?? "—"}</td>
                     <td style={{ fontSize: "0.82rem" }}>{s.tipoServicio?.nombre ?? "—"}</td>
                     <td>{s.tecnicoAsignado?.nombre ?? "—"}</td>
@@ -199,14 +252,29 @@ export default function Servicios() {
                       )}
                     </td>
                     <td>
-                      {s.estatus !== "cerrado" && (
-                        <button className="btn btn-primary btn-sm" onClick={() => {
-                          setCerrarModal(s);
-                          setCerrarForm({ horometro: s.horometro ?? 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
-                        }}>
-                          Cerrar
-                        </button>
-                      )}
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))}
+                          title="Ver orden de trabajo"
+                        >👁️</button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))}
+                          title="Imprimir orden de trabajo"
+                        >🖨️</button>
+                        {s.estatus !== "cerrado" && (
+                          <button
+                            className="btn btn-amber btn-sm"
+                            onClick={() => {
+                              setCerrarModal(s);
+                              setCerrarForm({ horometro: s.horometro ?? 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
+                            }}
+                          >
+                            Cerrar
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -316,7 +384,7 @@ export default function Servicios() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Notas de cierre</label>
+                <label className="form-label">Notas de cierre / trabajos realizados</label>
                 <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm(p => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
               </div>
             </div>
