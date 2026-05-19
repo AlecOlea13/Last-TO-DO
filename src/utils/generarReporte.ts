@@ -717,16 +717,19 @@ export function imprimirReporte(cot: CotizacionReporte) {
   abrirVentana(htmlConPrint);
 }
 
-export function generarOrdenTrabajo(ot: OrdenTrabajoReporte) {
-  abrirVentana(htmlOrdenTrabajo(ot));
+export function imprimirOrdenTrabajo(ot: OrdenTrabajoReporte) {
+  const folio = ot.folio ?? "OT";
+  const html = htmlOrdenTrabajo({ ...ot, folio });
+  const htmlConPrint = html.replace(
+    `window.onload = function() { document.title = '${folio}'; };`,
+    `window.onload = function() { document.title = '${folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
+  );
+  abrirVentana(htmlConPrint);
 }
 
-export function imprimirOrdenTrabajo(ot: OrdenTrabajoReporte) {
-  const html = htmlOrdenTrabajo(ot).replace(
-    `window.onload = function() { document.title = '${ot.folio}'; };`,
-    `window.onload = function() { document.title = '${ot.folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
-  );
-  abrirVentana(html);
+export function generarOrdenTrabajo(ot: OrdenTrabajoReporte) {
+  const folio = ot.folio ?? "OT";
+  abrirVentana(htmlOrdenTrabajo({ ...ot, folio }));
 }
 
 function abrirVentana(html: string) {

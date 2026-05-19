@@ -124,7 +124,7 @@ export default function Servicios() {
 
   function buildOrdenTrabajo(s: Servicio): OrdenTrabajoReporte {
     return {
-      folio:       s.folio,
+      folio: s.folio ?? `OT-${s._id.slice(-4)}`,
       fecha:       s.fechaReporte,
       cliente:     s.cliente ? { nombre: s.cliente.nombre } : undefined,
       montacargas: s.montacargas ? {
