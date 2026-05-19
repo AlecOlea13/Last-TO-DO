@@ -33,64 +33,87 @@ type Orden = {
   createdAt: string;
 };
 
+type TipoServicioItem = {
+  refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string };
+  cantidad: number;
+};
+
+type TipoServicio = {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  intervaloHrs?: number;
+  refacciones: TipoServicioItem[];
+  activo: boolean;
+};
+
 const emptyRefaccion = {
   nombre: "", numeroParte: "", categoria: "", unidad: "pieza",
   stock: 0, stockMinimo: 1, precio: 0,
 };
 
-const ESTATUS_BADGE: Record<string, string> = {
-  pendiente:  "badge-amber",
-  surtida:    "badge-green",
-  parcial:    "badge-blue",
-  cancelada:  "badge-gray",
+const emptyTipo = {
+  nombre: "", descripcion: "", intervaloHrs: "", refacciones: [] as { refaccion: string; cantidad: number }[],
 };
 
-const rol = localStorage.getItem("rol") ?? "";
+const ESTATUS_BADGE: Record<string, string> = {
+  pendiente: "badge-amber", surtida: "badge-green",
+  parcial:   "badge-blue",  cancelada: "badge-gray",
+};
+
+const rol     = localStorage.getItem("rol") ?? "";
 const canEdit = ["developer", "gerencia"].includes(rol);
 
 export default function Almacen() {
-  const [tab, setTab]               = useState<"inventario" | "ordenes">("inventario");
-  const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
-  const [ordenes, setOrdenes]       = useState<Orden[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState("");
-  const [modal, setModal]           = useState(false);
-  const [stockModal, setStockModal] = useState<Refaccion | null>(null);
-  const [surtirModal, setSurtirModal] = useState<Orden | null>(null);
-  const [editing, setEditing]       = useState<Refaccion | null>(null);
-  const [form, setForm]             = useState<any>(emptyRefaccion);
-  const [stockForm, setStockForm]   = useState({ tipo: "entrada", cantidad: 1 });
-  const [surtirItems, setSurtirItems] = useState<any[]>([]);
-  const [surtirNotas, setSurtirNotas] = useState("");
-  const [saving, setSaving]         = useState(false);
+  const [tab, setTab]                   = useState<"inventario" | "ordenes" | "tipos">("inventario");
+  const [refacciones, setRefacciones]   = useState<Refaccion[]>([]);
+  const [ordenes, setOrdenes]           = useState<Orden[]>([]);
+  const [tipos, setTipos]               = useState<TipoServicio[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState("");
+
+  // Modales refacción
+  const [modal, setModal]               = useState(false);
+  const [stockModal, setStockModal]     = useState<Refaccion | null>(null);
+  const [editing, setEditing]           = useState<Refaccion | null>(null);
+  const [form, setForm]                 = useState<any>(emptyRefaccion);
+  const [stockForm, setStockForm]       = useState({ tipo: "entrada", cantidad: 1 });
+
+  // Modal orden
+  const [surtirModal, setSurtirModal]   = useState<Orden | null>(null);
+  const [surtirItems, setSurtirItems]   = useState<any[]>([]);
+  const [surtirNotas, setSurtirNotas]   = useState("");
+
+  // Modal tipo servicio
+  const [tipoModal, setTipoModal]       = useState(false);
+  const [editingTipo, setEditingTipo]   = useState<TipoServicio | null>(null);
+  const [tipoForm, setTipoForm]         = useState<any>(emptyTipo);
+
+  const [saving, setSaving]             = useState(false);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [r, o] = await Promise.all([api.get("/refacciones"), api.get("/ordenes-refaccion")]);
+      const [r, o, t] = await Promise.all([
+        api.get("/refacciones"),
+        api.get("/ordenes-refaccion"),
+        api.get("/tipos-servicio"),
+      ]);
       setRefacciones(r.data);
       setOrdenes(o.data);
+      setTipos(t.data);
     } catch {}
     finally { setLoading(false); }
   }
 
-  function openNew() {
-    setEditing(null);
-    setForm(emptyRefaccion);
-    setModal(true);
-  }
+  // ── Refacciones ──────────────────────────────────────────────────────────────
+  function openNew() { setEditing(null); setForm(emptyRefaccion); setModal(true); }
 
   function openEdit(r: Refaccion) {
     setEditing(r);
     setForm({ nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "", unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio });
     setModal(true);
-  }
-
-  function openSurtir(o: Orden) {
-    setSurtirModal(o);
-    setSurtirItems(o.items.map(i => ({ refaccionId: i.refaccion._id, cantidadSurtida: i.cantidadSolicitada })));
-    setSurtirNotas("");
   }
 
   async function saveRefaccion() {
@@ -120,6 +143,19 @@ export default function Almacen() {
     finally { setSaving(false); }
   }
 
+  async function removeRefaccion(r: Refaccion) {
+    if (!confirm(`¿Eliminar ${r.nombre}?`)) return;
+    await api.delete(`/refacciones/${r._id}`);
+    setRefacciones(prev => prev.filter(x => x._id !== r._id));
+  }
+
+  // ── Órdenes ──────────────────────────────────────────────────────────────────
+  function openSurtir(o: Orden) {
+    setSurtirModal(o);
+    setSurtirItems(o.items.map(i => ({ refaccionId: i.refaccion._id, cantidadSurtida: i.cantidadSolicitada })));
+    setSurtirNotas("");
+  }
+
   async function surtirOrden() {
     if (!surtirModal) return;
     setSaving(true);
@@ -132,12 +168,69 @@ export default function Almacen() {
     finally { setSaving(false); }
   }
 
-  async function remove(r: Refaccion) {
-    if (!confirm(`¿Eliminar ${r.nombre}?`)) return;
-    await api.delete(`/refacciones/${r._id}`);
-    setRefacciones(prev => prev.filter(x => x._id !== r._id));
+  // ── Tipos de servicio ─────────────────────────────────────────────────────────
+  function openNewTipo() {
+    setEditingTipo(null);
+    setTipoForm({ ...emptyTipo, refacciones: [] });
+    setTipoModal(true);
   }
 
+  function openEditTipo(t: TipoServicio) {
+    setEditingTipo(t);
+    setTipoForm({
+      nombre:       t.nombre,
+      descripcion:  t.descripcion ?? "",
+      intervaloHrs: t.intervaloHrs ?? "",
+      refacciones:  t.refacciones.map(r => ({ refaccion: r.refaccion._id, cantidad: r.cantidad })),
+    });
+    setTipoModal(true);
+  }
+
+  function addRefaccionTipo() {
+    setTipoForm((p: any) => ({ ...p, refacciones: [...p.refacciones, { refaccion: "", cantidad: 1 }] }));
+  }
+
+  function removeRefaccionTipo(i: number) {
+    setTipoForm((p: any) => ({ ...p, refacciones: p.refacciones.filter((_: any, idx: number) => idx !== i) }));
+  }
+
+  function updateRefaccionTipo(i: number, field: string, val: any) {
+    setTipoForm((p: any) => {
+      const refs = [...p.refacciones];
+      refs[i] = { ...refs[i], [field]: val };
+      return { ...p, refacciones: refs };
+    });
+  }
+
+  async function saveTipo() {
+    if (!tipoForm.nombre.trim()) return;
+    setSaving(true);
+    try {
+      const payload = {
+        nombre:       tipoForm.nombre,
+        descripcion:  tipoForm.descripcion || null,
+        intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null,
+        refacciones:  tipoForm.refacciones.filter((r: any) => r.refaccion),
+      };
+      if (editingTipo) {
+        const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload);
+        setTipos(prev => prev.map(t => t._id === editingTipo._id ? data : t));
+      } else {
+        const { data } = await api.post("/tipos-servicio", payload);
+        setTipos(prev => [data, ...prev]);
+      }
+      setTipoModal(false);
+    } catch {}
+    finally { setSaving(false); }
+  }
+
+  async function removeTipo(t: TipoServicio) {
+    if (!confirm(`¿Eliminar tipo "${t.nombre}"?`)) return;
+    await api.delete(`/tipos-servicio/${t._id}`);
+    setTipos(prev => prev.filter(x => x._id !== t._id));
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────────
   function fmt(date?: string) {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
@@ -155,8 +248,23 @@ export default function Almacen() {
     (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const stockBajo = refacciones.filter(r => r.stock <= r.stockMinimo).length;
+  const filteredTipos = tipos.filter(t =>
+    t.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
+
+  const tabStyle = (t: string) => ({
+    padding: "8px 20px", borderRadius: "var(--radius-sm)",
+    border: "1.5px solid", cursor: "pointer",
+    borderColor: tab === t ? "var(--accent)" : "var(--border)",
+    background: tab === t ? "rgba(255,180,0,0.1)" : "var(--surface2)",
+    color: tab === t ? "var(--accent)" : "var(--text-muted)",
+    fontWeight: tab === t ? 700 : 400,
+    fontSize: "0.88rem",
+  });
 
   return (
     <>
@@ -167,6 +275,9 @@ export default function Almacen() {
         </div>
         {canEdit && tab === "inventario" && (
           <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>
+        )}
+        {canEdit && tab === "tipos" && (
+          <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>
         )}
       </div>
 
@@ -196,28 +307,16 @@ export default function Almacen() {
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {(["inventario", "ordenes"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSearch(""); }}
-              style={{
-                padding: "8px 20px", borderRadius: "var(--radius-sm)",
-                border: "1.5px solid", cursor: "pointer",
-                borderColor: tab === t ? "var(--accent)" : "var(--border)",
-                background: tab === t ? "rgba(255,180,0,0.1)" : "var(--surface2)",
-                color: tab === t ? "var(--accent)" : "var(--text-muted)",
-                fontWeight: tab === t ? 700 : 400,
-                textTransform: "capitalize", fontSize: "0.88rem",
-              }}
-            >
-              {t === "inventario" ? "📦 Inventario" : "📋 Órdenes de refacciones"}
-            </button>
-          ))}
+          <button onClick={() => { setTab("inventario"); setSearch(""); }} style={tabStyle("inventario")}>📦 Inventario</button>
+          <button onClick={() => { setTab("ordenes"); setSearch(""); }} style={tabStyle("ordenes")}>📋 Órdenes</button>
+          {canEdit && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
         </div>
 
         <div className="table-card">
           <div className="table-card-header">
-            <p className="table-card-title">{tab === "inventario" ? "Inventario de refacciones" : "Órdenes de refacciones"}</p>
+            <p className="table-card-title">
+              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : "Tipos de servicio"}
+            </p>
             <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
 
@@ -230,14 +329,8 @@ export default function Almacen() {
               <table>
                 <thead>
                   <tr>
-                    <th>Nombre</th>
-                    <th>No. Parte</th>
-                    <th>Categoría</th>
-                    <th>Unidad</th>
-                    <th>Stock</th>
-                    <th>Mín.</th>
-                    <th>Precio</th>
-                    <th></th>
+                    <th>Nombre</th><th>No. Parte</th><th>Categoría</th><th>Unidad</th>
+                    <th>Stock</th><th>Mín.</th><th>Precio</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -255,35 +348,28 @@ export default function Almacen() {
                       <td style={{ color: "var(--text-muted)" }}>{r.stockMinimo}</td>
                       <td>${r.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          {canEdit && (
-                            <>
-                              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
-                              <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>
-                              <button className="btn btn-danger btn-sm" onClick={() => remove(r)}>🗑️</button>
-                            </>
-                          )}
-                        </div>
+                        {canEdit && (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
+                            <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )
-          ) : (
+          ) : tab === "ordenes" ? (
             filteredOrd.length === 0 ? (
               <div className="empty-state"><span className="empty-icon">📋</span><p>Sin órdenes registradas</p></div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>Folio orden</th>
-                    <th>Servicio</th>
-                    <th>Equipo</th>
-                    <th>Piezas</th>
-                    <th>Fecha</th>
-                    <th>Estatus</th>
-                    <th></th>
+                    <th>Folio orden</th><th>Servicio</th><th>Equipo</th>
+                    <th>Piezas</th><th>Fecha</th><th>Estatus</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -305,11 +391,52 @@ export default function Almacen() {
                 </tbody>
               </table>
             )
+          ) : (
+            // ── Tipos de servicio ──
+            filteredTipos.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">⚙️</span><p>Sin tipos de servicio registrados</p></div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nombre</th><th>Intervalo</th><th>Descripción</th><th>Refacciones</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTipos.map(t => (
+                    <tr key={t._id}>
+                      <td style={{ fontWeight: 600 }}>{t.nombre}</td>
+                      <td>{t.intervaloHrs ? `${t.intervaloHrs} hrs` : "—"}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t.descripcion || "—"}</td>
+                      <td>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                          {t.refacciones.length === 0 ? (
+                            <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Sin refacciones</span>
+                          ) : t.refacciones.map((r, i) => (
+                            <span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>
+                              {r.cantidad}× {r.refaccion.nombre}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        {canEdit && (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
           )}
         </div>
       </div>
 
-      {/* Modal nueva/editar refacción */}
+      {/* ── Modal nueva/editar refacción ── */}
       {modal && canEdit && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -360,7 +487,7 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* Modal ajustar stock */}
+      {/* ── Modal ajustar stock ── */}
       {stockModal && canEdit && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setStockModal(null)}>
           <div className="modal" style={{ maxWidth: 380 }}>
@@ -390,7 +517,7 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* Modal surtir orden */}
+      {/* ── Modal surtir orden ── */}
       {surtirModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSurtirModal(null)}>
           <div className="modal" style={{ maxWidth: 600 }}>
@@ -399,7 +526,6 @@ export default function Almacen() {
             <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
               Servicio: <strong style={{ color: "var(--text)" }}>{surtirModal.servicio?.folio}</strong> — {surtirModal.montacargas?.numeroEconomico} {surtirModal.montacargas?.marca}
             </p>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {surtirModal.items.map((item, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
@@ -417,9 +543,7 @@ export default function Almacen() {
                   <div style={{ textAlign: "center" }}>
                     <p style={{ margin: 0, fontSize: "0.7rem", color: "var(--text-muted)" }}>A surtir</p>
                     <input
-                      type="number"
-                      min={0}
-                      max={item.cantidadSolicitada}
+                      type="number" min={0} max={item.cantidadSolicitada}
                       value={surtirItems[i]?.cantidadSurtida ?? item.cantidadSolicitada}
                       onChange={e => setSurtirItems(prev => prev.map((x, idx) => idx === i ? { ...x, cantidadSurtida: +e.target.value } : x))}
                       style={{ width: 70, padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", textAlign: "center" }}
@@ -428,15 +552,84 @@ export default function Almacen() {
                 </div>
               ))}
             </div>
-
             <div className="form-group">
               <label className="form-label">Notas (opcional)</label>
               <input className="form-input" value={surtirNotas} onChange={e => setSurtirNotas(e.target.value)} placeholder="Ej. Faltó 1 filtro, se pedirá mañana" />
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setSurtirModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={surtirOrden} disabled={saving}>{saving ? "Confirmando..." : "Confirmar entrega"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal nuevo/editar tipo de servicio ── */}
+      {tipoModal && canEdit && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTipoModal(false)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <button className="modal-close" onClick={() => setTipoModal(false)}>✕</button>
+            <h2 className="modal-title">{editingTipo ? "Editar tipo de servicio" : "Nuevo tipo de servicio"}</h2>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Nombre *</label>
+                <input className="form-input" value={tipoForm.nombre} onChange={e => setTipoForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Preventivo 500 hrs" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Intervalo (horas)</label>
+                <input className="form-input" type="number" value={tipoForm.intervaloHrs} onChange={e => setTipoForm((p: any) => ({ ...p, intervaloHrs: e.target.value }))} placeholder="Ej. 500" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Descripción</label>
+                <input className="form-input" value={tipoForm.descripcion} onChange={e => setTipoForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Descripción opcional" />
+              </div>
+            </div>
+
+            {/* Refacciones del tipo */}
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
+                  Refacciones sugeridas
+                </p>
+                <button className="btn btn-secondary btn-sm" onClick={addRefaccionTipo}>+ Agregar</button>
+              </div>
+
+              {tipoForm.refacciones.length === 0 ? (
+                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>
+                  Sin refacciones — este tipo no generará orden automática
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {tipoForm.refacciones.map((r: any, i: number) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 32px", gap: 8, alignItems: "center" }}>
+                      <select
+                        className="form-select"
+                        value={r.refaccion}
+                        onChange={e => updateRefaccionTipo(i, "refaccion", e.target.value)}
+                      >
+                        <option value="">Selecciona refacción...</option>
+                        {refacciones.map(ref => (
+                          <option key={ref._id} value={ref._id}>{ref.nombre}{ref.numeroParte ? ` (#${ref.numeroParte})` : ""}</option>
+                        ))}
+                      </select>
+                      <input
+                        className="form-input"
+                        type="number" min={1}
+                        value={r.cantidad}
+                        onChange={e => updateRefaccionTipo(i, "cantidad", +e.target.value)}
+                        placeholder="Cant."
+                        style={{ padding: "8px", textAlign: "center" }}
+                      />
+                      <button className="btn btn-danger btn-icon" onClick={() => removeRefaccionTipo(i)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setTipoModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveTipo} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
             </div>
           </div>
         </div>
