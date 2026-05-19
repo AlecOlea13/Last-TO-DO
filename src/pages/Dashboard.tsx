@@ -185,6 +185,7 @@ export default function Dashboard() {
     { to: "/dashboard",               icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico"] },
     { to: "/dashboard/montacargas",   icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico"] },
     { to: "/dashboard/servicios",     icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico"] },
+    { to: "/dashboard/almacen",       icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico"] },
     { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },

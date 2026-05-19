@@ -3,58 +3,69 @@ import { api } from "../api";
 
 type Servicio = {
   _id: string;
+  folio: string;
   montacargas?: { _id: string; numeroEconomico: string; marca: string };
   cliente?: { _id: string; nombre: string };
+  tipoServicio?: { _id: string; nombre: string };
+  tecnicoAsignado?: { _id: string; nombre: string };
   fechaReporte: string;
   problema?: string;
-  tecnicoAsignado?: string;
   estatus: "abierto" | "en_proceso" | "cerrado";
   costoRefacciones?: number;
   costoManoObra?: number;
   horometro?: number;
+  horometroCierre?: number;
+  ordenRefaccion?: { _id: string; folio: string; estatus: string };
+  notasCierre?: string;
 };
 
-type Monta   = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
-type Cliente = { _id: string; nombre: string };
+type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
+type Cliente      = { _id: string; nombre: string };
+type TipoServicio = { _id: string; nombre: string; intervaloHrs?: number };
+type Usuario      = { _id: string; nombre: string; rol: string };
 
 const emptyForm = {
-  montacargas: "", cliente: "", fechaReporte: new Date().toISOString().split("T")[0],
-  problema: "", tecnicoAsignado: "", costoRefacciones: 0, costoManoObra: 0, horometro: 0,
+  montacargas: "", cliente: "", tipoServicio: "", tecnicoAsignado: "",
+  fechaReporte: new Date().toISOString().split("T")[0],
+  problema: "", costoRefacciones: 0, costoManoObra: 0, horometro: 0,
 };
 
-// const ESTATUS_BADGE: Record<string, string> = {
-//   abierto:    "badge-red",
-//   en_proceso: "badge-amber",
-//   cerrado:    "badge-gray",
-// };
+const ORDEN_BADGE: Record<string, string> = {
+  pendiente: "badge-amber", surtida: "badge-green",
+  parcial: "badge-blue",   cancelada: "badge-gray",
+};
 
-// const ESTATUS_LABEL: Record<string, string> = {
-//   abierto:    "Abierto",
-//   en_proceso: "En proceso",
-//   cerrado:    "Cerrado",
-// };
+const rol = localStorage.getItem("rol") ?? "";
 
 export default function Servicios() {
-  const [servicios, setServicios] = useState<Servicio[]>([]);
-  const [montas, setMontas]       = useState<Monta[]>([]);
-  const [clientes, setClientes]   = useState<Cliente[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [filtro, setFiltro]       = useState("todos");
-  const [modal, setModal]         = useState(false);
+  const [servicios, setServicios]   = useState<Servicio[]>([]);
+  const [montas, setMontas]         = useState<Monta[]>([]);
+  const [clientes, setClientes]     = useState<Cliente[]>([]);
+  const [tipos, setTipos]           = useState<TipoServicio[]>([]);
+  const [usuarios, setUsuarios]     = useState<Usuario[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [filtro, setFiltro]         = useState("todos");
+  const [modal, setModal]           = useState(false);
   const [cerrarModal, setCerrarModal] = useState<Servicio | null>(null);
-  const [form, setForm]           = useState<any>(emptyForm);
-  const [cerrarForm, setCerrarForm]   = useState({ horometro: 0, proximoServicio: "", estatusMonta: "disponible" });
-  const [saving, setSaving]       = useState(false);
+  const [form, setForm]             = useState<any>(emptyForm);
+  const [cerrarForm, setCerrarForm] = useState({ horometro: 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
+  const [saving, setSaving]         = useState(false);
+
+  const canCreate = ["developer","gerencia","oficina"].includes(rol);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [s, m, c] = await Promise.all([api.get("/servicios"), api.get("/montacargas"), api.get("/clientes")]);
+      const calls: any[] = [api.get("/servicios"), api.get("/montacargas"), api.get("/clientes"), api.get("/tipos-servicio")];
+      if (["developer","gerencia","oficina"].includes(rol)) calls.push(api.get("/users"));
+      const [s, m, c, t, u] = await Promise.all(calls);
       setServicios(s.data);
       setMontas(m.data);
       setClientes(c.data);
+      setTipos(t.data);
+      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico","oficina"].includes(x.rol)));
     } catch {}
     finally { setLoading(false); }
   }
@@ -83,25 +94,22 @@ export default function Servicios() {
   }
 
   async function cambiarEstatus(s: Servicio, estatus: string) {
+    if (rol === "tecnico" && estatus !== "cerrado") return;
     await api.put(`/servicios/${s._id}`, { estatus });
     setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: estatus as any } : sv));
   }
 
-  // Auto-fill cliente cuando se selecciona montacargas
   function onMontaChange(montaId: string) {
     const monta = montas.find(m => m._id === montaId);
-    setForm((p: any) => ({
-      ...p,
-      montacargas: montaId,
-      cliente: monta?.clienteActual?._id ?? p.cliente,
-    }));
+    setForm((p: any) => ({ ...p, montacargas: montaId, cliente: monta?.clienteActual?._id ?? p.cliente }));
   }
 
   const filtered = servicios.filter(s => {
     const matchSearch =
+      (s.folio ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (s.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (s.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (s.tecnicoAsignado ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.tecnicoAsignado?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (s.problema ?? "").toLowerCase().includes(search.toLowerCase());
     const matchFiltro = filtro === "todos" || s.estatus === filtro;
     return matchSearch && matchFiltro;
@@ -119,7 +127,9 @@ export default function Servicios() {
           <h1 className="page-title">Servicios</h1>
           <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nuevo servicio</button>
+        {canCreate && (
+          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nuevo servicio</button>
+        )}
       </div>
 
       <div className="page-content">
@@ -145,12 +155,13 @@ export default function Servicios() {
             <table>
               <thead>
                 <tr>
+                  <th>Folio</th>
                   <th>Fecha</th>
                   <th>Equipo</th>
                   <th>Cliente</th>
-                  <th>Problema</th>
+                  <th>Tipo</th>
                   <th>Técnico</th>
-                  <th>Costo total</th>
+                  <th>Orden refac.</th>
                   <th>Estatus</th>
                   <th></th>
                 </tr>
@@ -158,27 +169,41 @@ export default function Servicios() {
               <tbody>
                 {filtered.map(s => (
                   <tr key={s._id}>
+                    <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{s.folio}</td>
                     <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{fmt(s.fechaReporte)}</td>
                     <td style={{ fontWeight: 600 }}>{s.montacargas?.numeroEconomico} <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.8rem" }}>{s.montacargas?.marca}</span></td>
                     <td>{s.cliente?.nombre ?? "—"}</td>
-                    <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.problema || "—"}</td>
-                    <td>{s.tecnicoAsignado || "—"}</td>
-                    <td>{s.costoRefacciones || s.costoManoObra ? `$${((s.costoRefacciones ?? 0) + (s.costoManoObra ?? 0)).toLocaleString()}` : "—"}</td>
+                    <td style={{ fontSize: "0.82rem" }}>{s.tipoServicio?.nombre ?? "—"}</td>
+                    <td>{s.tecnicoAsignado?.nombre ?? "—"}</td>
                     <td>
-                      <select
-                        className="form-select"
-                        style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
-                        value={s.estatus}
-                        onChange={e => cambiarEstatus(s, e.target.value)}
-                      >
-                        <option value="abierto">Abierto</option>
-                        <option value="en_proceso">En proceso</option>
-                        <option value="cerrado">Cerrado</option>
-                      </select>
+                      {s.ordenRefaccion ? (
+                        <span className={`badge ${ORDEN_BADGE[s.ordenRefaccion.estatus]}`}>{s.ordenRefaccion.folio}</span>
+                      ) : "—"}
+                    </td>
+                    <td>
+                      {rol === "tecnico" ? (
+                        <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
+                          {s.estatus}
+                        </span>
+                      ) : (
+                        <select
+                          className="form-select"
+                          style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
+                          value={s.estatus}
+                          onChange={e => cambiarEstatus(s, e.target.value)}
+                        >
+                          <option value="abierto">Abierto</option>
+                          <option value="en_proceso">En proceso</option>
+                          <option value="cerrado">Cerrado</option>
+                        </select>
+                      )}
                     </td>
                     <td>
                       {s.estatus !== "cerrado" && (
-                        <button className="btn btn-primary btn-sm" onClick={() => { setCerrarModal(s); setCerrarForm({ horometro: s.horometro ?? 0, proximoServicio: "", estatusMonta: "disponible" }); }}>
+                        <button className="btn btn-primary btn-sm" onClick={() => {
+                          setCerrarModal(s);
+                          setCerrarForm({ horometro: s.horometro ?? 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
+                        }}>
                           Cerrar
                         </button>
                       )}
@@ -192,7 +217,7 @@ export default function Servicios() {
       </div>
 
       {/* Modal nuevo servicio */}
-      {modal && (
+      {modal && canCreate && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal">
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
@@ -213,16 +238,30 @@ export default function Servicios() {
                 </select>
               </div>
               <div className="form-group">
+                <label className="form-label">Tipo de servicio</label>
+                <select className="form-select" value={form.tipoServicio} onChange={e => setForm((p: any) => ({ ...p, tipoServicio: e.target.value }))}>
+                  <option value="">Sin tipo (revisión / otro)</option>
+                  {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Técnico asignado</label>
+                <select className="form-select" value={form.tecnicoAsignado} onChange={e => setForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
+                  <option value="">Sin asignar</option>
+                  {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
                 <label className="form-label">Fecha reporte</label>
                 <input className="form-input" type="date" value={form.fechaReporte} onChange={e => setForm((p: any) => ({ ...p, fechaReporte: e.target.value }))} />
               </div>
               <div className="form-group">
-                <label className="form-label">Técnico asignado</label>
-                <input className="form-input" value={form.tecnicoAsignado} onChange={e => setForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))} placeholder="Nombre del técnico" />
+                <label className="form-label">Horómetro actual</label>
+                <input className="form-input" type="number" value={form.horometro} onChange={e => setForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
               </div>
-              <div className="form-group span-2">
-                <label className="form-label">Problema *</label>
-                <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema..." />
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Problema / descripción *</label>
+                <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema o trabajo a realizar..." rows={3} />
               </div>
               <div className="form-group">
                 <label className="form-label">Costo refacciones</label>
@@ -232,11 +271,12 @@ export default function Servicios() {
                 <label className="form-label">Costo mano de obra</label>
                 <input className="form-input" type="number" value={form.costoManoObra} onChange={e => setForm((p: any) => ({ ...p, costoManoObra: +e.target.value }))} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Horómetro actual</label>
-                <input className="form-input" type="number" value={form.horometro} onChange={e => setForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
-              </div>
             </div>
+            {form.tipoServicio && (
+              <div style={{ padding: "10px 14px", background: "rgba(255,180,0,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", fontSize: "0.82rem", color: "var(--accent)", marginTop: 8 }}>
+                ⚡ Se generará automáticamente una orden de refacciones al guardar.
+              </div>
+            )}
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
@@ -248,12 +288,17 @@ export default function Servicios() {
       {/* Modal cerrar servicio */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
-          <div className="modal" style={{ maxWidth: 420 }}>
+          <div className="modal" style={{ maxWidth: 460 }}>
             <button className="modal-close" onClick={() => setCerrarModal(null)}>✕</button>
             <h2 className="modal-title">Cerrar servicio</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-              Equipo <strong style={{ color: "var(--text)" }}>{cerrarModal.montacargas?.numeroEconomico}</strong>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 8 }}>
+              <strong style={{ color: "var(--text)" }}>{cerrarModal.folio}</strong> — {cerrarModal.montacargas?.numeroEconomico} {cerrarModal.montacargas?.marca}
             </p>
+            {cerrarModal.ordenRefaccion && cerrarModal.ordenRefaccion.estatus !== "surtida" && (
+              <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--red)", fontSize: "0.82rem", color: "var(--red)", marginBottom: 12 }}>
+                ⚠️ La orden de refacciones <strong>{cerrarModal.ordenRefaccion.folio}</strong> aún no ha sido surtida completamente.
+              </div>
+            )}
             <div className="form-grid cols-1">
               <div className="form-group">
                 <label className="form-label">Horómetro al cierre</label>
@@ -269,6 +314,10 @@ export default function Servicios() {
                   <option value="disponible">Disponible</option>
                   <option value="rentado">Rentado</option>
                 </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas de cierre</label>
+                <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm(p => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
               </div>
             </div>
             <div className="modal-footer">

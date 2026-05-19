@@ -10,6 +10,7 @@ import Facturas     from "./pages/Facturas";
 import Cotizaciones from "./pages/Cotizaciones";
 import Asesores     from "./pages/Asesores";
 import Usuarios     from "./pages/Usuarios";
+import Almacen      from "./pages/Almacen";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
@@ -18,63 +19,39 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
 
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        >
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
+
           {/* Todos los roles */}
           <Route path="montacargas" element={<Montacargas />} />
           <Route path="servicios"   element={<Servicios />} />
 
+          {/* Almacén — todos menos técnico en gestión */}
+          <Route path="almacen" element={<Almacen />} />
+
           {/* Oficina, gerencia, developer */}
-          <Route path="clientes"    element={
-            <ProtectedRoute roles={["developer","gerencia","oficina"]}>
-              <Clientes />
-            </ProtectedRoute>
+          <Route path="clientes" element={
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Clientes /></ProtectedRoute>
           } />
-          <Route path="rentas"      element={
-            <ProtectedRoute roles={["developer","gerencia","oficina"]}>
-              <Rentas />
-            </ProtectedRoute>
+          <Route path="rentas" element={
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Rentas /></ProtectedRoute>
           } />
           <Route path="cotizaciones" element={
-            <ProtectedRoute roles={["developer","gerencia","oficina"]}>
-              <Cotizaciones />
-            </ProtectedRoute>
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Cotizaciones /></ProtectedRoute>
           } />
-          <Route path="facturas"    element={
-            <ProtectedRoute roles={["developer","gerencia","oficina"]}>
-              <Facturas />
-            </ProtectedRoute>
-          } />
-
-          {/* Solo developer y gerencia */}
-          <Route path="asesores"    element={
-            <ProtectedRoute roles={["developer"]}>
-              <Asesores />
-            </ProtectedRoute>
+          <Route path="facturas" element={
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Facturas /></ProtectedRoute>
           } />
 
           {/* Solo developer */}
-          <Route path="usuarios"    element={
-            <ProtectedRoute roles={["developer"]}>
-              <Usuarios />
-            </ProtectedRoute>
+          <Route path="asesores" element={
+            <ProtectedRoute roles={["developer"]}><Asesores /></ProtectedRoute>
+          } />
+          <Route path="usuarios" element={
+            <ProtectedRoute roles={["developer"]}><Usuarios /></ProtectedRoute>
           } />
         </Route>
 
-        <Route
-          path="/dashboard/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dashboard/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );
