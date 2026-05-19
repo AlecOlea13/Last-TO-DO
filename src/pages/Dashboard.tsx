@@ -8,6 +8,7 @@ const ROL_LABEL: Record<string, string> = {
   gerencia:  "Gerencia",
   oficina:   "Oficina",
   tecnico:   "Técnico",
+  almacen:   "Almacén",
 };
 
 function getSaludo(nombre: string) {
@@ -182,17 +183,17 @@ export default function Dashboard() {
   }
 
   const allNav = [
-    { to: "/dashboard",               icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico"] },
-    { to: "/dashboard/montacargas",   icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico"] },
-    { to: "/dashboard/servicios",     icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico"] },
-    { to: "/dashboard/almacen",       icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico"] },
-    { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
-    { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
-  ];
+  { to: "/dashboard",               icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico","almacen"] },
+  { to: "/dashboard/montacargas",   icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico","almacen"] },
+  { to: "/dashboard/servicios",     icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico","almacen"] },
+  { to: "/dashboard/almacen",       icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico","almacen"] },
+  { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
+  { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
+];
 
   const navItems = allNav.filter(item => item.roles.includes(rol));
   const isDashboard = location.pathname === "/dashboard";

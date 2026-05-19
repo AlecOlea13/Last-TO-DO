@@ -5,13 +5,9 @@ type Usuario = {
   _id: string;
   username: string;
   nombre: string;
-  rol: "developer" | "gerencia" | "oficina" | "tecnico";
+  rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen";
   activo: boolean;
   createdAt: string;
-};
-
-const emptyForm = {
-  username: "", nombre: "", password: "", rol: "oficina", activo: true,
 };
 
 const ROL_BADGE: Record<string, string> = {
@@ -19,6 +15,11 @@ const ROL_BADGE: Record<string, string> = {
   gerencia:  "badge-blue",
   oficina:   "badge-green",
   tecnico:   "badge-amber",
+  almacen:   "badge-purple",
+};
+
+const emptyForm = {
+  username: "", nombre: "", password: "", rol: "oficina", activo: true,
 };
 
 export default function Usuarios() {
@@ -179,6 +180,7 @@ export default function Usuarios() {
                 <label className="form-label">Rol *</label>
                 <select className="form-select" value={form.rol} onChange={e => setForm((p: any) => ({ ...p, rol: e.target.value }))}>
                   <option value="tecnico">Técnico</option>
+                  <option value="almacen">Almacén</option>
                   <option value="oficina">Oficina</option>
                   <option value="gerencia">Gerencia</option>
                 </select>

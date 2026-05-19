@@ -21,12 +21,10 @@ function App() {
 
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
 
-          {/* Todos los roles */}
+          {/* Todos los roles incluyendo almacen */}
           <Route path="montacargas" element={<Montacargas />} />
           <Route path="servicios"   element={<Servicios />} />
-
-          {/* Almacén — todos menos técnico en gestión */}
-          <Route path="almacen" element={<Almacen />} />
+          <Route path="almacen"     element={<Almacen />} />
 
           {/* Oficina, gerencia, developer */}
           <Route path="clientes" element={

@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
+
+const CLOUDINARY_URL    = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
+const UPLOAD_PRESET     = "pipsa productos";
 
 type OrdenRefaccionItem = {
   refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string; precio?: number };
@@ -13,7 +16,7 @@ type Servicio = {
   _id: string;
   folio: string;
   montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string };
-  cliente?: { _id: string; nombre: string };
+  cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string };
   tipoServicio?: { _id: string; nombre: string };
   tecnicoAsignado?: { _id: string; nombre: string };
   fechaReporte: string;
@@ -23,13 +26,10 @@ type Servicio = {
   costoManoObra?: number;
   horometro?: number;
   horometroCierre?: number;
-  ordenRefaccion?: {
-    _id: string;
-    folio: string;
-    estatus: string;
-    items?: OrdenRefaccionItem[];
-  };
+  ordenRefaccion?: { _id: string; folio: string; estatus: string; items?: OrdenRefaccionItem[] };
   notasCierre?: string;
+  fotoHojaFirmada?: string;
+  fotoEquipoFinal?: string;
 };
 
 type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
@@ -43,29 +43,34 @@ const emptyForm = {
   problema: "", costoRefacciones: 0, costoManoObra: 0, horometro: 0,
 };
 
+const emptyCerrarForm = {
+  horometro: 0, proximoServicio: "", estatusMonta: "disponible",
+  notasCierre: "", fotoHojaFirmada: "", fotoEquipoFinal: "",
+};
+
 const ORDEN_BADGE: Record<string, string> = {
   pendiente: "badge-amber", surtida: "badge-green",
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
-const rol = localStorage.getItem("rol") ?? "";
+const rol      = localStorage.getItem("rol") ?? "";
+const canCreate = ["developer","gerencia"].includes(rol);
 
 export default function Servicios() {
-  const [servicios, setServicios]   = useState<Servicio[]>([]);
-  const [montas, setMontas]         = useState<Monta[]>([]);
-  const [clientes, setClientes]     = useState<Cliente[]>([]);
-  const [tipos, setTipos]           = useState<TipoServicio[]>([]);
-  const [usuarios, setUsuarios]     = useState<Usuario[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState("");
-  const [filtro, setFiltro]         = useState("todos");
-  const [modal, setModal]           = useState(false);
+  const [servicios, setServicios]     = useState<Servicio[]>([]);
+  const [montas, setMontas]           = useState<Monta[]>([]);
+  const [clientes, setClientes]       = useState<Cliente[]>([]);
+  const [tipos, setTipos]             = useState<TipoServicio[]>([]);
+  const [usuarios, setUsuarios]       = useState<Usuario[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState("");
+  const [filtro, setFiltro]           = useState("todos");
+  const [modal, setModal]             = useState(false);
   const [cerrarModal, setCerrarModal] = useState<Servicio | null>(null);
-  const [form, setForm]             = useState<any>(emptyForm);
-  const [cerrarForm, setCerrarForm] = useState({ horometro: 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
-  const [saving, setSaving]         = useState(false);
-
-  const canCreate = ["developer","gerencia","oficina"].includes(rol);
+  const [form, setForm]               = useState<any>(emptyForm);
+  const [cerrarForm, setCerrarForm]   = useState<any>(emptyCerrarForm);
+  const [saving, setSaving]           = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState<"hoja" | "equipo" | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -83,7 +88,7 @@ export default function Servicios() {
       setMontas(m.data);
       setClientes(c.data);
       setTipos(t.data);
-      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico","oficina"].includes(x.rol)));
+      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico","oficina","almacen"].includes(x.rol)));
     } catch {}
     finally { setLoading(false); }
   }
@@ -98,6 +103,20 @@ export default function Servicios() {
       load();
     } catch {}
     finally { setSaving(false); }
+  }
+
+  async function subirFoto(file: File, tipo: "hoja" | "equipo") {
+    setUploadingFoto(tipo);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", UPLOAD_PRESET);
+    try {
+      const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
+      const data = await res.json();
+      const key  = tipo === "hoja" ? "fotoHojaFirmada" : "fotoEquipoFinal";
+      setCerrarForm((p: any) => ({ ...p, [key]: data.secure_url }));
+    } catch { alert("Error al subir imagen"); }
+    finally { setUploadingFoto(null); }
   }
 
   async function cerrar() {
@@ -124,10 +143,10 @@ export default function Servicios() {
 
   function buildOrdenTrabajo(s: Servicio): OrdenTrabajoReporte {
     return {
-      folio: s.folio ?? `OT-${s._id.slice(-4)}`,
-      fecha:       s.fechaReporte,
-      cliente:     s.cliente ? { nombre: s.cliente.nombre } : undefined,
-      montacargas: s.montacargas ? {
+      folio:        s.folio ?? `OT-${s._id.slice(-4)}`,
+      fecha:        s.fechaReporte,
+      cliente:      s.cliente ? { nombre: s.cliente.nombre, direccion: s.cliente.direccion } : undefined,
+      montacargas:  s.montacargas ? {
         numeroEconomico: s.montacargas.numeroEconomico,
         marca:           s.montacargas.marca,
         modelo:          s.montacargas.modelo ?? "",
@@ -144,7 +163,7 @@ export default function Servicios() {
         .map(i => ({
           cantidad:    i.cantidadSurtida,
           descripcion: i.refaccion.nombre,
-          precio:      i.refaccion.precio,
+          precio:      undefined, // sin precios en el reporte
         })) ?? [],
       costoRefacciones: s.costoRefacciones,
       costoManoObra:    s.costoManoObra,
@@ -166,6 +185,38 @@ export default function Servicios() {
   function fmt(date?: string) {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" }) {
+    const ref = useRef<HTMLInputElement>(null);
+    const url = cerrarForm[fotoKey];
+    return (
+      <div>
+        <label className="form-label">{label}</label>
+        <div
+          onClick={() => ref.current?.click()}
+          style={{
+            border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)",
+            padding: 12, textAlign: "center", cursor: "pointer",
+            background: "var(--surface2)", transition: "border-color .15s",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
+        >
+          {url ? (
+            <img src={url} alt={label} style={{ width: "100%", maxHeight: 140, objectFit: "cover", borderRadius: 6 }} />
+          ) : uploadingFoto === tipo ? (
+            <div className="spinner" style={{ width: 24, height: 24, margin: "auto" }} />
+          ) : (
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 {label}</p>
+          )}
+        </div>
+        <input
+          ref={ref} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo); }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -205,15 +256,8 @@ export default function Servicios() {
             <table>
               <thead>
                 <tr>
-                  <th>Folio</th>
-                  <th>Fecha</th>
-                  <th>Equipo</th>
-                  <th>Cliente</th>
-                  <th>Tipo</th>
-                  <th>Técnico</th>
-                  <th>Orden refac.</th>
-                  <th>Estatus</th>
-                  <th></th>
+                  <th>Folio</th><th>Fecha</th><th>Equipo</th><th>Cliente</th>
+                  <th>Tipo</th><th>Técnico</th><th>Orden refac.</th><th>Estatus</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -229,12 +273,12 @@ export default function Servicios() {
                     <td style={{ fontSize: "0.82rem" }}>{s.tipoServicio?.nombre ?? "—"}</td>
                     <td>{s.tecnicoAsignado?.nombre ?? "—"}</td>
                     <td>
-                      {s.ordenRefaccion ? (
-                        <span className={`badge ${ORDEN_BADGE[s.ordenRefaccion.estatus]}`}>{s.ordenRefaccion.folio}</span>
-                      ) : "—"}
+                      {s.ordenRefaccion
+                        ? <span className={`badge ${ORDEN_BADGE[s.ordenRefaccion.estatus]}`}>{s.ordenRefaccion.folio}</span>
+                        : "—"}
                     </td>
                     <td>
-                      {rol === "tecnico" ? (
+                      {rol === "tecnico" || rol === "almacen" ? (
                         <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
                           {s.estatus}
                         </span>
@@ -253,23 +297,12 @@ export default function Servicios() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))}
-                          title="Ver orden de trabajo"
-                        >👁️</button>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))}
-                          title="Imprimir orden de trabajo"
-                        >🖨️</button>
-                        {s.estatus !== "cerrado" && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
+                        {s.estatus !== "cerrado" && ["developer","gerencia","oficina"].includes(rol) && (
                           <button
                             className="btn btn-amber btn-sm"
-                            onClick={() => {
-                              setCerrarModal(s);
-                              setCerrarForm({ horometro: s.horometro ?? 0, proximoServicio: "", estatusMonta: "disponible", notasCierre: "" });
-                            }}
+                            onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
                           >
                             Cerrar
                           </button>
@@ -284,7 +317,7 @@ export default function Servicios() {
         </div>
       </div>
 
-      {/* Modal nuevo servicio */}
+      {/* ── Modal nuevo servicio ── */}
       {modal && canCreate && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal">
@@ -353,10 +386,10 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* Modal cerrar servicio */}
+      {/* ── Modal cerrar servicio ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
-          <div className="modal" style={{ maxWidth: 460 }}>
+          <div className="modal" style={{ maxWidth: 520 }}>
             <button className="modal-close" onClick={() => setCerrarModal(null)}>✕</button>
             <h2 className="modal-title">Cerrar servicio</h2>
             <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 8 }}>
@@ -364,30 +397,43 @@ export default function Servicios() {
             </p>
             {cerrarModal.ordenRefaccion && cerrarModal.ordenRefaccion.estatus !== "surtida" && (
               <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--red)", fontSize: "0.82rem", color: "var(--red)", marginBottom: 12 }}>
-                ⚠️ La orden de refacciones <strong>{cerrarModal.ordenRefaccion.folio}</strong> aún no ha sido surtida completamente.
+                ⚠️ La orden <strong>{cerrarModal.ordenRefaccion.folio}</strong> aún no está surtida completamente.
               </div>
             )}
-            <div className="form-grid cols-1">
+            <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Horómetro al cierre</label>
-                <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm(p => ({ ...p, horometro: +e.target.value }))} />
+                <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Próximo servicio</label>
-                <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm(p => ({ ...p, proximoServicio: e.target.value }))} />
+                <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
               </div>
-              <div className="form-group">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Estatus del equipo al cerrar</label>
-                <select className="form-select" value={cerrarForm.estatusMonta} onChange={e => setCerrarForm(p => ({ ...p, estatusMonta: e.target.value }))}>
+                <select className="form-select" value={cerrarForm.estatusMonta} onChange={e => setCerrarForm((p: any) => ({ ...p, estatusMonta: e.target.value }))}>
                   <option value="disponible">Disponible</option>
                   <option value="rentado">Rentado</option>
                 </select>
               </div>
-              <div className="form-group">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Notas de cierre / trabajos realizados</label>
-                <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm(p => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
+                <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
+              </div>
+
+              {/* ── Fotos ── */}
+              <div className="form-group">
+                <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
+              </div>
+              <div className="form-group">
+                <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
               </div>
             </div>
+
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
+              📧 Se enviará notificación automática a gerencia al cerrar.
+            </p>
+
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={cerrar} disabled={saving}>{saving ? "Cerrando..." : "Cerrar servicio"}</button>
