@@ -42,8 +42,9 @@ const ESTATUS_BADGE: Record<string, string> = {
   pendiente: "badge-amber", surtida: "badge-green", parcial: "badge-blue", cancelada: "badge-gray",
 };
 
-const rol      = localStorage.getItem("rol") ?? "";
-const canEdit  = ["developer", "gerencia"].includes(rol);
+const rol       = localStorage.getItem("rol") ?? "";
+const canEdit   = ["developer", "gerencia"].includes(rol);
+const canAddRefac = ["developer", "gerencia", "almacen"].includes(rol);
 const canSurtir = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
 
 export default function Almacen() {
@@ -222,7 +223,7 @@ export default function Almacen() {
           <h1 className="page-title">Almacén</h1>
           <p className="page-subtitle">{refacciones.length} refacciones en inventario</p>
         </div>
-        {canEdit && tab === "inventario" && <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>}
+        {canAddRefac && tab === "inventario" && <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>}
         {canEdit && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
       </div>
 
@@ -281,13 +282,17 @@ export default function Almacen() {
                       <td style={{ color: "var(--text-muted)" }}>{r.stockMinimo}</td>
                       <td>${r.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td>
-                        {canEdit && (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {canEdit && (
+                            <>
+                              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
+                              <button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button>
+                            </>
+                          )}
+                          {(canEdit || rol === "almacen") && (
                             <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -360,7 +365,7 @@ export default function Almacen() {
       </div>
 
       {/* ── Modal refacción ── */}
-      {modal && canEdit && (
+      {modal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 520 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
@@ -393,7 +398,7 @@ export default function Almacen() {
       )}
 
       {/* ── Modal ajustar stock ── */}
-      {stockModal && canEdit && (
+      {stockModal && (canEdit || rol === "almacen") && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setStockModal(null)}>
           <div className="modal" style={{ maxWidth: 380 }}>
             <button className="modal-close" onClick={() => setStockModal(null)}>✕</button>
@@ -427,7 +432,6 @@ export default function Almacen() {
             <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
               Servicio: <strong style={{ color: "var(--text)" }}>{surtirModal.servicio?.folio}</strong> — {surtirModal.montacargas?.numeroEconomico} {surtirModal.montacargas?.marca}
             </p>
-
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {surtirModal.items.map((item, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
@@ -454,21 +458,14 @@ export default function Almacen() {
                 </div>
               ))}
             </div>
-
             <div className="form-group" style={{ marginBottom: 16 }}>
               <label className="form-label">Notas (opcional)</label>
               <input className="form-input" value={surtirNotas} onChange={e => setSurtirNotas(e.target.value)} placeholder="Ej. Faltó 1 filtro, se pedirá mañana" />
             </div>
-
-            {/* ── Fotos de evidencia ── */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <label className="form-label" style={{ margin: 0 }}>📷 Fotos de refacciones viejas / evidencia</label>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => evidenciaRef.current?.click()}
-                  disabled={uploadingEvidencia}
-                >
+                <button className="btn btn-secondary btn-sm" onClick={() => evidenciaRef.current?.click()} disabled={uploadingEvidencia}>
                   {uploadingEvidencia ? "Subiendo..." : "+ Agregar foto"}
                 </button>
                 <input ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); }} />
@@ -487,7 +484,6 @@ export default function Almacen() {
                 </div>
               )}
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setSurtirModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={surtirOrden} disabled={saving}>{saving ? "Confirmando..." : "Confirmar entrega"}</button>

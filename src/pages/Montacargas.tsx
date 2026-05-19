@@ -62,7 +62,6 @@ const TIPO_BADGE: Record<string, string> = {
   electrico: "badge-blue", gas: "badge-amber", diesel: "badge-gray",
 };
 
-// ─── Toggle helper ────────────────────────────────────────────────────────────
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div
@@ -78,29 +77,23 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       <span style={{ fontSize: "0.87rem", color: checked ? "var(--accent)" : "var(--text-muted)", fontWeight: checked ? 600 : 400 }}>
         {label}
       </span>
-      <div style={{
-        width: 36, height: 20, borderRadius: 10, position: "relative", transition: "background 0.2s",
-        background: checked ? "var(--accent)" : "var(--border)",
-      }}>
-        <div style={{
-          position: "absolute", top: 3, left: checked ? 19 : 3,
-          width: 14, height: 14, borderRadius: "50%", background: "#fff",
-          transition: "left 0.2s",
-        }} />
+      <div style={{ width: 36, height: 20, borderRadius: 10, position: "relative", transition: "background 0.2s", background: checked ? "var(--accent)" : "var(--border)" }}>
+        <div style={{ position: "absolute", top: 3, left: checked ? 19 : 3, width: 14, height: 14, borderRadius: "50%", background: "#fff", transition: "left 0.2s" }} />
       </div>
     </div>
   );
 }
 
-// ─── Section label ────────────────────────────────────────────────────────────
 function SectionLabel({ text }: { text: string }) {
   return (
-    <p style={{
-      fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700,
-      textTransform: "uppercase", letterSpacing: "0.09em", marginTop: 16, marginBottom: 4,
-    }}>{text}</p>
+    <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", marginTop: 16, marginBottom: 4 }}>
+      {text}
+    </p>
   );
 }
+
+const rol      = localStorage.getItem("rol") ?? "";
+const canEdit  = !["tecnico", "almacen"].includes(rol);
 
 export default function Montacargas() {
   const [montas, setMontas]         = useState<Monta[]>([]);
@@ -161,13 +154,8 @@ export default function Montacargas() {
     setModal(true);
   }
 
-  function setF(field: string, val: any) {
-    setForm((p: any) => ({ ...p, [field]: val }));
-  }
-
-  function setSeg(field: string, val: boolean) {
-    setForm((p: any) => ({ ...p, equipoSeguridad: { ...p.equipoSeguridad, [field]: val } }));
-  }
+  function setF(field: string, val: any) { setForm((p: any) => ({ ...p, [field]: val })); }
+  function setSeg(field: string, val: boolean) { setForm((p: any) => ({ ...p, equipoSeguridad: { ...p.equipoSeguridad, [field]: val } })); }
 
   async function save() {
     if (!form.numeroEconomico.trim()) return;
@@ -226,7 +214,9 @@ export default function Montacargas() {
           <h1 className="page-title">Montacargas</h1>
           <p className="page-subtitle">{montas.length} equipos en flota</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
+        )}
       </div>
 
       <div className="page-content">
@@ -269,16 +259,8 @@ export default function Montacargas() {
             <table>
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Marca / Modelo</th>
-                  <th>Tipo</th>
-                  <th>Capacidad</th>
-                  <th>Horómetro</th>
-                  <th>Prox. Mant.</th>
-                  <th>Estatus</th>
-                  <th>Cliente</th>
-                  <th>Costo/mes</th>
-                  <th></th>
+                  <th>#</th><th>Marca / Modelo</th><th>Tipo</th><th>Capacidad</th>
+                  <th>Horómetro</th><th>Prox. Mant.</th><th>Estatus</th><th>Cliente</th><th>Costo/mes</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -301,14 +283,18 @@ export default function Montacargas() {
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>
-                        {m.estatus === "disponible" && (
+                        {canEdit && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>
+                        )}
+                        {canEdit && m.estatus === "disponible" && (
                           <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
                         )}
-                        {m.estatus === "rentado" && (
+                        {canEdit && m.estatus === "rentado" && (
                           <button className="btn btn-secondary btn-sm" onClick={() => regresar(m, "disponible")}>Regresar</button>
                         )}
-                        <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>
+                        {canEdit && (
+                          <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -320,13 +306,12 @@ export default function Montacargas() {
       </div>
 
       {/* ── Modal nuevo / editar ── */}
-      {modal && (
+      {modal && canEdit && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 700 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar equipo" : "Nuevo montacargas"}</h2>
 
-            {/* ── Datos generales ── */}
             <SectionLabel text="Datos generales" />
             <div className="form-grid">
               <div className="form-group">
@@ -376,7 +361,6 @@ export default function Montacargas() {
               </div>
             </div>
 
-            {/* ── Campos eléctrico ── */}
             {isElectrico && (
               <>
                 <SectionLabel text="Eléctrico" />
@@ -396,7 +380,6 @@ export default function Montacargas() {
               </>
             )}
 
-            {/* ── Campos gas / diesel ── */}
             {isGasDiesel && (
               <>
                 <SectionLabel text="Gas / Diésel" />
@@ -416,7 +399,6 @@ export default function Montacargas() {
               </>
             )}
 
-            {/* ── Equipo de seguridad ── */}
             <SectionLabel text="Equipo de seguridad" />
             <div className="form-grid">
               <Toggle label="Alarma de reversa"  checked={form.equipoSeguridad.alarmaReversa} onChange={v => setSeg("alarmaReversa", v)} />
@@ -425,7 +407,6 @@ export default function Montacargas() {
               <Toggle label="Extintor"            checked={form.equipoSeguridad.extintor}      onChange={v => setSeg("extintor",      v)} />
             </div>
 
-            {/* ── Horómetro y mantenimiento ── */}
             <SectionLabel text="Horómetro y mantenimiento" />
             <div className="form-grid">
               <div className="form-group">
@@ -454,7 +435,6 @@ export default function Montacargas() {
               </div>
             </div>
 
-            {/* ── Costos de renta ── */}
             <SectionLabel text="Costos de renta" />
             <div className="form-grid">
               <div className="form-group">
@@ -520,7 +500,9 @@ export default function Montacargas() {
               ) : null)}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => { setDetalleModal(null); openEdit(detalleModal); }}>✏️ Editar</button>
+              {canEdit && (
+                <button className="btn btn-primary" onClick={() => { setDetalleModal(null); openEdit(detalleModal); }}>✏️ Editar</button>
+              )}
             </div>
           </div>
         </div>
