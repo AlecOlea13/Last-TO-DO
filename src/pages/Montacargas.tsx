@@ -239,7 +239,7 @@ export default function Montacargas() {
           ))}
         </div>
 
-        <div className="table-card">
+        <div className="table-card" style={{ overflowX: "auto" }}>
           <div className="table-card-header">
             <p className="table-card-title">Flota completa</p>
             <div className="table-toolbar">
