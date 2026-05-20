@@ -92,10 +92,13 @@ function SectionLabel({ text }: { text: string }) {
   );
 }
 
-const rol      = localStorage.getItem("rol") ?? "";
-const canEdit  = !["tecnico", "almacen"].includes(rol);
+// const rol      = localStorage.getItem("rol") ?? "";
+// const canEdit  = !["tecnico", "almacen"].includes(rol);
 
 export default function Montacargas() {
+  const rol     = localStorage.getItem("rol") ?? "";
+  const canEdit = !["tecnico", "almacen"].includes(rol);
+
   const [montas, setMontas]         = useState<Monta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
   const [loading, setLoading]       = useState(true);

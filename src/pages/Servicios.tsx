@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
 
-const CLOUDINARY_URL    = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
-const UPLOAD_PRESET     = "pipsa productos";
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
+const UPLOAD_PRESET  = "pipsa productos";
 
 type OrdenRefaccionItem = {
   refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string; precio?: number };
@@ -53,10 +53,10 @@ const ORDEN_BADGE: Record<string, string> = {
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
-const rol      = localStorage.getItem("rol") ?? "";
-const canCreate = ["developer","gerencia"].includes(rol);
-
 export default function Servicios() {
+  const rol       = localStorage.getItem("rol") ?? "";
+  const canCreate = ["developer", "gerencia"].includes(rol);
+
   const [servicios, setServicios]     = useState<Servicio[]>([]);
   const [montas, setMontas]           = useState<Monta[]>([]);
   const [clientes, setClientes]       = useState<Cliente[]>([]);
@@ -82,13 +82,13 @@ export default function Servicios() {
         api.get("/clientes"),
         api.get("/tipos-servicio"),
       ];
-      if (["developer","gerencia","oficina"].includes(rol)) calls.push(api.get("/users"));
+      if (["developer", "gerencia", "oficina"].includes(rol)) calls.push(api.get("/users"));
       const [s, m, c, t, u] = await Promise.all(calls);
       setServicios(s.data);
       setMontas(m.data);
       setClientes(c.data);
       setTipos(t.data);
-      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico","oficina","almacen"].includes(x.rol)));
+      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
     } catch {}
     finally { setLoading(false); }
   }
@@ -131,7 +131,6 @@ export default function Servicios() {
   }
 
   async function cambiarEstatus(s: Servicio, estatus: string) {
-    if (rol === "tecnico" && estatus !== "cerrado") return;
     await api.put(`/servicios/${s._id}`, { estatus });
     setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: estatus as any } : sv));
   }
@@ -163,7 +162,7 @@ export default function Servicios() {
         .map(i => ({
           cantidad:    i.cantidadSurtida,
           descripcion: i.refaccion.nombre,
-          precio:      undefined, // sin precios en el reporte
+          precio:      undefined,
         })) ?? [],
       costoRefacciones: s.costoRefacciones,
       costoManoObra:    s.costoManoObra,
@@ -208,7 +207,7 @@ export default function Servicios() {
           ) : uploadingFoto === tipo ? (
             <div className="spinner" style={{ width: 24, height: 24, margin: "auto" }} />
           ) : (
-            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 {label}</p>
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para subir foto</p>
           )}
         </div>
         <input
@@ -278,7 +277,7 @@ export default function Servicios() {
                         : "—"}
                     </td>
                     <td>
-                      {rol === "tecnico" || rol === "almacen" ? (
+                      {["tecnico", "almacen"].includes(rol) ? (
                         <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
                           {s.estatus}
                         </span>
@@ -299,7 +298,7 @@ export default function Servicios() {
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                         <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-                        {s.estatus !== "cerrado" && ["developer","gerencia","oficina"].includes(rol) && (
+                        {s.estatus !== "cerrado" && ["developer", "gerencia", "oficina"].includes(rol) && (
                           <button
                             className="btn btn-amber btn-sm"
                             onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
@@ -420,8 +419,6 @@ export default function Servicios() {
                 <label className="form-label">Notas de cierre / trabajos realizados</label>
                 <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
               </div>
-
-              {/* ── Fotos ── */}
               <div className="form-group">
                 <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
               </div>
@@ -429,11 +426,9 @@ export default function Servicios() {
                 <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
               </div>
             </div>
-
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
               📧 Se enviará notificación automática a gerencia al cerrar.
             </p>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={cerrar} disabled={saving}>{saving ? "Cerrando..." : "Cerrar servicio"}</button>

@@ -42,12 +42,12 @@ const ESTATUS_BADGE: Record<string, string> = {
   pendiente: "badge-amber", surtida: "badge-green", parcial: "badge-blue", cancelada: "badge-gray",
 };
 
-const rol       = localStorage.getItem("rol") ?? "";
-const canEdit   = ["developer", "gerencia"].includes(rol);
-const canAddRefac = ["developer", "gerencia", "almacen"].includes(rol);
-const canSurtir = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
-
 export default function Almacen() {
+  const rol         = localStorage.getItem("rol") ?? "";
+  const canEdit     = ["developer", "gerencia"].includes(rol);
+  const canAddRefac = ["developer", "gerencia", "almacen"].includes(rol);
+  const canSurtir   = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
+
   const [tab, setTab]                 = useState<"inventario" | "ordenes" | "tipos">("inventario");
   const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
   const [ordenes, setOrdenes]         = useState<Orden[]>([]);
@@ -78,8 +78,14 @@ export default function Almacen() {
 
   async function load() {
     try {
-      const [r, o, t] = await Promise.all([api.get("/refacciones"), api.get("/ordenes-refaccion"), api.get("/tipos-servicio")]);
-      setRefacciones(r.data); setOrdenes(o.data); setTipos(t.data);
+      const [r, o, t] = await Promise.all([
+        api.get("/refacciones"),
+        api.get("/ordenes-refaccion"),
+        api.get("/tipos-servicio"),
+      ]);
+      setRefacciones(r.data);
+      setOrdenes(o.data);
+      setTipos(t.data);
     } catch {}
     finally { setLoading(false); }
   }
@@ -177,7 +183,12 @@ export default function Almacen() {
     if (!tipoForm.nombre.trim()) return;
     setSaving(true);
     try {
-      const payload = { nombre: tipoForm.nombre, descripcion: tipoForm.descripcion || null, intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null, refacciones: tipoForm.refacciones.filter((r: any) => r.refaccion) };
+      const payload = {
+        nombre: tipoForm.nombre,
+        descripcion: tipoForm.descripcion || null,
+        intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null,
+        refacciones: tipoForm.refacciones.filter((r: any) => r.refaccion),
+      };
       if (editingTipo) {
         const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload);
         setTipos(prev => prev.map(t => t._id === editingTipo._id ? data : t));
@@ -201,9 +212,20 @@ export default function Almacen() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  const filteredRef   = refacciones.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase()) || (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) || (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()));
-  const filteredOrd   = ordenes.filter(o => o.folio.toLowerCase().includes(search.toLowerCase()) || (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()));
-  const filteredTipos = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredRef   = refacciones.filter(r =>
+    r.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (r.categoria ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredOrd   = ordenes.filter(o =>
+    o.folio.toLowerCase().includes(search.toLowerCase()) ||
+    (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+  const filteredTipos = tipos.filter(t =>
+    t.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase())
+  );
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
@@ -289,7 +311,7 @@ export default function Almacen() {
                               <button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button>
                             </>
                           )}
-                          {(canEdit || rol === "almacen") && (
+                          {canAddRefac && (
                             <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>
                           )}
                         </div>
@@ -398,7 +420,7 @@ export default function Almacen() {
       )}
 
       {/* ── Modal ajustar stock ── */}
-      {stockModal && (canEdit || rol === "almacen") && (
+      {stockModal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setStockModal(null)}>
           <div className="modal" style={{ maxWidth: 380 }}>
             <button className="modal-close" onClick={() => setStockModal(null)}>✕</button>
@@ -462,15 +484,31 @@ export default function Almacen() {
               <label className="form-label">Notas (opcional)</label>
               <input className="form-input" value={surtirNotas} onChange={e => setSurtirNotas(e.target.value)} placeholder="Ej. Faltó 1 filtro, se pedirá mañana" />
             </div>
+
+            {/* ── Fotos de evidencia ── */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <label className="form-label" style={{ margin: 0 }}>📷 Fotos de refacciones viejas / evidencia</label>
-                <button className="btn btn-secondary btn-sm" onClick={() => evidenciaRef.current?.click()} disabled={uploadingEvidencia}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => evidenciaRef.current?.click()}
+                  disabled={uploadingEvidencia}
+                >
                   {uploadingEvidencia ? "Subiendo..." : "+ Agregar foto"}
                 </button>
-                <input ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); }} />
+                <input
+                  ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); e.target.value = ""; }}
+                />
               </div>
-              {fotosEvidencia.length > 0 && (
+              {fotosEvidencia.length === 0 ? (
+                <div
+                  onClick={() => evidenciaRef.current?.click()}
+                  style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: "20px", textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
+                >
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para agregar fotos de evidencia</p>
+                </div>
+              ) : (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {fotosEvidencia.map((url, i) => (
                     <div key={i} style={{ position: "relative" }}>
@@ -481,9 +519,16 @@ export default function Almacen() {
                       >✕</button>
                     </div>
                   ))}
+                  <div
+                    onClick={() => evidenciaRef.current?.click()}
+                    style={{ width: 80, height: 80, border: "2px dashed var(--border)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "var(--surface2)" }}
+                  >
+                    <span style={{ fontSize: "1.4rem", color: "var(--text-muted)" }}>+</span>
+                  </div>
                 </div>
               )}
             </div>
+
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setSurtirModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={surtirOrden} disabled={saving}>{saving ? "Confirmando..." : "Confirmar entrega"}</button>
