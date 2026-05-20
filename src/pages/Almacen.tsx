@@ -35,11 +35,29 @@ type TipoServicio = {
   intervaloHrs?: number; refacciones: TipoServicioItem[]; activo: boolean;
 };
 
+type RefaccionUsada = {
+  _id: string;
+  descripcion: string;
+  numeroParte?: string;
+  condicion: string;
+  fotos: string[];
+  notas?: string;
+  servicio?: { _id: string; folio: string; problema: string };
+  registradoPor?: { nombre: string };
+  createdAt: string;
+};
+
 const emptyRefaccion = { nombre: "", numeroParte: "", categoria: "", unidad: "pieza", stock: 0, stockMinimo: 1, precio: 0 };
 const emptyTipo = { nombre: "", descripcion: "", intervaloHrs: "", refacciones: [] as { refaccion: string; cantidad: number }[] };
+const emptyUsada = { descripcion: "", numeroParte: "", condicion: "desgastada", servicio: "", notas: "", fotos: [] as string[] };
 
 const ESTATUS_BADGE: Record<string, string> = {
   pendiente: "badge-amber", surtida: "badge-green", parcial: "badge-blue", cancelada: "badge-gray",
+};
+
+const CONDICION_BADGE: Record<string, string> = {
+  desgastada: "badge-amber", rota: "badge-red", quemada: "badge-red",
+  corroida: "badge-gray", otro: "badge-blue",
 };
 
 export default function Almacen() {
@@ -47,13 +65,16 @@ export default function Almacen() {
   const canEdit     = ["developer", "gerencia"].includes(rol);
   const canAddRefac = ["developer", "gerencia", "almacen"].includes(rol);
   const canSurtir   = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
+  const canUsadas   = ["developer", "gerencia", "almacen", "tecnico"].includes(rol);
 
-  const [tab, setTab]                 = useState<"inventario" | "ordenes" | "tipos">("inventario");
-  const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
-  const [ordenes, setOrdenes]         = useState<Orden[]>([]);
-  const [tipos, setTipos]             = useState<TipoServicio[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState("");
+  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas">("inventario");
+  const [refacciones, setRefacciones]   = useState<Refaccion[]>([]);
+  const [ordenes, setOrdenes]           = useState<Orden[]>([]);
+  const [tipos, setTipos]               = useState<TipoServicio[]>([]);
+  const [usadas, setUsadas]             = useState<RefaccionUsada[]>([]);
+  const [servicios, setServicios]       = useState<{ _id: string; folio: string; problema?: string }[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState("");
 
   const [modal, setModal]             = useState(false);
   const [stockModal, setStockModal]   = useState<Refaccion | null>(null);
@@ -70,34 +91,44 @@ export default function Almacen() {
   const [tipoModal, setTipoModal]     = useState(false);
   const [editingTipo, setEditingTipo] = useState<TipoServicio | null>(null);
   const [tipoForm, setTipoForm]       = useState<any>(emptyTipo);
-  const [saving, setSaving]           = useState(false);
+
+  const [usadaModal, setUsadaModal]   = useState(false);
+  const [usadaForm, setUsadaForm]     = useState<any>(emptyUsada);
+  const [uploadingUsada, setUploadingUsada] = useState(false);
+
+  const [saving, setSaving] = useState(false);
 
   const evidenciaRef = useRef<HTMLInputElement>(null);
+  const usadaFotoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const [r, o, t] = await Promise.all([
+      const calls: Promise<any>[] = [
         api.get("/refacciones"),
         api.get("/ordenes-refaccion"),
         api.get("/tipos-servicio"),
-      ]);
+        api.get("/refacciones-usadas"),
+        api.get("/servicios"),
+      ];
+      const [r, o, t, u, s] = await Promise.all(calls);
       setRefacciones(r.data);
       setOrdenes(o.data);
       setTipos(t.data);
+      setUsadas(u.data);
+      setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
     } catch {}
     finally { setLoading(false); }
   }
 
+  // ── Refacciones ──
   function openNew() { setEditing(null); setForm(emptyRefaccion); setModal(true); }
-
   function openEdit(r: Refaccion) {
     setEditing(r);
     setForm({ nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "", unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio });
     setModal(true);
   }
-
   async function saveRefaccion() {
     if (!form.nombre.trim()) return;
     setSaving(true);
@@ -113,7 +144,6 @@ export default function Almacen() {
     } catch {}
     finally { setSaving(false); }
   }
-
   async function ajustarStock() {
     if (!stockModal) return;
     setSaving(true);
@@ -124,20 +154,19 @@ export default function Almacen() {
     } catch {}
     finally { setSaving(false); }
   }
-
   async function removeRefaccion(r: Refaccion) {
     if (!confirm(`¿Eliminar ${r.nombre}?`)) return;
     await api.delete(`/refacciones/${r._id}`);
     setRefacciones(prev => prev.filter(x => x._id !== r._id));
   }
 
+  // ── Órdenes ──
   function openSurtir(o: Orden) {
     setSurtirModal(o);
     setSurtirItems(o.items.map(i => ({ refaccionId: i.refaccion._id, cantidadSurtida: i.cantidadSolicitada })));
     setSurtirNotas("");
     setFotosEvidencia([]);
   }
-
   async function subirEvidencia(file: File) {
     setUploadingEvidencia(true);
     const fd = new FormData();
@@ -150,14 +179,11 @@ export default function Almacen() {
     } catch { alert("Error al subir imagen"); }
     finally { setUploadingEvidencia(false); }
   }
-
   async function surtirOrden() {
     if (!surtirModal) return;
     setSaving(true);
     try {
-      const { data } = await api.post(`/ordenes-refaccion/${surtirModal._id}/surtir`, {
-        items: surtirItems, notas: surtirNotas, fotosEvidencia,
-      });
+      const { data } = await api.post(`/ordenes-refaccion/${surtirModal._id}/surtir`, { items: surtirItems, notas: surtirNotas, fotosEvidencia });
       setOrdenes(prev => prev.map(o => o._id === data._id ? data : o));
       setSurtirModal(null);
       load();
@@ -165,30 +191,23 @@ export default function Almacen() {
     finally { setSaving(false); }
   }
 
+  // ── Tipos de servicio ──
   function openNewTipo() { setEditingTipo(null); setTipoForm({ ...emptyTipo, refacciones: [] }); setTipoModal(true); }
-
   function openEditTipo(t: TipoServicio) {
     setEditingTipo(t);
     setTipoForm({ nombre: t.nombre, descripcion: t.descripcion ?? "", intervaloHrs: t.intervaloHrs ?? "", refacciones: t.refacciones.map(r => ({ refaccion: r.refaccion._id, cantidad: r.cantidad })) });
     setTipoModal(true);
   }
-
   function addRefaccionTipo() { setTipoForm((p: any) => ({ ...p, refacciones: [...p.refacciones, { refaccion: "", cantidad: 1 }] })); }
   function removeRefaccionTipo(i: number) { setTipoForm((p: any) => ({ ...p, refacciones: p.refacciones.filter((_: any, idx: number) => idx !== i) })); }
   function updateRefaccionTipo(i: number, field: string, val: any) {
     setTipoForm((p: any) => { const refs = [...p.refacciones]; refs[i] = { ...refs[i], [field]: val }; return { ...p, refacciones: refs }; });
   }
-
   async function saveTipo() {
     if (!tipoForm.nombre.trim()) return;
     setSaving(true);
     try {
-      const payload = {
-        nombre: tipoForm.nombre,
-        descripcion: tipoForm.descripcion || null,
-        intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null,
-        refacciones: tipoForm.refacciones.filter((r: any) => r.refaccion),
-      };
+      const payload = { nombre: tipoForm.nombre, descripcion: tipoForm.descripcion || null, intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null, refacciones: tipoForm.refacciones.filter((r: any) => r.refaccion) };
       if (editingTipo) {
         const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload);
         setTipos(prev => prev.map(t => t._id === editingTipo._id ? data : t));
@@ -200,11 +219,45 @@ export default function Almacen() {
     } catch {}
     finally { setSaving(false); }
   }
-
   async function removeTipo(t: TipoServicio) {
     if (!confirm(`¿Eliminar tipo "${t.nombre}"?`)) return;
     await api.delete(`/tipos-servicio/${t._id}`);
     setTipos(prev => prev.filter(x => x._id !== t._id));
+  }
+
+  // ── Refacciones usadas ──
+  function openNuevaUsada() { setUsadaForm(emptyUsada); setUsadaModal(true); }
+
+  async function subirFotoUsada(file: File) {
+    setUploadingUsada(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", UPLOAD_PRESET);
+    try {
+      const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
+      const data = await res.json();
+      setUsadaForm((p: any) => ({ ...p, fotos: [...p.fotos, data.secure_url] }));
+    } catch { alert("Error al subir imagen"); }
+    finally { setUploadingUsada(false); }
+  }
+
+  async function saveUsada() {
+    if (!usadaForm.descripcion.trim()) return;
+    setSaving(true);
+    try {
+      const payload = { ...usadaForm };
+      if (!payload.servicio) delete payload.servicio;
+      const { data } = await api.post("/refacciones-usadas", payload);
+      setUsadas(prev => [data, ...prev]);
+      setUsadaModal(false);
+    } catch {}
+    finally { setSaving(false); }
+  }
+
+  async function removeUsada(id: string) {
+    if (!confirm("¿Eliminar este registro?")) return;
+    await api.delete(`/refacciones-usadas/${id}`);
+    setUsadas(prev => prev.filter(x => x._id !== id));
   }
 
   function fmt(date?: string) {
@@ -212,20 +265,10 @@ export default function Almacen() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  const filteredRef   = refacciones.filter(r =>
-    r.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (r.categoria ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-  const filteredOrd   = ordenes.filter(o =>
-    o.folio.toLowerCase().includes(search.toLowerCase()) ||
-    (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase())
-  );
-  const filteredTipos = tipos.filter(t =>
-    t.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRef   = refacciones.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase()) || (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) || (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredOrd   = ordenes.filter(o => o.folio.toLowerCase().includes(search.toLowerCase()) || (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredTipos = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
@@ -247,6 +290,7 @@ export default function Almacen() {
         </div>
         {canAddRefac && tab === "inventario" && <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>}
         {canEdit && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
+        {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
       </div>
 
       <div className="page-content">
@@ -271,16 +315,17 @@ export default function Almacen() {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
           <button onClick={() => { setTab("inventario"); setSearch(""); }} style={tabStyle("inventario")}>📦 Inventario</button>
           <button onClick={() => { setTab("ordenes"); setSearch(""); }} style={tabStyle("ordenes")}>📋 Órdenes</button>
+          {canUsadas && <button onClick={() => { setTab("usadas"); setSearch(""); }} style={tabStyle("usadas")}>🔩 Refacciones usadas</button>}
           {canEdit && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
         </div>
 
         <div className="table-card">
           <div className="table-card-header">
             <p className="table-card-title">
-              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : "Tipos de servicio"}
+              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : tab === "usadas" ? "Refacciones usadas / reemplazadas" : "Tipos de servicio"}
             </p>
             <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
@@ -305,15 +350,8 @@ export default function Almacen() {
                       <td>${r.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td>
                         <div style={{ display: "flex", gap: 4 }}>
-                          {canEdit && (
-                            <>
-                              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button>
-                              <button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button>
-                            </>
-                          )}
-                          {canAddRefac && (
-                            <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>
-                          )}
+                          {canEdit && (<><button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button></>)}
+                          {canAddRefac && (<button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>)}
                         </div>
                       </td>
                     </tr>
@@ -336,10 +374,40 @@ export default function Almacen() {
                       <td>{o.items.length} pieza{o.items.length !== 1 ? "s" : ""}</td>
                       <td>{fmt(o.createdAt)}</td>
                       <td><span className={`badge ${ESTATUS_BADGE[o.estatus]}`}>{o.estatus}</span></td>
+                      <td>{(o.estatus === "pendiente" || o.estatus === "parcial") && canSurtir && (<button className="btn btn-primary btn-sm" onClick={() => openSurtir(o)}>Surtir</button>)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : tab === "usadas" ? (
+            filteredUsadas.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🔩</span><p>Sin refacciones usadas registradas</p></div>
+            ) : (
+              <table>
+                <thead><tr><th>Descripción</th><th>No. Parte</th><th>Condición</th><th>Servicio</th><th>Registrado por</th><th>Fecha</th><th>Fotos</th><th></th></tr></thead>
+                <tbody>
+                  {filteredUsadas.map(u => (
+                    <tr key={u._id}>
+                      <td style={{ fontWeight: 600 }}>{u.descripcion}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{u.numeroParte || "—"}</td>
+                      <td><span className={`badge ${CONDICION_BADGE[u.condicion] ?? "badge-gray"}`}>{u.condicion}</span></td>
+                      <td style={{ fontSize: "0.82rem" }}>{u.servicio?.folio ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                      <td style={{ fontSize: "0.82rem" }}>{u.registradoPor?.nombre ?? "—"}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{fmt(u.createdAt)}</td>
                       <td>
-                        {(o.estatus === "pendiente" || o.estatus === "parcial") && canSurtir && (
-                          <button className="btn btn-primary btn-sm" onClick={() => openSurtir(o)}>Surtir</button>
-                        )}
+                        {u.fotos.length > 0 ? (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            {u.fotos.map((f, i) => (
+                              <a key={i} href={f} target="_blank" rel="noreferrer">
+                                <img src={f} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid var(--border)" }} />
+                              </a>
+                            ))}
+                          </div>
+                        ) : <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>}
+                      </td>
+                      <td>
+                        {canEdit && <button className="btn btn-danger btn-sm" onClick={() => removeUsada(u._id)}>🗑️</button>}
                       </td>
                     </tr>
                   ))}
@@ -360,23 +428,11 @@ export default function Almacen() {
                       <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{t.descripcion || "—"}</td>
                       <td>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {t.refacciones.length === 0
-                            ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Sin refacciones</span>
-                            : t.refacciones.map((r, i) => (
-                              <span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>
-                                {r.cantidad}× {r.refaccion.nombre}
-                              </span>
-                            ))}
+                          {t.refacciones.length === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Sin refacciones</span>
+                            : t.refacciones.map((r, i) => (<span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>{r.cantidad}× {r.refaccion.nombre}</span>))}
                         </div>
                       </td>
-                      <td>
-                        {canEdit && (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button>
-                          </div>
-                        )}
-                      </td>
+                      <td>{canEdit && (<div style={{ display: "flex", gap: 4 }}><button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button></div>)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -393,18 +449,13 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar refacción" : "Nueva refacción"}</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Nombre *</label>
-                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" />
-              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Nombre *</label><input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" /></div>
               <div className="form-group"><label className="form-label">No. de parte</label><input className="form-input" value={form.numeroParte} onChange={e => setForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" /></div>
               <div className="form-group"><label className="form-label">Categoría</label><input className="form-input" value={form.categoria} onChange={e => setForm((p: any) => ({ ...p, categoria: e.target.value }))} placeholder="Ej. Filtros, Aceites..." /></div>
               <div className="form-group">
                 <label className="form-label">Unidad</label>
                 <select className="form-select" value={form.unidad} onChange={e => setForm((p: any) => ({ ...p, unidad: e.target.value }))}>
-                  <option value="pieza">Pieza</option><option value="litro">Litro</option>
-                  <option value="juego">Juego</option><option value="par">Par</option>
-                  <option value="metro">Metro</option><option value="kg">Kg</option>
+                  <option value="pieza">Pieza</option><option value="litro">Litro</option><option value="juego">Juego</option><option value="par">Par</option><option value="metro">Metro</option><option value="kg">Kg</option>
                 </select>
               </div>
               <div className="form-group"><label className="form-label">Stock inicial</label><input className="form-input" type="number" value={form.stock} onChange={e => setForm((p: any) => ({ ...p, stock: +e.target.value }))} /></div>
@@ -484,45 +535,93 @@ export default function Almacen() {
               <label className="form-label">Notas (opcional)</label>
               <input className="form-input" value={surtirNotas} onChange={e => setSurtirNotas(e.target.value)} placeholder="Ej. Faltó 1 filtro, se pedirá mañana" />
             </div>
-
-            {/* ── Fotos de evidencia ── */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <label className="form-label" style={{ margin: 0 }}>📷 Fotos de refacciones viejas / evidencia</label>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => evidenciaRef.current?.click()}
-                  disabled={uploadingEvidencia}
-                >
-                  {uploadingEvidencia ? "Subiendo..." : "+ Agregar foto"}
+                <label className="form-label" style={{ margin: 0 }}>📷 Fotos de evidencia (opcional)</label>
+                <button className="btn btn-secondary btn-sm" onClick={() => evidenciaRef.current?.click()} disabled={uploadingEvidencia}>
+                  {uploadingEvidencia ? "Subiendo..." : "+ Foto"}
                 </button>
-                <input
-                  ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }}
-                  onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); e.target.value = ""; }}
-                />
+                <input ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); e.target.value = ""; }} />
               </div>
-              {fotosEvidencia.length === 0 ? (
-                <div
-                  onClick={() => evidenciaRef.current?.click()}
-                  style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: "20px", textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
-                >
-                  <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para agregar fotos de evidencia</p>
-                </div>
-              ) : (
+              {fotosEvidencia.length > 0 && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {fotosEvidencia.map((url, i) => (
                     <div key={i} style={{ position: "relative" }}>
-                      <img src={url} alt={`evidencia-${i}`} style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
-                      <button
-                        onClick={() => setFotosEvidencia(prev => prev.filter((_, idx) => idx !== i))}
-                        style={{ position: "absolute", top: -6, right: -6, background: "var(--red)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}
-                      >✕</button>
+                      <img src={url} alt="" style={{ width: 70, height: 70, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
+                      <button onClick={() => setFotosEvidencia(prev => prev.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: -6, right: -6, background: "var(--red)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: "10px" }}>✕</button>
                     </div>
                   ))}
-                  <div
-                    onClick={() => evidenciaRef.current?.click()}
-                    style={{ width: 80, height: 80, border: "2px dashed var(--border)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "var(--surface2)" }}
-                  >
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSurtirModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={surtirOrden} disabled={saving}>{saving ? "Confirmando..." : "Confirmar entrega"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal nueva refacción usada ── */}
+      {usadaModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setUsadaModal(false)}>
+          <div className="modal" style={{ maxWidth: 540 }}>
+            <button className="modal-close" onClick={() => setUsadaModal(false)}>✕</button>
+            <h2 className="modal-title">Registrar refacción usada</h2>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Descripción *</label>
+                <input className="form-input" value={usadaForm.descripcion} onChange={e => setUsadaForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Filtro de aceite desgastado" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">No. de parte</label>
+                <input className="form-input" value={usadaForm.numeroParte} onChange={e => setUsadaForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Condición</label>
+                <select className="form-select" value={usadaForm.condicion} onChange={e => setUsadaForm((p: any) => ({ ...p, condicion: e.target.value }))}>
+                  <option value="desgastada">Desgastada</option>
+                  <option value="rota">Rota</option>
+                  <option value="quemada">Quemada</option>
+                  <option value="corroida">Corroída</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Servicio relacionado (opcional)</label>
+                <select className="form-select" value={usadaForm.servicio} onChange={e => setUsadaForm((p: any) => ({ ...p, servicio: e.target.value }))}>
+                  <option value="">Sin servicio / descripción libre</option>
+                  {servicios.map(s => <option key={s._id} value={s._id}>{s.folio}{s.problema ? ` — ${s.problema.slice(0, 40)}` : ""}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Notas adicionales</label>
+                <textarea className="form-textarea" rows={2} value={usadaForm.notas} onChange={e => setUsadaForm((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Observaciones, detalles del daño..." />
+              </div>
+            </div>
+
+            {/* Fotos */}
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label className="form-label" style={{ margin: 0 }}>📷 Fotos de la refacción usada</label>
+                <button className="btn btn-secondary btn-sm" onClick={() => usadaFotoRef.current?.click()} disabled={uploadingUsada}>
+                  {uploadingUsada ? "Subiendo..." : "+ Agregar foto"}
+                </button>
+                <input ref={usadaFotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoUsada(f); e.target.value = ""; }} />
+              </div>
+              {usadaForm.fotos.length === 0 ? (
+                <div onClick={() => usadaFotoRef.current?.click()} style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 20, textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}>
+                  <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para agregar fotos</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {usadaForm.fotos.map((url: string, i: number) => (
+                    <div key={i} style={{ position: "relative" }}>
+                      <img src={url} alt="" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)" }} />
+                      <button onClick={() => setUsadaForm((p: any) => ({ ...p, fotos: p.fotos.filter((_: any, idx: number) => idx !== i) }))} style={{ position: "absolute", top: -6, right: -6, background: "var(--red)", color: "#fff", border: "none", borderRadius: "50%", width: 20, height: 20, cursor: "pointer", fontSize: "10px" }}>✕</button>
+                    </div>
+                  ))}
+                  <div onClick={() => usadaFotoRef.current?.click()} style={{ width: 80, height: 80, border: "2px dashed var(--border)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "var(--surface2)" }}>
                     <span style={{ fontSize: "1.4rem", color: "var(--text-muted)" }}>+</span>
                   </div>
                 </div>
@@ -530,8 +629,8 @@ export default function Almacen() {
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSurtirModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={surtirOrden} disabled={saving}>{saving ? "Confirmando..." : "Confirmar entrega"}</button>
+              <button className="btn btn-secondary" onClick={() => setUsadaModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveUsada} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
             </div>
           </div>
         </div>
@@ -544,10 +643,7 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setTipoModal(false)}>✕</button>
             <h2 className="modal-title">{editingTipo ? "Editar tipo de servicio" : "Nuevo tipo de servicio"}</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Nombre *</label>
-                <input className="form-input" value={tipoForm.nombre} onChange={e => setTipoForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Preventivo 500 hrs" />
-              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Nombre *</label><input className="form-input" value={tipoForm.nombre} onChange={e => setTipoForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Preventivo 500 hrs" /></div>
               <div className="form-group"><label className="form-label">Intervalo (horas)</label><input className="form-input" type="number" value={tipoForm.intervaloHrs} onChange={e => setTipoForm((p: any) => ({ ...p, intervaloHrs: e.target.value }))} placeholder="Ej. 500" /></div>
               <div className="form-group"><label className="form-label">Descripción</label><input className="form-input" value={tipoForm.descripcion} onChange={e => setTipoForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Descripción opcional" /></div>
             </div>
