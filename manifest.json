@@ -1,11 +1,13 @@
 {
-  "name": "To-Do List",
-  "short_name": "To-Do",
-  "description": "Una aplicación de lista de tareas simple y eficiente.",
-  "start_url": "./",
+  "name": "Control Pipsa",
+  "short_name": "Pipsa",
+  "description": "Sistema de gestión de flota Pipsa Montacargas.",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#007bff",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -16,15 +18,12 @@
       "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
-    }
-  ],
-  "screenshots": [
+    },
     {
-      "src": "/screenshots/desktop-view.png",
-      "sizes": "1032x1028",
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "form_factor": "wide",
-      "label": "Vista de escritorio de mi App DNV"
+      "purpose": "maskable"
     }
   ]
 }

@@ -7,15 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: "To-Do List",
-        short_name: "To-Do",
-        description: "Una aplicación de lista de tareas simple y eficiente.",
-        theme_color: "#007bff",
-        background_color: "#ffffff",
+        name: "Control Pipsa",
+        short_name: "Pipsa",
+        description: "Sistema de gestión de flota Pipsa Montacargas.",
+        theme_color: "#0a0c10",
+        background_color: "#0a0c10",
         display: "standalone",
         start_url: "/",
+        scope: "/",
+        orientation: "portrait",
         icons: [
           {
             src: "icons/icon-192x192.png",
@@ -26,18 +28,18 @@ export default defineConfig({
             src: "icons/icon-512x512.png",
             sizes: "512x512",
             type: "image/png"
-          }
-        ], // <-- Aquí cerramos el arreglo de iconos
-        screenshots: [ // <-- Screenshots es una propiedad nueva, fuera de icons
+          },
           {
-            src: "screenshots/desktop-view.png",
-            sizes: "1032x1028",
+            src: "icons/icon-512x512.png",
+            sizes: "512x512",
             type: "image/png",
-            form_factor: "wide",
-            label: "Vista de escritorio de To-Do List"
+            purpose: "maskable"
           }
-          // Si llegas a agregar la versión móvil, iría aquí abajo
         ]
+      },
+      workbox: {
+        navigateFallback: "/index.html",
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
       }
     })
   ],
