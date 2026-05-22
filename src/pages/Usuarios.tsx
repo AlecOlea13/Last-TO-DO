@@ -170,7 +170,7 @@ export default function Usuarios() {
               </div>
               <div className="form-group">
                 <label className="form-label">Username *</label>
-                <input className="form-input" value={form.username} onChange={e => setForm((p: any) => ({ ...p, username: e.target.value }))} placeholder="juan.perez" disabled={!!editing} />
+                <input className="form-input" value={form.username} onChange={e => setForm((p: any) => ({ ...p, username: e.target.value }))} placeholder="juan.perez" />
               </div>
               <div className="form-group">
                 <label className="form-label">{editing ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña *"}</label>
