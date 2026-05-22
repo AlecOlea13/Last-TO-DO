@@ -298,7 +298,7 @@ export default function Servicios() {
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                         <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-                        {s.estatus !== "cerrado" && ["developer", "gerencia", "oficina"].includes(rol) && (
+                        {s.estatus !== "cerrado" && ["developer", "gerencia", "oficina", "tecnico"].includes(rol) && (
                           <button
                             className="btn btn-amber btn-sm"
                             onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
