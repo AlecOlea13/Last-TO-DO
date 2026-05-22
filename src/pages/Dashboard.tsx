@@ -31,6 +31,7 @@ export default function Dashboard() {
     serviciosAbiertos: 0, rentasVencer: 0, facturasPendientes: 0,
   });
   const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -41,6 +42,7 @@ export default function Dashboard() {
     setAuth(localStorage.getItem("token"));
     loadStats();
   }, []);
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   async function loadStats() {
     try {
@@ -206,7 +208,22 @@ export default function Dashboard() {
 
   return (
     <div className="dash-root">
-      <aside className="sidebar">
+
+      {/* ── Overlay móvil ── */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      {/* ── Topbar móvil ── */}
+      <div className="mobile-topbar">
+        <span className="mobile-topbar-brand">🏗️ Control Pipsa</span>
+        <button className="mobile-menu-btn" onClick={() => setSidebarOpen(p => !p)}>
+          {sidebarOpen ? "✕" : "☰"}
+        </button>
+      </div>
+
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <span className="brand-icon">🏗️</span>
           <div>
@@ -231,6 +248,7 @@ export default function Dashboard() {
             key={item.to}
             to={item.to}
             className={`nav-item ${location.pathname === item.to ? "active" : ""}`}
+            onClick={() => setSidebarOpen(false)}
           >
             <span className="nav-icon">{item.icon}</span>
             {item.label}
@@ -263,7 +281,7 @@ export default function Dashboard() {
                     return (
                       <div
                         key={a.id}
-                        onClick={() => navigate(a.ruta)}
+                        onClick={() => { navigate(a.ruta); setSidebarOpen(false); }}
                         style={{
                           display: "flex", alignItems: "center", gap: 14,
                           padding: "14px 18px",
@@ -348,7 +366,7 @@ export default function Dashboard() {
                 <div className="table-card-header">
                   <p className="table-card-title">Accesos rápidos</p>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 1 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 1 }}>
                   {navItems.filter(i => i.to !== "/dashboard").map(item => (
                     <Link
                       key={item.to}
