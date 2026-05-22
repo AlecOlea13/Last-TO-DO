@@ -189,11 +189,11 @@ export default function Montacargas() {
     setAsignarModal(null); setClienteSel("");
   }
 
-  async function regresar(monta: Monta, estatus: "disponible" | "taller") {
-    if (!confirm(`¿Regresar el montacargas a "${estatus}"?`)) return;
-    const { data } = await api.post(`/montacargas/${monta._id}/regresar`, { estatus });
-    setMontas(prev => prev.map(m => m._id === data._id ? data : m));
-  }
+  // async function regresar(monta: Monta, estatus: "disponible" | "taller") {
+  //   if (!confirm(`¿Regresar el montacargas a "${estatus}"?`)) return;
+  //   const { data } = await api.post(`/montacargas/${monta._id}/regresar`, { estatus });
+  //   setMontas(prev => prev.map(m => m._id === data._id ? data : m));
+  // }
 
   function fmt(date?: string) {
     if (!date) return "—";
@@ -292,9 +292,9 @@ export default function Montacargas() {
                         {canEdit && m.estatus === "disponible" && (
                           <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
                         )}
-                        {canEdit && m.estatus === "rentado" && (
+                        {/* {canEdit && m.estatus === "rentado" && (
                           <button className="btn btn-secondary btn-sm" onClick={() => regresar(m, "disponible")}>Regresar</button>
-                        )}
+                        )} */}
                         {canEdit && (
                           <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>
                         )}
