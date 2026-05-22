@@ -60,10 +60,12 @@ const ESTATUS_BADGE: Record<string, string> = {
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
-const rol = localStorage.getItem("rol") ?? "";
-const canComment = ["developer", "gerencia", "oficina"].includes(rol);
+// const rol = localStorage.getItem("rol") ?? "";
+// const canComment = ["developer", "gerencia", "oficina"].includes(rol);
 
 export default function Cotizaciones() {
+  const rol = localStorage.getItem("rol") ?? "";
+  const canComment = ["developer", "gerencia", "oficina"].includes(rol);
   const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
   const [clientes, setClientes]         = useState<Cliente[]>([]);
   const [montas, setMontas]             = useState<Montacargas[]>([]);
