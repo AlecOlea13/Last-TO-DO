@@ -43,7 +43,6 @@ export type CotizacionReporte = {
   flete?: number;
 };
 
-// ── NUEVO: Tipo para orden de trabajo ─────────────────────────────────────────
 export type OrdenTrabajoReporte = {
   folio: string;
   fecha: string;
@@ -71,8 +70,6 @@ export type OrdenTrabajoReporte = {
   observaciones?: string;
 };
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-
 function specRow(label: string, val?: string | null) {
   if (!val) return "";
   return `<tr>
@@ -80,8 +77,6 @@ function specRow(label: string, val?: string | null) {
     <td style="padding:5px 10px;border:1px solid #ddd">${val}</td>
   </tr>`;
 }
-
-// ── HTML SERVICIO (cotización) ────────────────────────────────────────────────
 
 function htmlServicio(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -103,7 +98,7 @@ function htmlServicio(cot: CotizacionReporte): string {
       <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
         ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
       </td>
-      <td style="padding:6px 8px;border:1px solid #ddd">${item.descripcion}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     </tr>`
@@ -121,7 +116,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
-    ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; }",
+    ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; white-space: pre-wrap; }",
     ".intro { margin-bottom: 10px; font-size: 10pt; }",
     "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
@@ -160,7 +155,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     cot.montacargas ? "Montacargas <strong>" + cot.montacargas.marca + " " + cot.montacargas.modelo + ".</strong>" : "",
     "</div>",
 
-    cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio}</div>` : "",
+    cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
 
     "<table>",
@@ -203,8 +198,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     "</body>", "</html>",
   ].join("\n");
 }
-
-// ── HTML VENTA / RENTA ────────────────────────────────────────────────────────
 
 function htmlVentaRenta(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -263,7 +256,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
           ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
           : `<span style="color:#aaa;font-size:9pt">—</span>`}
       </td>
-      <td style="padding:6px 8px;border:1px solid #ddd">${item.descripcion}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</td>
       <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
@@ -379,8 +372,6 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
   ].join("\n");
 }
 
-// ── HTML ORDEN DE TRABAJO ─────────────────────────────────────────────────────
-
 function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const fechaObj = new Date(ot.fecha);
@@ -398,7 +389,6 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
     </tr>`
   ).join("");
 
-  // Filas vacías para completar al menos 8 filas en la tabla de refacciones
   const filasFaltantes = Math.max(0, 8 - (ot.refacciones?.length ?? 0));
   const filasVacias = Array(filasFaltantes).fill(
     `<tr>
@@ -419,144 +409,71 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; background: #fff; }
   .page { display: grid; grid-template-columns: 110px 1fr; min-height: 100vh; }
-
-  /* ── Columna izquierda con logos de marcas ── */
-  .sidebar-logos {
-    border-right: 2px solid #111;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 8px 4px; gap: 10px;
-  }
+  .sidebar-logos { border-right: 2px solid #111; display: flex; flex-direction: column; align-items: center; padding: 8px 4px; gap: 10px; }
   .sidebar-logos img { width: 90px; object-fit: contain; }
-  .brand-text {
-    font-weight: 900; font-size: 11pt; letter-spacing: 1px;
-    text-align: center; line-height: 1.1;
-  }
+  .brand-text { font-weight: 900; font-size: 11pt; letter-spacing: 1px; text-align: center; line-height: 1.1; }
   .brand-text.raymond { color: #cc0000; font-style: italic; }
   .brand-text.caterpillar { color: #f0a500; font-size: 9pt; }
   .brand-text.toyota { color: #cc0000; font-size: 9pt; }
   .brand-text.nissan { color: #222; font-size: 9pt; }
   .brand-text.komatsu { color: #f0a500; font-size: 10pt; }
-
-  /* ── Contenido principal ── */
   .main { padding: 10px 14px; }
-
-  /* ── Header ── */
   .top-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
   .company-info { text-align: center; font-size: 9pt; line-height: 1.6; flex: 1; }
   .company-info strong { font-size: 10pt; }
   .order-box { border: 2px solid #111; min-width: 140px; }
-  .order-box .order-title {
-    background: #e8a000; color: #111; font-weight: 900;
-    text-align: center; padding: 3px 8px; font-size: 9pt;
-    text-transform: uppercase; letter-spacing: 1px;
-  }
-  .order-box .order-number {
-    text-align: center; font-size: 18pt; font-weight: 900;
-    color: #cc0000; padding: 4px 8px;
-  }
+  .order-box .order-title { background: #e8a000; color: #111; font-weight: 900; text-align: center; padding: 3px 8px; font-size: 9pt; text-transform: uppercase; letter-spacing: 1px; }
+  .order-box .order-number { text-align: center; font-size: 18pt; font-weight: 900; color: #cc0000; padding: 4px 8px; }
   .date-box { border: 2px solid #111; margin-top: 6px; }
-  .date-box .date-title {
-    background: #e8a000; color: #111; font-weight: 900;
-    text-align: center; padding: 3px 8px; font-size: 9pt;
-    text-transform: uppercase; letter-spacing: 1px;
-  }
-  .date-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    text-align: center; font-size: 8pt; color: #555;
-  }
+  .date-box .date-title { background: #e8a000; color: #111; font-weight: 900; text-align: center; padding: 3px 8px; font-size: 9pt; text-transform: uppercase; letter-spacing: 1px; }
+  .date-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 8pt; color: #555; }
   .date-grid div { padding: 2px 4px; border-right: 1px solid #ccc; }
   .date-grid div:last-child { border-right: none; }
-  .date-values {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    text-align: center; font-size: 12pt; font-weight: 700;
-  }
+  .date-values { display: grid; grid-template-columns: 1fr 1fr 1fr; text-align: center; font-size: 12pt; font-weight: 700; }
   .date-values div { padding: 2px 4px; border-right: 1px solid #ccc; border-top: 1px solid #ccc; }
   .date-values div:last-child { border-right: none; }
-
-  /* ── Título central ── */
-  .doc-title {
-    text-align: center; font-size: 13pt; font-weight: 900;
-    border-top: 2px solid #111; border-bottom: 2px solid #111;
-    padding: 4px 0; margin: 8px 0; letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-
-  /* ── Campos de datos ── */
+  .doc-title { text-align: center; font-size: 13pt; font-weight: 900; border-top: 2px solid #111; border-bottom: 2px solid #111; padding: 4px 0; margin: 8px 0; letter-spacing: 2px; text-transform: uppercase; }
   .field-row { display: flex; align-items: stretch; margin-bottom: 6px; border: 1px solid #ccc; }
-  .field-label {
-    background: #f0f0f0; font-weight: 700; font-size: 8pt;
-    padding: 4px 8px; min-width: 90px; text-transform: uppercase;
-    display: flex; align-items: center; border-right: 1px solid #ccc;
-    text-align: center; justify-content: center;
-  }
+  .field-label { background: #f0f0f0; font-weight: 700; font-size: 8pt; padding: 4px 8px; min-width: 90px; text-transform: uppercase; display: flex; align-items: center; border-right: 1px solid #ccc; text-align: center; justify-content: center; }
   .field-value { padding: 4px 10px; flex: 1; font-size: 10pt; min-height: 28px; }
-
-  /* ── Sección datos unidad ── */
   .unit-section { border: 1px solid #ccc; margin-bottom: 6px; }
-  .unit-title {
-    background: #222; color: #fff; font-weight: 700; font-size: 9pt;
-    text-align: center; padding: 3px; text-transform: uppercase; letter-spacing: 1px;
-  }
+  .unit-title { background: #222; color: #fff; font-weight: 700; font-size: 9pt; text-align: center; padding: 3px; text-transform: uppercase; letter-spacing: 1px; }
   .unit-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
   .unit-cell { padding: 4px 8px; border-right: 1px solid #ccc; }
   .unit-cell:last-child { border-right: none; }
   .unit-cell-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; color: #555; }
   .unit-cell-value { font-size: 10pt; min-height: 20px; }
-
-  /* ── Tabla refacciones ── */
   .ref-section { border: 1px solid #ccc; margin-bottom: 6px; }
-  .ref-title {
-    background: #e8a000; color: #111; font-weight: 900; font-size: 9pt;
-    text-align: center; padding: 4px; text-transform: uppercase; letter-spacing: 2px;
-  }
+  .ref-title { background: #e8a000; color: #111; font-weight: 900; font-size: 9pt; text-align: center; padding: 4px; text-transform: uppercase; letter-spacing: 2px; }
   .ref-table { width: 100%; border-collapse: collapse; }
-  .ref-table thead th {
-    background: #e8a000; color: #111; font-weight: 700; font-size: 8.5pt;
-    padding: 5px 10px; text-align: center; border: 1px solid #ccc;
-    text-transform: uppercase; letter-spacing: 1px;
-  }
+  .ref-table thead th { background: #e8a000; color: #111; font-weight: 700; font-size: 8.5pt; padding: 5px 10px; text-align: center; border: 1px solid #ccc; text-transform: uppercase; letter-spacing: 1px; }
   .ref-table thead th:nth-child(2) { text-align: left; }
   .ref-table tbody tr:nth-child(even) { background: #fafafa; }
-
-  /* ── Totales ── */
-  .totals-row {
-    display: flex; justify-content: flex-end; gap: 0;
-    border-top: 2px solid #111; margin-top: 2px;
-  }
+  .totals-row { display: flex; justify-content: flex-end; gap: 0; border-top: 2px solid #111; margin-top: 2px; }
   .total-item { padding: 4px 14px; font-size: 9.5pt; border-left: 1px solid #ccc; }
   .total-item strong { font-size: 11pt; }
-
-  /* ── Observaciones ── */
   .obs-section { border: 1px solid #ccc; margin-bottom: 10px; }
   .obs-label { font-weight: 700; font-size: 8.5pt; text-transform: uppercase; padding: 4px 8px; background: #f0f0f0; border-bottom: 1px solid #ccc; }
-  .obs-value { padding: 6px 10px; font-size: 9.5pt; min-height: 60px; line-height: 1.6; }
-
-  /* ── Firmas ── */
+  .obs-value { padding: 6px 10px; font-size: 9.5pt; min-height: 60px; line-height: 1.6; white-space: pre-wrap; }
   .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
   .firma-box { text-align: center; }
   .firma-line { border-top: 1.5px solid #111; margin-top: 40px; padding-top: 4px; font-size: 9pt; font-weight: 700; text-transform: uppercase; }
-
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
 <div class="page">
-
-  <!-- ── Sidebar logos ── -->
   <div class="sidebar-logos">
     <img src="${logoUrl}" alt="Pipsa" style="width:95px;background:#000;border-radius:4px;padding:4px" />
     <div style="border-top:1px solid #ccc;width:100%;margin:4px 0"></div>
     <div style="text-align:center;font-size:8pt;color:#555;font-style:italic">Montacargas</div>
-    <!-- Yale -->
     <div style="background:#f5c000;padding:3px 6px;border-radius:3px;width:90px;text-align:center">
       <span style="font-weight:900;font-size:13pt;font-style:italic;color:#111">Yale</span>
       <span style="font-size:7pt;color:#333;display:block">MONTACARGAS</span>
     </div>
-    <!-- Crown -->
     <div style="background:#222;padding:3px 6px;border-radius:3px;width:90px;text-align:center">
       <span style="font-weight:900;font-size:12pt;color:#fff;letter-spacing:1px">Crown</span>
     </div>
-    <!-- Hyster -->
     <div style="background:#f5a000;padding:3px 6px;border-radius:3px;width:90px;text-align:center">
       <span style="font-weight:900;font-size:11pt;color:#111;letter-spacing:1px">HYSTER</span>
     </div>
@@ -568,10 +485,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
     <p class="brand-text komatsu">KOMATSU</p>
   </div>
 
-  <!-- ── Contenido principal ── -->
   <div class="main">
-
-    <!-- Header -->
     <div class="top-header">
       <div class="company-info">
         <strong>C. Bahías de Huatulco No.99</strong><br>
@@ -588,20 +502,14 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
         </div>
         <div class="date-box">
           <div class="date-title">Fecha</div>
-          <div class="date-grid">
-            <div>DÍA</div><div>MES</div><div>AÑO</div>
-          </div>
-          <div class="date-values">
-            <div>${dia}</div><div>${mes}</div><div>${anio}</div>
-          </div>
+          <div class="date-grid"><div>DÍA</div><div>MES</div><div>AÑO</div></div>
+          <div class="date-values"><div>${dia}</div><div>${mes}</div><div>${anio}</div></div>
         </div>
       </div>
     </div>
 
-    <!-- Título -->
     <div class="doc-title">Servicio de Montacargas</div>
 
-    <!-- Cliente -->
     <div class="field-row">
       <div class="field-label">Cliente</div>
       <div class="field-value">${ot.cliente?.nombre ?? ""}</div>
@@ -611,22 +519,12 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
       <div class="field-value">${ot.cliente?.direccion ?? ""}</div>
     </div>
 
-    <!-- Datos de la unidad -->
     <div class="unit-section">
       <div class="unit-title">Datos de la Unidad</div>
       <div class="unit-grid">
-        <div class="unit-cell">
-          <div class="unit-cell-label">Marca</div>
-          <div class="unit-cell-value">${ot.montacargas?.marca ?? ""}</div>
-        </div>
-        <div class="unit-cell">
-          <div class="unit-cell-label">Modelo</div>
-          <div class="unit-cell-value">${ot.montacargas?.modelo ?? ""}</div>
-        </div>
-        <div class="unit-cell">
-          <div class="unit-cell-label">Serie</div>
-          <div class="unit-cell-value">${ot.montacargas?.serie ?? ""}</div>
-        </div>
+        <div class="unit-cell"><div class="unit-cell-label">Marca</div><div class="unit-cell-value">${ot.montacargas?.marca ?? ""}</div></div>
+        <div class="unit-cell"><div class="unit-cell-label">Modelo</div><div class="unit-cell-value">${ot.montacargas?.modelo ?? ""}</div></div>
+        <div class="unit-cell"><div class="unit-cell-label">Serie</div><div class="unit-cell-value">${ot.montacargas?.serie ?? ""}</div></div>
       </div>
       <div style="border-top:1px solid #ccc">
         <div class="unit-grid">
@@ -642,13 +540,11 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
       </div>
     </div>
 
-    <!-- Mano de obra -->
     <div class="field-row" style="min-height:60px;align-items:flex-start">
       <div class="field-label" style="padding-top:6px">Mano de Obra</div>
       <div class="field-value" style="white-space:pre-wrap">${ot.manoDeObra ?? ot.notasCierre ?? ""}</div>
     </div>
 
-    <!-- Refacciones -->
     <div class="ref-section">
       <div class="ref-title">Refacciones</div>
       <table class="ref-table">
@@ -666,7 +562,6 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
       </table>
     </div>
 
-    <!-- Totales -->
     ${totalCosto > 0 ? `
     <div class="totals-row">
       ${ot.costoRefacciones ? `<div class="total-item">Refacciones: <strong>$${ot.costoRefacciones.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>` : ""}
@@ -674,30 +569,21 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
       <div class="total-item">Total: <strong>$${totalCosto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
     </div>` : ""}
 
-    <!-- Observaciones -->
     <div class="obs-section">
       <div class="obs-label">Observaciones:</div>
       <div class="obs-value">${ot.observaciones ?? ""}</div>
     </div>
 
-    <!-- Firmas -->
     <div class="firmas">
-      <div class="firma-box">
-        <div class="firma-line">Técnico: ${ot.tecnico ?? "_____________________"}</div>
-      </div>
-      <div class="firma-box">
-        <div class="firma-line">Cliente: _____________________</div>
-      </div>
+      <div class="firma-box"><div class="firma-line">Técnico: ${ot.tecnico ?? "_____________________"}</div></div>
+      <div class="firma-box"><div class="firma-line">Cliente: _____________________</div></div>
     </div>
-
   </div>
 </div>
 <script>window.onload = function() { document.title = '${ot.folio}'; };</script>
 </body>
 </html>`;
 }
-
-// ── EXPORTS PÚBLICOS ──────────────────────────────────────────────────────────
 
 export function generarReporte(cot: CotizacionReporte) {
   const html = cot.tipo === "venta" || cot.tipo === "renta"
