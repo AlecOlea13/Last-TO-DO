@@ -398,7 +398,14 @@ export default function Cotizaciones() {
                       <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
                     </label>
                     <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
-                    <input className="form-input" value={item.descripcion} onChange={e => updateItem(i, "descripcion", e.target.value)} placeholder="Descripción del concepto" />
+                   <textarea
+                      className="form-textarea"
+                      value={item.descripcion}
+                      onChange={e => updateItem(i, "descripcion", e.target.value)}
+                      placeholder="Descripción del concepto"
+                      rows={2}
+                      style={{ resize: "vertical", minHeight: 40 }}
+                    />
                     <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} />
                     <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
                     <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
