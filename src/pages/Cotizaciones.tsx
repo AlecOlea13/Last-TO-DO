@@ -60,27 +60,25 @@ const ESTATUS_BADGE: Record<string, string> = {
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
-// const rol = localStorage.getItem("rol") ?? "";
-// const canComment = ["developer", "gerencia", "oficina"].includes(rol);
-
 export default function Cotizaciones() {
-  const rol = localStorage.getItem("rol") ?? "";
+  const rol        = localStorage.getItem("rol") ?? "";
   const canComment = ["developer", "gerencia", "oficina"].includes(rol);
-  const [cotizaciones, setCotizaciones] = useState<Cotizacion[]>([]);
-  const [clientes, setClientes]         = useState<Cliente[]>([]);
-  const [montas, setMontas]             = useState<Montacargas[]>([]);
-  const [asesores, setAsesores]         = useState<Asesor[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState("");
-  const [filtro, setFiltro]             = useState("todos");
-  const [filtroAsesor, setFiltroAsesor] = useState("todos");
-  const [modal, setModal]               = useState(false);
+
+  const [cotizaciones, setCotizaciones]       = useState<Cotizacion[]>([]);
+  const [clientes, setClientes]               = useState<Cliente[]>([]);
+  const [montas, setMontas]                   = useState<Montacargas[]>([]);
+  const [asesores, setAsesores]               = useState<Asesor[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [search, setSearch]                   = useState("");
+  const [filtro, setFiltro]                   = useState("todos");
+  const [filtroAsesor, setFiltroAsesor]       = useState("todos");
+  const [modal, setModal]                     = useState(false);
   const [comentarioModal, setComentarioModal] = useState<Cotizacion | null>(null);
   const [nuevoComentario, setNuevoComentario] = useState("");
-  const [form, setForm]                 = useState<any>(emptyForm);
-  const [saving, setSaving]             = useState(false);
+  const [form, setForm]                       = useState<any>(emptyForm);
+  const [saving, setSaving]                   = useState(false);
   const [savingComentario, setSavingComentario] = useState(false);
-  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [uploadingIdx, setUploadingIdx]       = useState<number | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -133,7 +131,7 @@ export default function Cotizaciones() {
   }
 
   async function save() {
-    if (!form.folio || !form.cliente) return;
+    if (!form.folio || !form.cliente) return; // ← solo folio y cliente son requeridos
     setSaving(true);
     try {
       const { data } = await api.post("/cotizaciones", form);
@@ -365,7 +363,13 @@ export default function Cotizaciones() {
               </div>
               <div className="form-group span-2">
                 <label className="form-label">Descripción del servicio</label>
-                <input className="form-input" value={form.descripcionServicio} onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))} placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  value={form.descripcionServicio}
+                  onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
+                  placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15"
+                />
               </div>
             </div>
 
@@ -435,8 +439,6 @@ export default function Cotizaciones() {
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>
               {comentarioModal.cliente?.nombre ?? "Sin cliente"}
             </p>
-
-            {/* Historial */}
             <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {comentarioModal.comentarios.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0" }}>
@@ -453,10 +455,7 @@ export default function Cotizaciones() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{fmtHora(cm.fecha)}</span>
                         {["developer", "gerencia"].includes(rol) && (
-                          <button
-                            onClick={() => eliminarComentario(comentarioModal._id, cm._id)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}
-                          >🗑️</button>
+                          <button onClick={() => eliminarComentario(comentarioModal._id, cm._id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}>🗑️</button>
                         )}
                       </div>
                     </div>
@@ -465,8 +464,6 @@ export default function Cotizaciones() {
                 ))
               )}
             </div>
-
-            {/* Nuevo comentario */}
             {canComment && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
                 <label className="form-label">Nuevo comentario</label>
