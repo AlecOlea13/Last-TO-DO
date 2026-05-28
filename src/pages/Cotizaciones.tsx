@@ -73,6 +73,7 @@ export default function Cotizaciones() {
   const [filtro, setFiltro]                   = useState("todos");
   const [filtroAsesor, setFiltroAsesor]       = useState("todos");
   const [modal, setModal]                     = useState(false);
+  const [editing, setEditing]                 = useState<Cotizacion | null>(null);
   const [comentarioModal, setComentarioModal] = useState<Cotizacion | null>(null);
   const [nuevoComentario, setNuevoComentario] = useState("");
   const [form, setForm]                       = useState<any>(emptyForm);
@@ -97,7 +98,29 @@ export default function Cotizaciones() {
   }
 
   function openNew() {
+    setEditing(null);
     setForm({ ...emptyForm, folio: `COT-${Date.now().toString().slice(-6)}`, items: [{ ...emptyItem }] });
+    setModal(true);
+  }
+
+  function openEdit(c: Cotizacion) {
+    setEditing(c);
+    setForm({
+      folio:               c.folio,
+      tipo:                c.tipo,
+      cliente:             c.cliente?._id ?? "",
+      montacargas:         c.montacargas?._id ?? "",
+      asesor:              c.asesor?._id ?? "",
+      fecha:               c.fecha.split("T")[0],
+      lugar:               c.lugar,
+      descripcionServicio: c.descripcionServicio ?? "",
+      items:               c.items.map(i => ({ ...i })),
+      subtotal:            c.subtotal,
+      iva:                 c.iva,
+      total:               c.total,
+      estatus:             c.estatus,
+      notas:               c.notas ?? "",
+    });
     setModal(true);
   }
 
@@ -131,12 +154,18 @@ export default function Cotizaciones() {
   }
 
   async function save() {
-    if (!form.folio || !form.cliente) return; // ← solo folio y cliente son requeridos
+    if (!form.folio || !form.cliente) return;
     setSaving(true);
     try {
-      const { data } = await api.post("/cotizaciones", form);
-      setCotizaciones(prev => [data, ...prev]);
+      if (editing) {
+        const { data } = await api.put(`/cotizaciones/${editing._id}`, form);
+        setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
+      } else {
+        const { data } = await api.post("/cotizaciones", form);
+        setCotizaciones(prev => [data, ...prev]);
+      }
       setModal(false);
+      setEditing(null);
       load();
     } catch {}
     finally { setSaving(false); }
@@ -192,6 +221,133 @@ export default function Cotizaciones() {
     const matchAsesor  = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
   });
+
+  // ── Formulario compartido (nueva y edición) ──
+  const modalForm = (
+    <div className="modal" style={{ maxWidth: 720 }}>
+      <button className="modal-close" onClick={() => { setModal(false); setEditing(null); }}>✕</button>
+      <h2 className="modal-title">{editing ? `Editar — ${editing.folio}` : "Nueva cotización"}</h2>
+      <div className="form-grid">
+        <div className="form-group">
+          <label className="form-label">Folio *</label>
+          <input className="form-input" value={form.folio} onChange={e => setForm((p: any) => ({ ...p, folio: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Tipo *</label>
+          <select className="form-select" value={form.tipo} onChange={e => setForm((p: any) => ({ ...p, tipo: e.target.value }))}>
+            <option value="servicio">Servicio / Mantenimiento</option>
+            <option value="renta">Renta</option>
+            <option value="venta">Venta</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Cliente *</label>
+          <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
+            <option value="">Selecciona cliente...</option>
+            {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Asesor</label>
+          <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
+            <option value="">Sin asesor</option>
+            {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Montacargas</label>
+          <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
+            <option value="">Sin equipo</option>
+            {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Fecha</label>
+          <input className="form-input" type="date" value={form.fecha} onChange={e => setForm((p: any) => ({ ...p, fecha: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Lugar</label>
+          <input className="form-input" value={form.lugar} onChange={e => setForm((p: any) => ({ ...p, lugar: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Estatus</label>
+          <select className="form-select" value={form.estatus} onChange={e => setForm((p: any) => ({ ...p, estatus: e.target.value }))}>
+            <option value="borrador">Borrador</option>
+            <option value="enviada">Enviada</option>
+            <option value="aceptada">Aceptada</option>
+            <option value="rechazada">Rechazada</option>
+          </select>
+        </div>
+        <div className="form-group span-2">
+          <label className="form-label">Descripción del servicio</label>
+          <textarea
+            className="form-textarea"
+            rows={3}
+            value={form.descripcionServicio}
+            onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
+            placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15"
+          />
+        </div>
+      </div>
+
+      {/* Items */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Conceptos</p>
+          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar línea</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, marginBottom: 4 }}>
+          {["Foto", "Cant.", "Descripción", "Precio U.", "Total", ""].map(h => (
+            <p key={h} style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{h}</p>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {form.items.map((item: Item, i: number) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", background: "var(--surface2)", padding: 8, borderRadius: "var(--radius-sm)" }}>
+              <label style={{ cursor: "pointer" }}>
+                {item.imagen ? (
+                  <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
+                ) : (
+                  <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
+                    {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
+                  </div>
+                )}
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
+              </label>
+              <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
+              <textarea
+                className="form-textarea"
+                value={item.descripcion}
+                onChange={e => updateItem(i, "descripcion", e.target.value)}
+                placeholder="Descripción del concepto"
+                rows={2}
+                style={{ resize: "vertical", minHeight: 40 }}
+              />
+              <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} />
+              <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
+              <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
+            <span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
+            <span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>
+            <span>Total:</span><span>${form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="modal-footer">
+        <button className="btn btn-secondary" onClick={() => { setModal(false); setEditing(null); }}>Cancelar</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : editing ? "Actualizar" : "Guardar"}</button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -302,6 +458,7 @@ export default function Cotizaciones() {
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
                         <button className="btn btn-primary btn-sm" onClick={() => imprimirReporte(c)} title="Imprimir">🖨️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
                         <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
                       </div>
                     </td>
@@ -313,123 +470,10 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      {/* ── Modal nueva cotización ── */}
+      {/* ── Modal nueva / editar cotización ── */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth: 720 }}>
-            <button className="modal-close" onClick={() => setModal(false)}>✕</button>
-            <h2 className="modal-title">Nueva cotización</h2>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Folio *</label>
-                <input className="form-input" value={form.folio} onChange={e => setForm((p: any) => ({ ...p, folio: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tipo *</label>
-                <select className="form-select" value={form.tipo} onChange={e => setForm((p: any) => ({ ...p, tipo: e.target.value }))}>
-                  <option value="servicio">Servicio / Mantenimiento</option>
-                  <option value="renta">Renta</option>
-                  <option value="venta">Venta</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Cliente *</label>
-                <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
-                  <option value="">Selecciona cliente...</option>
-                  {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Asesor</label>
-                <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
-                  <option value="">Sin asesor</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Montacargas</label>
-                <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
-                  <option value="">Sin equipo</option>
-                  {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Fecha</label>
-                <input className="form-input" type="date" value={form.fecha} onChange={e => setForm((p: any) => ({ ...p, fecha: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Lugar</label>
-                <input className="form-input" value={form.lugar} onChange={e => setForm((p: any) => ({ ...p, lugar: e.target.value }))} />
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Descripción del servicio</label>
-                <textarea
-                  className="form-textarea"
-                  rows={3}
-                  value={form.descripcionServicio}
-                  onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
-                  placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15"
-                />
-              </div>
-            </div>
-
-            {/* Items */}
-            <div style={{ marginTop: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Conceptos</p>
-                <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar línea</button>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, marginBottom: 4 }}>
-                {["Foto", "Cant.", "Descripción", "Precio U.", "Total", ""].map(h => (
-                  <p key={h} style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{h}</p>
-                ))}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {form.items.map((item: Item, i: number) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", background: "var(--surface2)", padding: 8, borderRadius: "var(--radius-sm)" }}>
-                    <label style={{ cursor: "pointer" }}>
-                      {item.imagen ? (
-                        <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
-                      ) : (
-                        <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
-                          {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
-                        </div>
-                      )}
-                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
-                    </label>
-                    <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
-                   <textarea
-                      className="form-textarea"
-                      value={item.descripcion}
-                      onChange={e => updateItem(i, "descripcion", e.target.value)}
-                      placeholder="Descripción del concepto"
-                      rows={2}
-                      style={{ resize: "vertical", minHeight: 40 }}
-                    />
-                    <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} />
-                    <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
-                    <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
-                  <span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
-                  <span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}>
-                  <span>Total:</span><span>${form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
-            </div>
-          </div>
+          {modalForm}
         </div>
       )}
 

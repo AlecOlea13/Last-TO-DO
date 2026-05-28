@@ -37,7 +37,7 @@ export default function Gastos() {
   const [xmlError, setXmlError]     = useState("");
 
   const rol = localStorage.getItem("rol") ?? "";
-  const canDelete = ["developer", "gerencia"].includes(rol);
+  const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
 
   useEffect(() => { load(); }, []);
 
