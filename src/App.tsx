@@ -11,6 +11,7 @@ import Cotizaciones from "./pages/Cotizaciones";
 import Asesores     from "./pages/Asesores";
 import Usuarios     from "./pages/Usuarios";
 import Almacen      from "./pages/Almacen";
+import Gastos from "./pages/Gastos";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
@@ -39,6 +40,8 @@ function App() {
           <Route path="facturas" element={
             <ProtectedRoute roles={["developer","gerencia","oficina"]}><Facturas /></ProtectedRoute>
           } />
+          <Route path="gastos" element={
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Gastos /></ProtectedRoute>} />
 
           {/* Solo developer */}
           <Route path="asesores" element={

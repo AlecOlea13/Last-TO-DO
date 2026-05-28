@@ -193,6 +193,7 @@ export default function Dashboard() {
   { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/gastos", icon: "🧾", label: "Gastos", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
   { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
 ];
