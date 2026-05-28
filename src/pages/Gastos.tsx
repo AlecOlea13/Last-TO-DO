@@ -8,7 +8,7 @@ type Concepto = {
   importe: number;
 };
 
-type Gasto = {
+type GastoFiscal = {
   _id: string;
   uuid?: string;
   fechaEmision?: string;
@@ -21,34 +21,115 @@ type Gasto = {
   iva: number;
   total: number;
   moneda?: string;
+  asesor?: { _id: string; nombre: string };
   notas?: string;
-  xmlUrl?: string;
+};
+
+type GastoNoFiscal = {
+  _id: string;
+  fecha: string;
+  asesor?: { _id: string; nombre: string };
+  entrada?: string;
+  monto: number;
+  descripcion: string;
+  notas?: string;
+};
+
+type Asesor = { _id: string; nombre: string };
+
+const emptyNoFiscal = {
+  fecha: new Date().toISOString().split("T")[0],
+  asesor: "", entrada: "", monto: 0, descripcion: "", notas: "",
 };
 
 export default function Gastos() {
-  const [gastos, setGastos]         = useState<Gasto[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState("");
-  const [modal, setModal]           = useState(false);
-  const [detalleModal, setDetalle]  = useState<Gasto | null>(null);
-  const [parsing, setParsing]       = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [form, setForm]             = useState<Partial<Gasto>>({});
-  const [xmlError, setXmlError]     = useState("");
-
-  const rol = localStorage.getItem("rol") ?? "";
+  const rol       = localStorage.getItem("rol") ?? "";
   const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
+
+  const [tab, setTab]                   = useState<"fiscal" | "nofiscal">("fiscal");
+  const [fiscales, setFiscales]         = useState<GastoFiscal[]>([]);
+  const [noFiscales, setNoFiscales]     = useState<GastoNoFiscal[]>([]);
+  const [asesores, setAsesores]         = useState<Asesor[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState("");
+
+  // Fiscal
+  const [modalFiscal, setModalFiscal]   = useState(false);
+  const [parsing, setParsing]           = useState(false);
+  const [savingF, setSavingF]           = useState(false);
+  const [formF, setFormF]               = useState<Partial<GastoFiscal>>({});
+  const [xmlError, setXmlError]         = useState("");
+  const [detalleF, setDetalleF]         = useState<GastoFiscal | null>(null);
+
+  // No fiscal
+  const [modalNF, setModalNF]           = useState(false);
+  const [editingNF, setEditingNF]       = useState<GastoNoFiscal | null>(null);
+  const [formNF, setFormNF]             = useState<any>(emptyNoFiscal);
+  const [savingNF, setSavingNF]         = useState(false);
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     try {
-      const { data } = await api.get("/gastos");
-      setGastos(data);
+      const [f, nf, as] = await Promise.all([
+        api.get("/gastos"),
+        api.get("/gastos-no-fiscales"),
+        api.get("/asesores"),
+      ]);
+      setFiscales(f.data);
+      setNoFiscales(nf.data);
+      setAsesores(as.data);
     } catch {}
     finally { setLoading(false); }
   }
 
+  // ── Helpers de fechas ──────────────────────────────────────────────────────
+  function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
+    if (!dateStr) return false;
+    const d   = new Date(dateStr);
+    const now = new Date();
+    if (tipo === "semana") {
+      const lunes = new Date(now);
+      lunes.setDate(now.getDate() - now.getDay() + 1);
+      lunes.setHours(0,0,0,0);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      domingo.setHours(23,59,59,999);
+      return d >= lunes && d <= domingo;
+    }
+    if (tipo === "mes") {
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }
+    if (tipo === "año") {
+      return d.getFullYear() === now.getFullYear();
+    }
+    return false;
+  }
+
+  function sumaFiscal(tipo?: "semana" | "mes" | "año") {
+    return fiscales
+      .filter(g => tipo ? enRango(g.fechaEmision, tipo) : true)
+      .reduce((acc, g) => acc + g.total, 0);
+  }
+
+  function sumaNoFiscal(tipo?: "semana" | "mes" | "año") {
+    return noFiscales
+      .filter(g => tipo ? enRango(g.fecha, tipo) : true)
+      .reduce((acc, g) => acc + g.monto, 0);
+  }
+
+  function fmt(date?: string) {
+    if (!date) return "—";
+    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function fmtCorto(date?: string) {
+    if (!date) return "—";
+    const d = new Date(date);
+    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
+  }
+
+  // ── XML Parser ─────────────────────────────────────────────────────────────
   function parseXML(file: File) {
     setParsing(true);
     setXmlError("");
@@ -58,38 +139,27 @@ export default function Gastos() {
         const text = e.target?.result as string;
         const parser = new DOMParser();
         const doc = parser.parseFromString(text, "application/xml");
-
         const ns  = "http://www.sat.gob.mx/cfd/4";
         const ns3 = "http://www.sat.gob.mx/cfd/3";
-
         const cfdi = doc.querySelector("Comprobante") ??
                      doc.getElementsByTagNameNS(ns,  "Comprobante")[0] ??
                      doc.getElementsByTagNameNS(ns3, "Comprobante")[0];
-
         if (!cfdi) throw new Error("No se encontró el nodo Comprobante en el XML");
-
-        const getAttr = (node: Element | null | undefined, attr: string) =>
-          node?.getAttribute(attr) ?? "";
-
+        const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
         const emisor   = cfdi.querySelector("Emisor")   ?? cfdi.getElementsByTagName("Emisor")[0];
         const receptor = cfdi.querySelector("Receptor") ?? cfdi.getElementsByTagName("Receptor")[0];
-        const timbre   = cfdi.querySelector("TimbreFiscalDigital") ??
-                         cfdi.getElementsByTagName("TimbreFiscalDigital")[0];
-
+        const timbre   = cfdi.querySelector("TimbreFiscalDigital") ?? cfdi.getElementsByTagName("TimbreFiscalDigital")[0];
         const conceptosNodes = Array.from(
           cfdi.querySelectorAll("Concepto").length > 0
             ? cfdi.querySelectorAll("Concepto")
             : cfdi.getElementsByTagName("Concepto")
         );
-
         const conceptos: Concepto[] = conceptosNodes.map(c => ({
           descripcion:   getAttr(c, "Descripcion")   || getAttr(c, "descripcion"),
-          cantidad:      parseFloat(getAttr(c, "Cantidad")      || getAttr(c, "cantidad")      || "1"),
-          valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || getAttr(c, "valorUnitario") || "0"),
-          importe:       parseFloat(getAttr(c, "Importe")       || getAttr(c, "importe")       || "0"),
+          cantidad:      parseFloat(getAttr(c, "Cantidad")      || "1"),
+          valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || "0"),
+          importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
-
-        // Calcular IVA desde nodos Traslado
         let iva = 0;
         const traslados = Array.from(
           cfdi.querySelectorAll("Traslado").length > 0
@@ -97,25 +167,23 @@ export default function Gastos() {
             : cfdi.getElementsByTagName("Traslado")
         );
         traslados.forEach(t => {
-          const imp = parseFloat(getAttr(t, "Importe") || getAttr(t, "importe") || "0");
+          const imp = parseFloat(getAttr(t, "Importe") || "0");
           if (!isNaN(imp)) iva += imp;
         });
-
-        const parsed: Partial<Gasto> = {
+        setFormF(prev => ({
+          ...prev,
           uuid:          getAttr(timbre, "UUID") || getAttr(timbre, "uuid"),
           fechaEmision:  getAttr(cfdi, "Fecha")  || getAttr(cfdi, "fecha"),
           rfcEmisor:     getAttr(emisor,   "Rfc") || getAttr(emisor,   "rfc"),
-          nombreEmisor:  getAttr(emisor,   "Nombre") || getAttr(emisor,   "nombre"),
+          nombreEmisor:  getAttr(emisor,   "Nombre") || getAttr(emisor, "nombre"),
           rfcReceptor:   getAttr(receptor, "Rfc") || getAttr(receptor, "rfc"),
           nombreReceptor:getAttr(receptor, "Nombre") || getAttr(receptor, "nombre"),
-          subtotal:      parseFloat(getAttr(cfdi, "SubTotal") || getAttr(cfdi, "subTotal") || "0"),
+          subtotal:      parseFloat(getAttr(cfdi, "SubTotal") || "0"),
           iva:           iva || parseFloat(getAttr(cfdi, "Iva") || "0"),
-          total:         parseFloat(getAttr(cfdi, "Total") || getAttr(cfdi, "total") || "0"),
+          total:         parseFloat(getAttr(cfdi, "Total") || "0"),
           moneda:        getAttr(cfdi, "Moneda") || "MXN",
           conceptos,
-        };
-
-        setForm(parsed);
+        }));
         setParsing(false);
       } catch (err: any) {
         setXmlError(err.message ?? "Error al leer el XML");
@@ -126,169 +194,404 @@ export default function Gastos() {
     reader.readAsText(file, "UTF-8");
   }
 
-  async function save() {
-    if (!form.nombreEmisor && !form.rfcEmisor) return;
-    setSaving(true);
+  async function saveFiscal() {
+    if (!formF.nombreEmisor && !formF.rfcEmisor) return;
+    setSavingF(true);
     try {
-      const { data } = await api.post("/gastos", form);
-      setGastos(prev => [data, ...prev]);
-      setModal(false);
-      setForm({});
+      const { data } = await api.post("/gastos", formF);
+      setFiscales(prev => [data, ...prev]);
+      setModalFiscal(false);
+      setFormF({});
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
-    finally { setSaving(false); }
+    finally { setSavingF(false); }
   }
 
-  async function remove(id: string) {
+  async function deleteFiscal(id: string) {
     if (!confirm("¿Eliminar este gasto?")) return;
     await api.delete(`/gastos/${id}`);
-    setGastos(prev => prev.filter(g => g._id !== id));
+    setFiscales(prev => prev.filter(g => g._id !== id));
   }
 
-  function fmt(date?: string) {
-    if (!date) return "—";
-    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  // ── No fiscal ──────────────────────────────────────────────────────────────
+  function openNewNF() {
+    setEditingNF(null);
+    setFormNF({ ...emptyNoFiscal, fecha: new Date().toISOString().split("T")[0] });
+    setModalNF(true);
   }
 
-  const totalMes = gastos
-    .filter(g => {
-      if (!g.fechaEmision) return false;
-      const d = new Date(g.fechaEmision);
-      const now = new Date();
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    })
-    .reduce((acc, g) => acc + g.total, 0);
+  function openEditNF(g: GastoNoFiscal) {
+    setEditingNF(g);
+    setFormNF({
+      fecha:       g.fecha.split("T")[0],
+      asesor:      g.asesor?._id ?? "",
+      entrada:     g.entrada ?? "",
+      monto:       g.monto,
+      descripcion: g.descripcion,
+      notas:       g.notas ?? "",
+    });
+    setModalNF(true);
+  }
 
-  const totalGeneral = gastos.reduce((acc, g) => acc + g.total, 0);
+  async function saveNF() {
+    if (!formNF.descripcion || !formNF.monto) return;
+    setSavingNF(true);
+    try {
+      if (editingNF) {
+        const { data } = await api.put(`/gastos-no-fiscales/${editingNF._id}`, formNF);
+        setNoFiscales(prev => prev.map(g => g._id === editingNF._id ? data : g));
+      } else {
+        const { data } = await api.post("/gastos-no-fiscales", formNF);
+        setNoFiscales(prev => [data, ...prev]);
+      }
+      setModalNF(false);
+      setEditingNF(null);
+    } catch {}
+    finally { setSavingNF(false); }
+  }
 
-  const filtered = gastos.filter(g =>
+  async function deleteNF(id: string) {
+    if (!confirm("¿Eliminar este gasto?")) return;
+    await api.delete(`/gastos-no-fiscales/${id}`);
+    setNoFiscales(prev => prev.filter(g => g._id !== id));
+  }
+
+  // ── Reportes ───────────────────────────────────────────────────────────────
+  function abrirReporte(tipo: "fiscal" | "nofiscal" | "general", periodo: "semana" | "mes" | "año" | "todo") {
+    const periodoLabel: Record<string, string> = {
+      semana: "Semanal", mes: "Mensual", año: "Anual", todo: "General",
+    };
+
+    const filtrarF = (g: GastoFiscal) => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
+    const filtrarNF = (g: GastoNoFiscal) => periodo === "todo" ? true : enRango(g.fecha, periodo);
+
+    const gastosFR  = fiscales.filter(filtrarF);
+    const gastosNFR = noFiscales.filter(filtrarNF);
+
+    // Acumulado no fiscal
+    const nfOrdenados = [...gastosNFR].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    let acum = 0;
+
+    const rowsF = gastosFR.map(g => `
+      <tr>
+        <td>${fmtCorto(g.fechaEmision)}</td>
+        <td>${g.asesor?.nombre ?? "—"}</td>
+        <td>${g.nombreEmisor ?? "—"}</td>
+        <td>${g.rfcEmisor ?? "—"}</td>
+        <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td>${g.conceptos[0]?.descripcion ?? "—"}</td>
+        <td>${g.notas ?? "—"}</td>
+      </tr>`
+    ).join("");
+
+    const rowsNF = nfOrdenados.map(g => {
+      acum += g.monto;
+      return `
+      <tr>
+        <td>${fmtCorto(g.fecha)}</td>
+        <td>${g.asesor?.nombre ?? "—"}</td>
+        <td>${g.entrada ?? ""}</td>
+        <td style="text-align:right">$${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right">$${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td>${g.descripcion}</td>
+        <td>${g.notas ?? ""}</td>
+      </tr>`;
+    }).join("");
+
+    const totalF  = gastosFR.reduce((a, g) => a + g.total, 0);
+    const totalNF = gastosNFR.reduce((a, g) => a + g.monto, 0);
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte de Gastos ${periodoLabel[periodo]}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; padding: 24px; }
+  .header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 16px; }
+  .logo { width: 60px; height: 60px; object-fit: contain; background: #000; border-radius: 6px; }
+  .header-info h1 { font-size: 14pt; font-weight: 900; }
+  .header-info p  { font-size: 9pt; color: #555; }
+  .section-title { font-size: 11pt; font-weight: 700; margin: 16px 0 8px; border-left: 4px solid #222; padding-left: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9pt; }
+  thead { background: #222; color: #fff; }
+  thead th { padding: 6px 8px; text-align: left; }
+  tbody tr:nth-child(even) { background: #f5f5f5; }
+  td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+  .total-row { text-align: right; font-size: 10pt; font-weight: 700; margin-top: 4px; }
+  .grand-total { margin-top: 16px; padding: 10px 16px; background: #222; color: #fff; border-radius: 6px; text-align: right; font-size: 12pt; font-weight: 900; }
+  @media print { body { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Pipsa" />
+  <div class="header-info">
+    <h1>Reporte de Gastos — ${periodoLabel[periodo]}</h1>
+    <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+  </div>
+</div>
+
+${(tipo === "fiscal" || tipo === "general") ? `
+<div class="section-title">Gastos Fiscales</div>
+${gastosFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
+<table>
+  <thead><tr>
+    <th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th>
+  </tr></thead>
+  <tbody>${rowsF}</tbody>
+</table>
+<p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+`}` : ""}
+
+${(tipo === "nofiscal" || tipo === "general") ? `
+<div class="section-title">Gastos No Fiscales</div>
+${gastosNFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
+<table>
+  <thead><tr>
+    <th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th>
+  </tr></thead>
+  <tbody>${rowsNF}</tbody>
+</table>
+<p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+`}` : ""}
+
+${tipo === "general" ? `
+<div class="grand-total">
+  TOTAL GENERAL: $${(totalF + totalNF).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+</div>` : ""}
+
+<script>window.onload = function() { setTimeout(function(){ window.print(); }, 500); window.onafterprint = function(){ window.close(); }; };</script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    const win  = window.open(url, "_blank");
+    if (win) win.focus();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // ── Filtros ────────────────────────────────────────────────────────────────
+  const filteredF = fiscales.filter(g =>
     (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (g.rfcEmisor    ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (g.uuid         ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
     g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const filteredNF = noFiscales.filter(g =>
+    g.descripcion.toLowerCase().includes(search.toLowerCase()) ||
+    (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (g.notas ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const statsF = [
+    { label: "Esta semana",  val: sumaFiscal("semana") },
+    { label: "Este mes",     val: sumaFiscal("mes") },
+    { label: "Este año",     val: sumaFiscal("año") },
+    { label: "Total general",val: sumaFiscal() },
+  ];
+
+  const statsNF = [
+    { label: "Esta semana",  val: sumaNoFiscal("semana") },
+    { label: "Este mes",     val: sumaNoFiscal("mes") },
+    { label: "Este año",     val: sumaNoFiscal("año") },
+    { label: "Total general",val: sumaNoFiscal() },
+  ];
 
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Gastos</h1>
-          <p className="page-subtitle">{gastos.length} facturas registradas</p>
+          <p className="page-subtitle">{fiscales.length} fiscales · {noFiscales.length} no fiscales</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm({}); setXmlError(""); setModal(true); }}>
-          + Subir XML
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* Reportes */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["semana","mes","año","todo"] as const).map(p => (
+              <button key={p} className="btn btn-secondary btn-sm" onClick={() => abrirReporte("general", p)}>
+                📊 {p === "semana" ? "Semanal" : p === "mes" ? "Mensual" : p === "año" ? "Anual" : "General"}
+              </button>
+            ))}
+          </div>
+          {tab === "fiscal"
+            ? <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalFiscal(true); }}>+ Subir XML</button>
+            : <button className="btn btn-primary" onClick={openNewNF}>+ Nuevo gasto</button>
+          }
+        </div>
       </div>
 
       <div className="page-content">
 
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginBottom: 0 }}>
+          {(["fiscal","nofiscal"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setSearch(""); }}
+              style={{
+                padding: "10px 24px", border: "none", cursor: "pointer",
+                background: "transparent", fontFamily: "var(--font-head)",
+                fontWeight: 700, fontSize: "0.88rem",
+                color: tab === t ? "var(--accent)" : "var(--text-muted)",
+                borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              {t === "fiscal" ? "🧾 Fiscal" : "💵 No Fiscal"}
+            </button>
+          ))}
+        </div>
+
         {/* Stats */}
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-          <div className="stat-card">
-            <span className="stat-card-icon">📄</span>
-            <p className="stat-card-value">{gastos.length}</p>
-            <p className="stat-card-label">Total facturas</p>
-            <div className="stat-card-accent" style={{ background: "var(--blue)" }} />
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-icon">📅</span>
-            <p className="stat-card-value" style={{ color: "var(--accent)", fontSize: "1.4rem" }}>
-              ${totalMes.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-            </p>
-            <p className="stat-card-label">Gasto este mes</p>
-            <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-icon">💰</span>
-            <p className="stat-card-value" style={{ color: "var(--red)", fontSize: "1.4rem" }}>
-              ${totalGeneral.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-            </p>
-            <p className="stat-card-label">Gasto total</p>
-            <div className="stat-card-accent" style={{ background: "var(--red)" }} />
-          </div>
+        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          {(tab === "fiscal" ? statsF : statsNF).map(s => (
+            <div key={s.label} className="stat-card">
+              <p className="stat-card-value" style={{ color: "var(--accent)", fontSize: "1.2rem" }}>
+                ${s.val.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </p>
+              <p className="stat-card-label">{s.label}</p>
+              <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
+            </div>
+          ))}
         </div>
 
-        {/* Tabla */}
-        <div className="table-card" style={{ overflowX: "auto" }}>
-          <div className="table-card-header">
-            <p className="table-card-title">Todas las facturas</p>
-            <div className="table-toolbar">
-              <input
-                className="search-input"
-                placeholder="🔍 Buscar proveedor, RFC, concepto..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
+        {/* Reportes por tipo */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", alignSelf: "center" }}>
+            Reporte {tab === "fiscal" ? "fiscal" : "no fiscal"}:
+          </span>
+          {(["semana","mes","año","todo"] as const).map(p => (
+            <button key={p} className="btn btn-secondary btn-sm"
+              onClick={() => abrirReporte(tab === "fiscal" ? "fiscal" : "nofiscal", p)}>
+              🖨️ {p === "semana" ? "Semanal" : p === "mes" ? "Mensual" : p === "año" ? "Anual" : "General"}
+            </button>
+          ))}
+        </div>
 
-          {loading ? (
-            <div className="loading-state"><div className="spinner" /></div>
-          ) : filtered.length === 0 ? (
-            <div className="empty-state">
-              <span className="empty-icon">🧾</span>
-              <p>Sin gastos{search ? " con ese filtro" : " registrados"}</p>
+        {/* Tabla fiscal */}
+        {tab === "fiscal" && (
+          <div className="table-card" style={{ overflowX: "auto" }}>
+            <div className="table-card-header">
+              <p className="table-card-title">Facturas fiscales</p>
+              <div className="table-toolbar">
+                <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
             </div>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Proveedor</th>
-                  <th>RFC Emisor</th>
-                  <th>Conceptos</th>
-                  <th>Subtotal</th>
-                  <th>IVA</th>
-                  <th>Total</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(g => (
-                  <tr key={g._id}>
-                    <td>{fmt(g.fechaEmision)}</td>
-                    <td style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</td>
-                    <td style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "monospace" }}>{g.rfcEmisor ?? "—"}</td>
-                    <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 200 }}>
-                      {g.conceptos.length > 0
-                        ? g.conceptos[0].descripcion.slice(0, 60) + (g.conceptos[0].descripcion.length > 60 ? "..." : "")
-                        : "—"}
-                      {g.conceptos.length > 1 && (
-                        <span style={{ marginLeft: 6, fontSize: "0.72rem", background: "var(--surface3)", padding: "1px 6px", borderRadius: 4 }}>
-                          +{g.conceptos.length - 1}
-                        </span>
-                      )}
-                    </td>
-                    <td>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                    <td style={{ color: "var(--text-muted)" }}>${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                    <td style={{ fontWeight: 700, color: "var(--red)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(g)}>👁️</button>
-                        {canDelete && <button className="btn btn-danger btn-sm" onClick={() => remove(g._id)}>🗑️</button>}
-                      </div>
-                    </td>
+            {loading ? (
+              <div className="loading-state"><div className="spinner" /></div>
+            ) : filteredF.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{search ? " con ese filtro" : ""}</p></div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th>
+                    <th>Concepto</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Notas</th><th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {filteredF.map(g => (
+                    <tr key={g._id}>
+                      <td>{fmt(g.fechaEmision)}</td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</td>
+                      <td style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</td>
+                      <td style={{ fontSize: "0.78rem", fontFamily: "monospace", color: "var(--text-muted)" }}>{g.rfcEmisor ?? "—"}</td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 180 }}>
+                        {g.conceptos[0]?.descripcion?.slice(0, 50) ?? "—"}
+                        {(g.conceptos[0]?.descripcion?.length ?? 0) > 50 ? "..." : ""}
+                        {g.conceptos.length > 1 && <span style={{ marginLeft: 4, fontSize: "0.7rem", background: "var(--surface3)", padding: "1px 5px", borderRadius: 4 }}>+{g.conceptos.length - 1}</span>}
+                      </td>
+                      <td>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ color: "var(--text-muted)" }}>${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ fontWeight: 700, color: "var(--red)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)}>👁️</button>
+                          {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)}>🗑️</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* Tabla no fiscal */}
+        {tab === "nofiscal" && (
+          <div className="table-card" style={{ overflowX: "auto" }}>
+            <div className="table-card-header">
+              <p className="table-card-title">Gastos no fiscales</p>
+              <div className="table-toolbar">
+                <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+            </div>
+            {loading ? (
+              <div className="loading-state"><div className="spinner" /></div>
+            ) : filteredNF.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{search ? " con ese filtro" : ""}</p></div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th><th>Quien</th><th>Entrada</th>
+                    <th>Monto</th><th>Acumulado</th><th>Descripción</th><th>Notas</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let acum = 0;
+                    return [...filteredNF]
+                      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+                      .map(g => {
+                        acum += g.monto;
+                        return (
+                          <tr key={g._id}>
+                            <td>{fmt(g.fecha)}</td>
+                            <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</td>
+                            <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{g.entrada ?? "—"}</td>
+                            <td style={{ fontWeight: 600 }}>${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                            <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                            <td style={{ fontWeight: 500 }}>{g.descripcion}</td>
+                            <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
+                            <td>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
+                                {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️</button>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      });
+                  })()}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Modal subir XML ── */}
-      {modal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
+      {/* ── Modal subir XML fiscal ── */}
+      {modalFiscal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalFiscal(false)}>
           <div className="modal" style={{ maxWidth: 560 }}>
-            <button className="modal-close" onClick={() => setModal(false)}>✕</button>
+            <button className="modal-close" onClick={() => setModalFiscal(false)}>✕</button>
             <h2 className="modal-title">Subir factura XML</h2>
 
-            {/* Drop zone */}
             <label style={{
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "32px 20px",
-              cursor: "pointer", background: "var(--surface2)", gap: 8, transition: "border-color 0.2s",
+              border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px",
+              cursor: "pointer", background: "var(--surface2)", gap: 8,
             }}
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseXML(f); }}
@@ -297,129 +600,166 @@ export default function Gastos() {
               <p style={{ fontWeight: 600, color: "var(--text)" }}>
                 {parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}
               </p>
-              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Archivos .xml de CFDI 3.3 o 4.0</p>
-              <input
-                type="file" accept=".xml" style={{ display: "none" }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }}
-              />
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CFDI 3.3 o 4.0</p>
+              <input type="file" accept=".xml" style={{ display: "none" }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
             </label>
 
-            {xmlError && (
-              <p style={{ color: "var(--red)", fontSize: "0.85rem", marginTop: 8 }}>⚠ {xmlError}</p>
-            )}
+            {xmlError && <p style={{ color: "var(--red)", fontSize: "0.85rem" }}>⚠ {xmlError}</p>}
 
-            {/* Preview de datos extraídos */}
-            {form.nombreEmisor && !parsing && (
-              <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "16px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
-                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  ✅ Datos extraídos del XML
-                </p>
+            {formF.nombreEmisor && !parsing && (
+              <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 16, border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>✅ Datos extraídos</p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 20px", fontSize: "0.85rem" }}>
                   {[
-                    { label: "Proveedor",  val: form.nombreEmisor },
-                    { label: "RFC",        val: form.rfcEmisor },
-                    { label: "Fecha",      val: form.fechaEmision ? new Date(form.fechaEmision).toLocaleDateString("es-MX") : "" },
-                    { label: "UUID",       val: form.uuid?.slice(0, 20) + "..." },
-                    { label: "Subtotal",   val: `$${(form.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "IVA",        val: `$${(form.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Total",      val: `$${(form.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Conceptos",  val: `${form.conceptos?.length ?? 0} concepto(s)` },
+                    { label: "Proveedor", val: formF.nombreEmisor },
+                    { label: "RFC",       val: formF.rfcEmisor },
+                    { label: "Fecha",     val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
+                    { label: "UUID",      val: (formF.uuid ?? "").slice(0, 20) + "..." },
+                    { label: "Subtotal",  val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "IVA",       val: `$${(formF.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "Total",     val: `$${(formF.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "Conceptos", val: `${formF.conceptos?.length ?? 0} concepto(s)` },
                   ].map(item => (
                     <div key={item.label}>
-                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
+                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
                       <p style={{ color: "var(--text)", fontWeight: 500 }}>{item.val}</p>
                     </div>
                   ))}
                 </div>
-                <div className="form-group" style={{ marginTop: 4 }}>
+                <div className="form-group">
+                  <label className="form-label">Quien realizó el gasto</label>
+                  <select className="form-select" value={formF.asesor as any ?? ""}
+                    onChange={e => setFormF(p => ({ ...p, asesor: e.target.value as any }))}>
+                    <option value="">Sin asignar</option>
+                    {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
                   <label className="form-label">Notas (opcional)</label>
-                  <input
-                    className="form-input"
-                    value={form.notas ?? ""}
-                    onChange={e => setForm(p => ({ ...p, notas: e.target.value }))}
-                    placeholder="Ej. Factura de combustible enero"
-                  />
+                  <input className="form-input" value={formF.notas ?? ""}
+                    onChange={e => setFormF(p => ({ ...p, notas: e.target.value }))}
+                    placeholder="Ej. Factura de combustible enero" />
                 </div>
               </div>
             )}
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                onClick={save}
-                disabled={saving || !form.nombreEmisor || parsing}
-              >
-                {saving ? "Guardando..." : "Guardar gasto"}
+              <button className="btn btn-secondary" onClick={() => setModalFiscal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveFiscal}
+                disabled={savingF || !formF.nombreEmisor || parsing}>
+                {savingF ? "Guardando..." : "Guardar gasto"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal detalle ── */}
-      {detalleModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetalle(null)}>
-          <div className="modal" style={{ maxWidth: 560 }}>
-            <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-            <h2 className="modal-title">{detalleModal.nombreEmisor ?? "Factura"}</h2>
-            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
-              UUID: {detalleModal.uuid ?? "—"}
-            </p>
+      {/* ── Modal nuevo / editar no fiscal ── */}
+      {modalNF && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalNF(false)}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <button className="modal-close" onClick={() => setModalNF(false)}>✕</button>
+            <h2 className="modal-title">{editingNF ? "Editar gasto" : "Nuevo gasto no fiscal"}</h2>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Fecha *</label>
+                <input className="form-input" type="date" value={formNF.fecha}
+                  onChange={e => setFormNF((p: any) => ({ ...p, fecha: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formNF.asesor}
+                  onChange={e => setFormNF((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Monto *</label>
+                <input className="form-input" type="number" value={formNF.monto}
+                  onChange={e => setFormNF((p: any) => ({ ...p, monto: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Entrada</label>
+                <input className="form-input" value={formNF.entrada}
+                  onChange={e => setFormNF((p: any) => ({ ...p, entrada: e.target.value }))}
+                  placeholder="Opcional" />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Descripción *</label>
+                <textarea className="form-textarea" rows={3} value={formNF.descripcion}
+                  onChange={e => setFormNF((p: any) => ({ ...p, descripcion: e.target.value }))}
+                  placeholder="Ej. LALO SERVICIO DE PARCHE LLANTAS" />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Notas</label>
+                <input className="form-input" value={formNF.notas}
+                  onChange={e => setFormNF((p: any) => ({ ...p, notas: e.target.value }))}
+                  placeholder="Ej. CAJA CHICA ABRIL 2026" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalNF(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveNF} disabled={savingNF}>
+                {savingNF ? "Guardando..." : editingNF ? "Actualizar" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* ── Modal detalle fiscal ── */}
+      {detalleF && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetalleF(null)}>
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <button className="modal-close" onClick={() => setDetalleF(null)}>✕</button>
+            <h2 className="modal-title">{detalleF.nombreEmisor ?? "Factura"}</h2>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>UUID: {detalleF.uuid ?? "—"}</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 8 }}>
               {[
-                { label: "Fecha emisión",    val: fmt(detalleModal.fechaEmision) },
-                { label: "RFC Emisor",       val: detalleModal.rfcEmisor },
-                { label: "Receptor",         val: detalleModal.nombreReceptor },
-                { label: "RFC Receptor",     val: detalleModal.rfcReceptor },
-                { label: "Moneda",           val: detalleModal.moneda },
-                { label: "Notas",            val: detalleModal.notas },
+                { label: "Fecha",        val: fmt(detalleF.fechaEmision) },
+                { label: "RFC Emisor",   val: detalleF.rfcEmisor },
+                { label: "Receptor",     val: detalleF.nombreReceptor },
+                { label: "RFC Receptor", val: detalleF.rfcReceptor },
+                { label: "Quien",        val: detalleF.asesor?.nombre },
+                { label: "Notas",        val: detalleF.notas },
               ].map(item => item.val ? (
                 <div key={item.label}>
-                  <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.label}</p>
+                  <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
                   <p style={{ fontSize: "0.88rem", color: "var(--text)", fontWeight: 500, marginTop: 2 }}>{item.val}</p>
                 </div>
               ) : null)}
             </div>
-
-            {/* Conceptos */}
-            {detalleModal.conceptos.length > 0 && (
+            {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
-                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Conceptos</p>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {detalleModal.conceptos.map((c, i) => (
-                    <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                      <div style={{ flex: 1 }}>
+                  {detalleF.conceptos.map((c, i) => (
+                    <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", gap: 12 }}>
+                      <div>
                         <p style={{ fontSize: "0.85rem", color: "var(--text)", fontWeight: 500 }}>{c.descripcion}</p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>
-                          {c.cantidad} × ${c.valorUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 2 }}>{c.cantidad} × ${c.valorUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
-                      <p style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap" }}>
-                        ${c.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </p>
+                      <p style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* Totales */}
             <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
               <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
-                <span>Subtotal:</span><span>${detalleModal.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                <span>Subtotal:</span><span>${detalleF.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
               <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
-                <span>IVA:</span><span>${detalleModal.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                <span>IVA:</span><span>${detalleF.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
               <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--red)" }}>
-                <span>Total:</span><span>${detalleModal.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                <span>Total:</span><span>${detalleF.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
-
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
+              <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
             </div>
           </div>
         </div>
