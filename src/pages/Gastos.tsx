@@ -46,26 +46,31 @@ export default function Gastos() {
   const rol       = localStorage.getItem("rol") ?? "";
   const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
 
-  const [tab, setTab]                   = useState<"fiscal" | "nofiscal">("fiscal");
-  const [fiscales, setFiscales]         = useState<GastoFiscal[]>([]);
-  const [noFiscales, setNoFiscales]     = useState<GastoNoFiscal[]>([]);
-  const [asesores, setAsesores]         = useState<Asesor[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState("");
+  const [tab, setTab]               = useState<"fiscal" | "nofiscal">("fiscal");
+  const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
+  const [noFiscales, setNoFiscales] = useState<GastoNoFiscal[]>([]);
+  const [asesores, setAsesores]     = useState<Asesor[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+
+  // Filtros
+  const [filtroAsesor, setFiltroAsesor] = useState("todos");
+  const [fechaDesde, setFechaDesde]     = useState("");
+  const [fechaHasta, setFechaHasta]     = useState("");
 
   // Fiscal
-  const [modalFiscal, setModalFiscal]   = useState(false);
-  const [parsing, setParsing]           = useState(false);
-  const [savingF, setSavingF]           = useState(false);
-  const [formF, setFormF]               = useState<Partial<GastoFiscal>>({});
-  const [xmlError, setXmlError]         = useState("");
-  const [detalleF, setDetalleF]         = useState<GastoFiscal | null>(null);
+  const [modalFiscal, setModalFiscal] = useState(false);
+  const [parsing, setParsing]         = useState(false);
+  const [savingF, setSavingF]         = useState(false);
+  const [formF, setFormF]             = useState<Partial<GastoFiscal>>({});
+  const [xmlError, setXmlError]       = useState("");
+  const [detalleF, setDetalleF]       = useState<GastoFiscal | null>(null);
 
   // No fiscal
-  const [modalNF, setModalNF]           = useState(false);
-  const [editingNF, setEditingNF]       = useState<GastoNoFiscal | null>(null);
-  const [formNF, setFormNF]             = useState<any>(emptyNoFiscal);
-  const [savingNF, setSavingNF]         = useState(false);
+  const [modalNF, setModalNF]   = useState(false);
+  const [editingNF, setEditingNF] = useState<GastoNoFiscal | null>(null);
+  const [formNF, setFormNF]     = useState<any>(emptyNoFiscal);
+  const [savingNF, setSavingNF] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -83,6 +88,15 @@ export default function Gastos() {
     finally { setLoading(false); }
   }
 
+  function limpiarFiltros() {
+    setFiltroAsesor("todos");
+    setFechaDesde("");
+    setFechaHasta("");
+    setSearch("");
+  }
+
+  const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "";
+
   // ── Helpers de fechas ──────────────────────────────────────────────────────
   function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
     if (!dateStr) return false;
@@ -97,25 +111,17 @@ export default function Gastos() {
       domingo.setHours(23,59,59,999);
       return d >= lunes && d <= domingo;
     }
-    if (tipo === "mes") {
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }
-    if (tipo === "año") {
-      return d.getFullYear() === now.getFullYear();
-    }
+    if (tipo === "mes") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (tipo === "año") return d.getFullYear() === now.getFullYear();
     return false;
   }
 
   function sumaFiscal(tipo?: "semana" | "mes" | "año") {
-    return fiscales
-      .filter(g => tipo ? enRango(g.fechaEmision, tipo) : true)
-      .reduce((acc, g) => acc + g.total, 0);
+    return fiscales.filter(g => tipo ? enRango(g.fechaEmision, tipo) : true).reduce((acc, g) => acc + g.total, 0);
   }
 
   function sumaNoFiscal(tipo?: "semana" | "mes" | "año") {
-    return noFiscales
-      .filter(g => tipo ? enRango(g.fecha, tipo) : true)
-      .reduce((acc, g) => acc + g.monto, 0);
+    return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
   }
 
   function fmt(date?: string) {
@@ -214,7 +220,6 @@ export default function Gastos() {
     setFiscales(prev => prev.filter(g => g._id !== id));
   }
 
-  // ── No fiscal ──────────────────────────────────────────────────────────────
   function openNewNF() {
     setEditingNF(null);
     setFormNF({ ...emptyNoFiscal, fecha: new Date().toISOString().split("T")[0] });
@@ -259,116 +264,75 @@ export default function Gastos() {
 
   // ── Reportes ───────────────────────────────────────────────────────────────
   function abrirReporte(tipo: "fiscal" | "nofiscal" | "general", periodo: "semana" | "mes" | "año" | "todo") {
-    const periodoLabel: Record<string, string> = {
-      semana: "Semanal", mes: "Mensual", año: "Anual", todo: "General",
-    };
-
-    const filtrarF = (g: GastoFiscal) => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
-    const filtrarNF = (g: GastoNoFiscal) => periodo === "todo" ? true : enRango(g.fecha, periodo);
-
+    const periodoLabel: Record<string, string> = { semana: "Semanal", mes: "Mensual", año: "Anual", todo: "General" };
+    const filtrarF  = (g: GastoFiscal)    => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
+    const filtrarNF = (g: GastoNoFiscal)  => periodo === "todo" ? true : enRango(g.fecha, periodo);
     const gastosFR  = fiscales.filter(filtrarF);
     const gastosNFR = noFiscales.filter(filtrarNF);
-
-    // Acumulado no fiscal
     const nfOrdenados = [...gastosNFR].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
     let acum = 0;
-
     const rowsF = gastosFR.map(g => `
       <tr>
-        <td>${fmtCorto(g.fechaEmision)}</td>
-        <td>${g.asesor?.nombre ?? "—"}</td>
-        <td>${g.nombreEmisor ?? "—"}</td>
-        <td>${g.rfcEmisor ?? "—"}</td>
+        <td>${fmtCorto(g.fechaEmision)}</td><td>${g.asesor?.nombre ?? "—"}</td>
+        <td>${g.nombreEmisor ?? "—"}</td><td>${g.rfcEmisor ?? "—"}</td>
         <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-        <td>${g.conceptos[0]?.descripcion ?? "—"}</td>
-        <td>${g.notas ?? "—"}</td>
-      </tr>`
-    ).join("");
-
+        <td>${g.conceptos[0]?.descripcion ?? "—"}</td><td>${g.notas ?? "—"}</td>
+      </tr>`).join("");
     const rowsNF = nfOrdenados.map(g => {
       acum += g.monto;
-      return `
-      <tr>
-        <td>${fmtCorto(g.fecha)}</td>
-        <td>${g.asesor?.nombre ?? "—"}</td>
+      return `<tr>
+        <td>${fmtCorto(g.fecha)}</td><td>${g.asesor?.nombre ?? "—"}</td>
         <td>${g.entrada ?? ""}</td>
         <td style="text-align:right">$${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td style="text-align:right">$${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-        <td>${g.descripcion}</td>
-        <td>${g.notas ?? ""}</td>
+        <td>${g.descripcion}</td><td>${g.notas ?? ""}</td>
       </tr>`;
     }).join("");
-
     const totalF  = gastosFR.reduce((a, g) => a + g.total, 0);
     const totalNF = gastosNFR.reduce((a, g) => a + g.monto, 0);
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Reporte de Gastos ${periodoLabel[periodo]}</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; padding: 24px; }
-  .header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 16px; }
-  .logo { width: 60px; height: 60px; object-fit: contain; background: #000; border-radius: 6px; }
-  .header-info h1 { font-size: 14pt; font-weight: 900; }
-  .header-info p  { font-size: 9pt; color: #555; }
-  .section-title { font-size: 11pt; font-weight: 700; margin: 16px 0 8px; border-left: 4px solid #222; padding-left: 8px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9pt; }
-  thead { background: #222; color: #fff; }
-  thead th { padding: 6px 8px; text-align: left; }
-  tbody tr:nth-child(even) { background: #f5f5f5; }
-  td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
-  .total-row { text-align: right; font-size: 10pt; font-weight: 700; margin-top: 4px; }
-  .grand-total { margin-top: 16px; padding: 10px 16px; background: #222; color: #fff; border-radius: 6px; text-align: right; font-size: 12pt; font-weight: 900; }
-  @media print { body { padding: 12px; } }
-</style>
-</head>
-<body>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:10pt;color:#222;padding:24px; }
+  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
+  .logo { width:60px;height:60px;object-fit:contain;background:#000;border-radius:6px; }
+  .header-info h1 { font-size:14pt;font-weight:900; }
+  .header-info p { font-size:9pt;color:#555; }
+  .section-title { font-size:11pt;font-weight:700;margin:16px 0 8px;border-left:4px solid #222;padding-left:8px; }
+  table { width:100%;border-collapse:collapse;margin-bottom:12px;font-size:9pt; }
+  thead { background:#222;color:#fff; }
+  thead th { padding:6px 8px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; }
+  td { padding:5px 8px;border-bottom:1px solid #ddd; }
+  .total-row { text-align:right;font-size:10pt;font-weight:700;margin-top:4px; }
+  .grand-total { margin-top:16px;padding:10px 16px;background:#222;color:#fff;border-radius:6px;text-align:right;font-size:12pt;font-weight:900; }
+  @media print { body { padding:12px; } }
+</style></head><body>
 <div class="header">
   <img src="${logoUrl}" class="logo" alt="Pipsa" />
   <div class="header-info">
     <h1>Reporte de Gastos — ${periodoLabel[periodo]}</h1>
     <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day:"2-digit",month:"long",year:"numeric" })}</p>
   </div>
 </div>
-
-${(tipo === "fiscal" || tipo === "general") ? `
+${(tipo==="fiscal"||tipo==="general") ? `
 <div class="section-title">Gastos Fiscales</div>
-${gastosFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
-<table>
-  <thead><tr>
-    <th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th>
-  </tr></thead>
-  <tbody>${rowsF}</tbody>
-</table>
-<p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-`}` : ""}
-
-${(tipo === "nofiscal" || tipo === "general") ? `
+${gastosFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
+<table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th></tr></thead>
+<tbody>${rowsF}</tbody></table>
+<p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
+${(tipo==="nofiscal"||tipo==="general") ? `
 <div class="section-title">Gastos No Fiscales</div>
-${gastosNFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
-<table>
-  <thead><tr>
-    <th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th>
-  </tr></thead>
-  <tbody>${rowsNF}</tbody>
-</table>
-<p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-`}` : ""}
-
-${tipo === "general" ? `
-<div class="grand-total">
-  TOTAL GENERAL: $${(totalF + totalNF).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-</div>` : ""}
-
-<script>window.onload = function() { setTimeout(function(){ window.print(); }, 500); window.onafterprint = function(){ window.close(); }; };</script>
-</body>
-</html>`;
-
+${gastosNFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
+<table><thead><tr><th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th></tr></thead>
+<tbody>${rowsNF}</tbody></table>
+<p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
+${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>` : ""}
+<script>window.onload=function(){setTimeout(function(){window.print();},500);window.onafterprint=function(){window.close();};};</script>
+</body></html>`;
     const blob = new Blob([html], { type: "text/html" });
     const url  = URL.createObjectURL(blob);
     const win  = window.open(url, "_blank");
@@ -376,33 +340,44 @@ ${tipo === "general" ? `
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
-  // ── Filtros ────────────────────────────────────────────────────────────────
-  const filteredF = fiscales.filter(g =>
-    (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (g.rfcEmisor    ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()))
-  );
+  // ── Filtros aplicados ──────────────────────────────────────────────────────
+  const filteredF = fiscales.filter(g => {
+    const matchSearch =
+      (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (g.rfcEmisor    ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
+    const matchAsesor = filtroAsesor === "todos" || g.asesor?._id === filtroAsesor;
+    const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
+    const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
+    const matchHasta = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
+    return matchSearch && matchAsesor && matchDesde && matchHasta;
+  });
 
-  const filteredNF = noFiscales.filter(g =>
-    g.descripcion.toLowerCase().includes(search.toLowerCase()) ||
-    (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (g.notas ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredNF = noFiscales.filter(g => {
+    const matchSearch =
+      g.descripcion.toLowerCase().includes(search.toLowerCase()) ||
+      (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (g.notas ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchAsesor = filtroAsesor === "todos" || g.asesor?._id === filtroAsesor;
+    const fecha = new Date(g.fecha);
+    const matchDesde = !fechaDesde || fecha >= new Date(fechaDesde);
+    const matchHasta = !fechaHasta || fecha <= new Date(fechaHasta + "T23:59:59");
+    return matchSearch && matchAsesor && matchDesde && matchHasta;
+  });
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const statsF = [
-    { label: "Esta semana",  val: sumaFiscal("semana") },
-    { label: "Este mes",     val: sumaFiscal("mes") },
-    { label: "Este año",     val: sumaFiscal("año") },
-    { label: "Total general",val: sumaFiscal() },
+    { label: "Esta semana",   val: sumaFiscal("semana") },
+    { label: "Este mes",      val: sumaFiscal("mes") },
+    { label: "Este año",      val: sumaFiscal("año") },
+    { label: "Total general", val: sumaFiscal() },
   ];
-
   const statsNF = [
-    { label: "Esta semana",  val: sumaNoFiscal("semana") },
-    { label: "Este mes",     val: sumaNoFiscal("mes") },
-    { label: "Este año",     val: sumaNoFiscal("año") },
-    { label: "Total general",val: sumaNoFiscal() },
+    { label: "Esta semana",   val: sumaNoFiscal("semana") },
+    { label: "Este mes",      val: sumaNoFiscal("mes") },
+    { label: "Este año",      val: sumaNoFiscal("año") },
+    { label: "Total general", val: sumaNoFiscal() },
   ];
 
   return (
@@ -413,7 +388,6 @@ ${tipo === "general" ? `
           <p className="page-subtitle">{fiscales.length} fiscales · {noFiscales.length} no fiscales</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* Reportes */}
           <div style={{ display: "flex", gap: 6 }}>
             {(["semana","mes","año","todo"] as const).map(p => (
               <button key={p} className="btn btn-secondary btn-sm" onClick={() => abrirReporte("general", p)}>
@@ -431,11 +405,10 @@ ${tipo === "general" ? `
       <div className="page-content">
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginBottom: 0 }}>
+        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)" }}>
           {(["fiscal","nofiscal"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => { setTab(t); setSearch(""); }}
+            <button key={t}
+              onClick={() => { setTab(t); limpiarFiltros(); }}
               style={{
                 padding: "10px 24px", border: "none", cursor: "pointer",
                 background: "transparent", fontFamily: "var(--font-head)",
@@ -464,8 +437,8 @@ ${tipo === "general" ? `
         </div>
 
         {/* Reportes por tipo */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", alignSelf: "center" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
             Reporte {tab === "fiscal" ? "fiscal" : "no fiscal"}:
           </span>
           {(["semana","mes","año","todo"] as const).map(p => (
@@ -483,12 +456,39 @@ ${tipo === "general" ? `
               <p className="table-card-title">Facturas fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                  value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
+                  <option value="todos">Todos</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+                <input className="form-input" type="date" value={fechaDesde}
+                  onChange={e => setFechaDesde(e.target.value)}
+                  style={{ width: "auto" }} title="Desde" />
+                <input className="form-input" type="date" value={fechaHasta}
+                  onChange={e => setFechaHasta(e.target.value)}
+                  style={{ width: "auto" }} title="Hasta" />
+                {hayFiltros && (
+                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
+                )}
               </div>
             </div>
+            {hayFiltros && (
+              <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
+                🔍 Mostrando {filteredF.length} resultado{filteredF.length !== 1 ? "s" : ""}
+                {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
+                {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
+                {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
+                {filteredF.length > 0 && (
+                  <span style={{ marginLeft: 12, fontWeight: 700 }}>
+                    Total: ${filteredF.reduce((acc, g) => acc + g.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </span>
+                )}
+              </div>
+            )}
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{search ? " con ese filtro" : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
             ) : (
               <table>
                 <thead>
@@ -534,12 +534,39 @@ ${tipo === "general" ? `
               <p className="table-card-title">Gastos no fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                  value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
+                  <option value="todos">Todos</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+                <input className="form-input" type="date" value={fechaDesde}
+                  onChange={e => setFechaDesde(e.target.value)}
+                  style={{ width: "auto" }} title="Desde" />
+                <input className="form-input" type="date" value={fechaHasta}
+                  onChange={e => setFechaHasta(e.target.value)}
+                  style={{ width: "auto" }} title="Hasta" />
+                {hayFiltros && (
+                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
+                )}
               </div>
             </div>
+            {hayFiltros && (
+              <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
+                🔍 Mostrando {filteredNF.length} resultado{filteredNF.length !== 1 ? "s" : ""}
+                {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
+                {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
+                {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
+                {filteredNF.length > 0 && (
+                  <span style={{ marginLeft: 12, fontWeight: 700 }}>
+                    Total: ${filteredNF.reduce((acc, g) => acc + g.monto, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </span>
+                )}
+              </div>
+            )}
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredNF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{search ? " con ese filtro" : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
             ) : (
               <table>
                 <thead>
@@ -587,7 +614,6 @@ ${tipo === "general" ? `
           <div className="modal" style={{ maxWidth: 560 }}>
             <button className="modal-close" onClick={() => setModalFiscal(false)}>✕</button>
             <h2 className="modal-title">Subir factura XML</h2>
-
             <label style={{
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
               border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px",
@@ -597,16 +623,12 @@ ${tipo === "general" ? `
               onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseXML(f); }}
             >
               <span style={{ fontSize: "2.5rem" }}>{parsing ? "⏳" : "📂"}</span>
-              <p style={{ fontWeight: 600, color: "var(--text)" }}>
-                {parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}
-              </p>
+              <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CFDI 3.3 o 4.0</p>
               <input type="file" accept=".xml" style={{ display: "none" }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
             </label>
-
             {xmlError && <p style={{ color: "var(--red)", fontSize: "0.85rem" }}>⚠ {xmlError}</p>}
-
             {formF.nombreEmisor && !parsing && (
               <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 16, border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>✅ Datos extraídos</p>
@@ -643,11 +665,9 @@ ${tipo === "general" ? `
                 </div>
               </div>
             )}
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalFiscal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveFiscal}
-                disabled={savingF || !formF.nombreEmisor || parsing}>
+              <button className="btn btn-primary" onClick={saveFiscal} disabled={savingF || !formF.nombreEmisor || parsing}>
                 {savingF ? "Guardando..." : "Guardar gasto"}
               </button>
             </div>
