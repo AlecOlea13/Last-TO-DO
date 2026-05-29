@@ -4,6 +4,7 @@ export type ItemReporte = {
   precioUnitario: number;
   total: number;
   imagen?: string;
+  subconceptos?: { descripcion: string; precio: number }[];
 };
 
 export type CotizacionReporte = {
@@ -92,17 +93,26 @@ function htmlServicio(cot: CotizacionReporte): string {
   const clienteTel      = cot.cliente?.telefono  ?? "";
   const clienteContacto = cot.cliente?.contacto  ?? "";
 
-  const itemsHtml = cot.items.map(item =>
-    `<tr>
-      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
-        ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
-      </td>
-      <td style="padding:6px 8px;border:1px solid #ddd;white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-    </tr>`
+  const itemsHtml = cot.items.map(item => {
+  const subHtml = (item.subconceptos ?? []).map(s =>
+    `<div class="subconcept">
+      <span>${s.descripcion}</span>
+      <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+    </div>`
   ).join("");
+  return `<tr>
+    <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
+    <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
+      ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
+    </td>
+    <td style="padding:6px 8px;border:1px solid #ddd">
+      <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+      ${subHtml}
+    </td>
+    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+  </tr>`;
+  }).join("");
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -131,9 +141,12 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".conditions li { margin-bottom: 2px; }",
     ".signature { margin-top: 28px; text-align: center; font-size: 10pt; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
+    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
+    ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
     "@media print { body { padding: 16px; } }",
     "</style>", "</head>", "<body>",
 
+    `<p class="folio-ref">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
     `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
@@ -292,9 +305,12 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".conditions li { margin-bottom: 4px; }",
     ".signature { margin-top: 28px; font-size: 10pt; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
+    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
+    ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
     "@media print { body { padding: 16px; } .foto-equipo img { max-height: 380px; } }",
     "</style>", "</head>", "<body>",
 
+    `<p class="folio-ref">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
     `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,

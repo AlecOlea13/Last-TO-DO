@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { generarReporte, imprimirReporte } from "../utils/generarReporte";
 
-type Item = { cantidad: number; descripcion: string; precioUnitario: number; total: number; imagen?: string };
+type SubConcepto = { descripcion: string; precio: number };
+type Item = {
+  cantidad: number;
+  descripcion: string;
+  precioUnitario: number;
+  total: number;
+  imagen?: string;
+  subconceptos?: SubConcepto[];
+};
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
 type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: string; rol: string }; fecha: string };
 
@@ -47,12 +55,12 @@ const emptyForm: any = {
   estatus: "borrador", notas: "",
 };
 
-const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "" };
+const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "", subconceptos: [] };
+const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
 const TIPO_BADGE: Record<string, string> = {
   servicio: "badge-amber", renta: "badge-blue", venta: "badge-green",
 };
-
 const ESTATUS_BADGE: Record<string, string> = {
   borrador: "badge-gray", enviada: "badge-blue", aceptada: "badge-green", rechazada: "badge-red",
 };
@@ -64,22 +72,22 @@ export default function Cotizaciones() {
   const rol        = localStorage.getItem("rol") ?? "";
   const canComment = ["developer", "gerencia", "oficina"].includes(rol);
 
-  const [cotizaciones, setCotizaciones]       = useState<Cotizacion[]>([]);
-  const [clientes, setClientes]               = useState<Cliente[]>([]);
-  const [montas, setMontas]                   = useState<Montacargas[]>([]);
-  const [asesores, setAsesores]               = useState<Asesor[]>([]);
-  const [loading, setLoading]                 = useState(true);
-  const [search, setSearch]                   = useState("");
-  const [filtro, setFiltro]                   = useState("todos");
-  const [filtroAsesor, setFiltroAsesor]       = useState("todos");
-  const [modal, setModal]                     = useState(false);
-  const [editing, setEditing]                 = useState<Cotizacion | null>(null);
-  const [comentarioModal, setComentarioModal] = useState<Cotizacion | null>(null);
-  const [nuevoComentario, setNuevoComentario] = useState("");
-  const [form, setForm]                       = useState<any>(emptyForm);
-  const [saving, setSaving]                   = useState(false);
+  const [cotizaciones, setCotizaciones]         = useState<Cotizacion[]>([]);
+  const [clientes, setClientes]                 = useState<Cliente[]>([]);
+  const [montas, setMontas]                     = useState<Montacargas[]>([]);
+  const [asesores, setAsesores]                 = useState<Asesor[]>([]);
+  const [loading, setLoading]                   = useState(true);
+  const [search, setSearch]                     = useState("");
+  const [filtro, setFiltro]                     = useState("todos");
+  const [filtroAsesor, setFiltroAsesor]         = useState("todos");
+  const [modal, setModal]                       = useState(false);
+  const [editing, setEditing]                   = useState<Cotizacion | null>(null);
+  const [comentarioModal, setComentarioModal]   = useState<Cotizacion | null>(null);
+  const [nuevoComentario, setNuevoComentario]   = useState("");
+  const [form, setForm]                         = useState<any>(emptyForm);
+  const [saving, setSaving]                     = useState(false);
   const [savingComentario, setSavingComentario] = useState(false);
-  const [uploadingIdx, setUploadingIdx]       = useState<number | null>(null);
+  const [uploadingIdx, setUploadingIdx]         = useState<number | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -99,7 +107,7 @@ export default function Cotizaciones() {
 
   function openNew() {
     setEditing(null);
-    setForm({ ...emptyForm, folio: `COT-${Date.now().toString().slice(-6)}`, items: [{ ...emptyItem }] });
+    setForm({ ...emptyForm, folio: "", items: [{ ...emptyItem, subconceptos: [] }] });
     setModal(true);
   }
 
@@ -114,7 +122,7 @@ export default function Cotizaciones() {
       fecha:               c.fecha.split("T")[0],
       lugar:               c.lugar,
       descripcionServicio: c.descripcionServicio ?? "",
-      items:               c.items.map(i => ({ ...i })),
+      items:               c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
       subtotal:            c.subtotal,
       iva:                 c.iva,
       total:               c.total,
@@ -124,19 +132,80 @@ export default function Cotizaciones() {
     setModal(true);
   }
 
-  function addItem() { setForm((p: any) => ({ ...p, items: [...p.items, { ...emptyItem }] })); }
-  function removeItem(i: number) { setForm((p: any) => ({ ...p, items: p.items.filter((_: any, idx: number) => idx !== i) })); }
+  function recalcTotales(items: Item[]) {
+    const subtotal = items.reduce((acc, it) => acc + it.total, 0);
+    const iva      = subtotal * 0.16;
+    return { subtotal, iva, total: subtotal + iva };
+  }
+
+  function addItem() {
+    setForm((p: any) => ({
+      ...p,
+      items: [...p.items, { ...emptyItem, subconceptos: [] }],
+    }));
+  }
+
+  function removeItem(i: number) {
+    setForm((p: any) => {
+      const items = p.items.filter((_: any, idx: number) => idx !== i);
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
 
   function updateItem(i: number, field: string, val: any) {
     setForm((p: any) => {
       const items = [...p.items];
       items[i] = { ...items[i], [field]: val };
       if (field === "cantidad" || field === "precioUnitario") {
-        items[i].total = items[i].cantidad * items[i].precioUnitario;
+        // Si tiene subconceptos, el precioUnitario viene de la suma de subconceptos
+        if (!items[i].subconceptos?.length) {
+          items[i].total = items[i].cantidad * items[i].precioUnitario;
+        }
       }
-      const subtotal = items.reduce((acc: number, it: Item) => acc + it.total, 0);
-      const iva      = subtotal * 0.16;
-      return { ...p, items, subtotal, iva, total: subtotal + iva };
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
+
+  // ── Subconceptos ──────────────────────────────────────────────────────────
+  function addSubconcepto(itemIdx: number) {
+    setForm((p: any) => {
+      const items = [...p.items];
+      items[itemIdx] = {
+        ...items[itemIdx],
+        subconceptos: [...(items[itemIdx].subconceptos ?? []), { ...emptySubconcepto }],
+      };
+      return { ...p, items };
+    });
+  }
+
+  function removeSubconcepto(itemIdx: number, subIdx: number) {
+    setForm((p: any) => {
+      const items = [...p.items];
+      const subs  = items[itemIdx].subconceptos?.filter((_: any, i: number) => i !== subIdx) ?? [];
+      const sumaSubconceptos = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
+      items[itemIdx] = {
+        ...items[itemIdx],
+        subconceptos:   subs,
+        precioUnitario: sumaSubconceptos,
+        total:          items[itemIdx].cantidad * sumaSubconceptos,
+      };
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
+
+  function updateSubconcepto(itemIdx: number, subIdx: number, field: keyof SubConcepto, val: any) {
+    setForm((p: any) => {
+      const items = [...p.items];
+      const subs  = [...(items[itemIdx].subconceptos ?? [])];
+      subs[subIdx] = { ...subs[subIdx], [field]: val };
+      const sumaSubconceptos = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
+      items[itemIdx] = {
+        ...items[itemIdx],
+        subconceptos:   subs,
+        precioUnitario: sumaSubconceptos,
+        total:          items[itemIdx].cantidad * sumaSubconceptos,
+      };
+      return { ...p, items, ...recalcTotales(items) };
     });
   }
 
@@ -154,14 +223,17 @@ export default function Cotizaciones() {
   }
 
   async function save() {
-    if (!form.folio || !form.cliente) return;
+    if (!form.cliente) return;
     setSaving(true);
     try {
       if (editing) {
         const { data } = await api.put(`/cotizaciones/${editing._id}`, form);
         setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
       } else {
-        const { data } = await api.post("/cotizaciones", form);
+        // folio vacío → el backend lo genera automáticamente
+        const payload = { ...form };
+        if (!payload.folio) delete payload.folio;
+        const { data } = await api.post("/cotizaciones", payload);
         setCotizaciones(prev => [data, ...prev]);
       }
       setModal(false);
@@ -198,16 +270,17 @@ export default function Cotizaciones() {
     if (!confirm("¿Eliminar este comentario?")) return;
     await api.delete(`/cotizaciones/${cotId}/comentarios/${comentId}`);
     setCotizaciones(prev => prev.map(c => c._id === cotId
-      ? { ...c, comentarios: c.comentarios.filter(cm => cm._id !== comentId) }
-      : c
+      ? { ...c, comentarios: c.comentarios.filter(cm => cm._id !== comentId) } : c
     ));
-    setComentarioModal(prev => prev ? { ...prev, comentarios: prev.comentarios.filter(cm => cm._id !== comentId) } : null);
+    setComentarioModal(prev => prev
+      ? { ...prev, comentarios: prev.comentarios.filter(cm => cm._id !== comentId) }
+      : null
+    );
   }
 
   function fmt(date: string) {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
-
   function fmtHora(date: string) {
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
@@ -217,21 +290,23 @@ export default function Cotizaciones() {
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
       (c.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (c.asesor?.nombre  ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchFiltro  = filtro       === "todos" || c.tipo === filtro || c.estatus === filtro;
-    const matchAsesor  = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
+    const matchFiltro = filtro       === "todos" || c.tipo === filtro || c.estatus === filtro;
+    const matchAsesor = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
   });
 
-  // ── Formulario compartido (nueva y edición) ──
   const modalForm = (
-    <div className="modal" style={{ maxWidth: 720 }}>
+    <div className="modal" style={{ maxWidth: 760 }}>
       <button className="modal-close" onClick={() => { setModal(false); setEditing(null); }}>✕</button>
       <h2 className="modal-title">{editing ? `Editar — ${editing.folio}` : "Nueva cotización"}</h2>
+
       <div className="form-grid">
-        <div className="form-group">
-          <label className="form-label">Folio *</label>
-          <input className="form-input" value={form.folio} onChange={e => setForm((p: any) => ({ ...p, folio: e.target.value }))} />
-        </div>
+        {editing && (
+          <div className="form-group">
+            <label className="form-label">Folio</label>
+            <input className="form-input" value={form.folio} onChange={e => setForm((p: any) => ({ ...p, folio: e.target.value }))} />
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Tipo *</label>
           <select className="form-select" value={form.tipo} onChange={e => setForm((p: any) => ({ ...p, tipo: e.target.value }))}>
@@ -280,55 +355,90 @@ export default function Cotizaciones() {
         </div>
         <div className="form-group span-2">
           <label className="form-label">Descripción del servicio</label>
-          <textarea
-            className="form-textarea"
-            rows={3}
-            value={form.descripcionServicio}
+          <textarea className="form-textarea" rows={3} value={form.descripcionServicio}
             onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
-            placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15"
-          />
+            placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
         </div>
       </div>
 
-      {/* Items */}
+      {/* ── Items ── */}
       <div style={{ marginTop: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Conceptos</p>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar línea</button>
+          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar concepto</button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, marginBottom: 4 }}>
-          {["Foto", "Cant.", "Descripción", "Precio U.", "Total", ""].map(h => (
-            <p key={h} style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{h}</p>
-          ))}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {form.items.map((item: Item, i: number) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", background: "var(--surface2)", padding: 8, borderRadius: "var(--radius-sm)" }}>
-              <label style={{ cursor: "pointer" }}>
-                {item.imagen ? (
-                  <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
-                ) : (
-                  <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
-                    {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {form.items.map((item: Item, i: number) => {
+            const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
+            return (
+              <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
+                {/* Fila principal del concepto */}
+                <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
+                  <label style={{ cursor: "pointer" }}>
+                    {item.imagen ? (
+                      <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
+                    ) : (
+                      <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
+                        {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
+                  </label>
+                  <input className="form-input" type="number" value={item.cantidad}
+                    onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
+                  <textarea className="form-textarea" value={item.descripcion}
+                    onChange={e => updateItem(i, "descripcion", e.target.value)}
+                    placeholder="Descripción del concepto" rows={2}
+                    style={{ resize: "vertical", minHeight: 40 }} />
+                  <input className="form-input" type="number" value={item.precioUnitario}
+                    onChange={e => updateItem(i, "precioUnitario", +e.target.value)}
+                    style={{ padding: "8px" }}
+                    readOnly={tieneSubconceptos}
+                    title={tieneSubconceptos ? "Calculado desde subconceptos" : ""}
+                  />
+                  <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
+                  <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
+                </div>
+
+                {/* Subconceptos */}
+                <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Subconceptos {tieneSubconceptos ? `(${item.subconceptos?.length})` : ""}
+                    </p>
+                    <button className="btn btn-secondary btn-sm" style={{ fontSize: "0.7rem", padding: "3px 8px" }} onClick={() => addSubconcepto(i)}>
+                      + Agregar subconcepto
+                    </button>
                   </div>
-                )}
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
-              </label>
-              <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
-              <textarea
-                className="form-textarea"
-                value={item.descripcion}
-                onChange={e => updateItem(i, "descripcion", e.target.value)}
-                placeholder="Descripción del concepto"
-                rows={2}
-                style={{ resize: "vertical", minHeight: 40 }}
-              />
-              <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} />
-              <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
-              <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
-            </div>
-          ))}
+
+                  {tieneSubconceptos && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {item.subconceptos!.map((sub, si) => (
+                        <div key={si} style={{ display: "grid", gridTemplateColumns: "1fr 120px 28px", gap: 6, alignItems: "center" }}>
+                          <input className="form-input" value={sub.descripcion}
+                            onChange={e => updateSubconcepto(i, si, "descripcion", e.target.value)}
+                            placeholder="Descripción del subconcepto"
+                            style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                          <input className="form-input" type="number" value={sub.precio}
+                            onChange={e => updateSubconcepto(i, si, "precio", +e.target.value)}
+                            placeholder="Precio"
+                            style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                          <button className="btn btn-danger btn-icon" style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                            onClick={() => removeSubconcepto(i, si)}>✕</button>
+                        </div>
+                      ))}
+                      <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>
+                        Suma subconceptos: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
+
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
             <span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
@@ -344,7 +454,9 @@ export default function Cotizaciones() {
 
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setModal(false); setEditing(null); }}>Cancelar</button>
-        <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : editing ? "Actualizar" : "Guardar"}</button>
+        <button className="btn btn-primary" onClick={save} disabled={saving}>
+          {saving ? "Guardando..." : editing ? "Actualizar" : "Guardar"}
+        </button>
       </div>
     </div>
   );
@@ -362,10 +474,10 @@ export default function Cotizaciones() {
       <div className="page-content">
         <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
           {[
-            { label: "Borradores", val: cotizaciones.filter(c => c.estatus === "borrador").length,  color: "var(--text-muted)", icon: "📝" },
-            { label: "Enviadas",   val: cotizaciones.filter(c => c.estatus === "enviada").length,   color: "var(--blue)",       icon: "📤" },
-            { label: "Aceptadas",  val: cotizaciones.filter(c => c.estatus === "aceptada").length,  color: "var(--green)",      icon: "✅" },
-            { label: "Rechazadas", val: cotizaciones.filter(c => c.estatus === "rechazada").length, color: "var(--red)",        icon: "❌" },
+            { label: "Borradores", val: cotizaciones.filter(c => c.estatus === "borrador").length, color: "var(--text-muted)", icon: "📝" },
+            { label: "Enviadas",   val: cotizaciones.filter(c => c.estatus === "enviada").length,  color: "var(--blue)",       icon: "📤" },
+            { label: "Aceptadas",  val: cotizaciones.filter(c => c.estatus === "aceptada").length, color: "var(--green)",      icon: "✅" },
+            { label: "Rechazadas", val: cotizaciones.filter(c => c.estatus === "rechazada").length,color: "var(--red)",        icon: "❌" },
           ].map(s => (
             <div key={s.label} className="stat-card">
               <span className="stat-card-icon">{s.icon}</span>
@@ -420,12 +532,8 @@ export default function Cotizaciones() {
                     <td>{fmt(c.fecha)}</td>
                     <td style={{ fontWeight: 700 }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                     <td>
-                      <select
-                        className="form-select"
-                        style={{ padding: "4px 8px", fontSize: "0.78rem", width: "auto" }}
-                        value={c.estatus}
-                        onChange={e => cambiarEstatus(c._id, e.target.value)}
-                      >
+                      <select className="form-select" style={{ padding: "4px 8px", fontSize: "0.78rem", width: "auto" }}
+                        value={c.estatus} onChange={e => cambiarEstatus(c._id, e.target.value)}>
                         <option value="borrador">Borrador</option>
                         <option value="enviada">Enviada</option>
                         <option value="aceptada">Aceptada</option>
@@ -434,11 +542,9 @@ export default function Cotizaciones() {
                     </td>
                     <td>
                       {canComment && (
-                        <button
-                          className="btn btn-secondary btn-sm"
+                        <button className="btn btn-secondary btn-sm"
                           onClick={() => { setComentarioModal(c); setNuevoComentario(""); }}
-                          style={{ position: "relative" }}
-                        >
+                          style={{ position: "relative" }}>
                           💬
                           {c.comentarios?.length > 0 && (
                             <span style={{
@@ -447,9 +553,7 @@ export default function Cotizaciones() {
                               borderRadius: "50%", width: 16, height: 16,
                               fontSize: "0.65rem", fontWeight: 700,
                               display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                              {c.comentarios.length}
-                            </span>
+                            }}>{c.comentarios.length}</span>
                           )}
                         </button>
                       )}
@@ -470,14 +574,12 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      {/* ── Modal nueva / editar cotización ── */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           {modalForm}
         </div>
       )}
 
-      {/* ── Modal comentarios ── */}
       {comentarioModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setComentarioModal(null)}>
           <div className="modal" style={{ maxWidth: 500 }}>
@@ -506,7 +608,8 @@ export default function Cotizaciones() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{fmtHora(cm.fecha)}</span>
                         {["developer", "gerencia"].includes(rol) && (
-                          <button onClick={() => eliminarComentario(comentarioModal._id, cm._id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}>🗑️</button>
+                          <button onClick={() => eliminarComentario(comentarioModal._id, cm._id)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}>🗑️</button>
                         )}
                       </div>
                     </div>
@@ -518,18 +621,15 @@ export default function Cotizaciones() {
             {canComment && (
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
                 <label className="form-label">Nuevo comentario</label>
-                <textarea
-                  className="form-textarea"
-                  rows={3}
-                  value={nuevoComentario}
+                <textarea className="form-textarea" rows={3} value={nuevoComentario}
                   onChange={e => setNuevoComentario(e.target.value)}
                   placeholder="Escribe un comentario sobre esta cotización..."
-                  onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) enviarComentario(); }}
-                />
+                  onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) enviarComentario(); }} />
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Ctrl + Enter para enviar</p>
                 <div className="modal-footer" style={{ paddingTop: 8 }}>
                   <button className="btn btn-secondary" onClick={() => setComentarioModal(null)}>Cerrar</button>
-                  <button className="btn btn-primary" onClick={enviarComentario} disabled={savingComentario || !nuevoComentario.trim()}>
+                  <button className="btn btn-primary" onClick={enviarComentario}
+                    disabled={savingComentario || !nuevoComentario.trim()}>
                     {savingComentario ? "Enviando..." : "Agregar comentario"}
                   </button>
                 </div>
