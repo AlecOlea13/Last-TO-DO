@@ -23,6 +23,10 @@ type GastoFiscal = {
   moneda?: string;
   asesor?: { _id: string; nombre: string };
   notas?: string;
+  estatus?: "pendiente" | "pagado";
+  fechaPago?: string;
+  comprobantePago?: string;
+  complementoXml?: string;
 };
 
 type GastoNoFiscal = {
@@ -33,6 +37,9 @@ type GastoNoFiscal = {
   monto: number;
   descripcion: string;
   notas?: string;
+  estatus?: "pendiente" | "pagado";
+  fechaPago?: string;
+  comprobantePago?: string;
 };
 
 type Asesor = { _id: string; nombre: string };
@@ -41,6 +48,9 @@ const emptyNoFiscal = {
   fecha: new Date().toISOString().split("T")[0],
   asesor: "", entrada: "", monto: 0, descripcion: "", notas: "",
 };
+
+const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
+const UPLOAD_PRESET  = "pipsa productos";
 
 export default function Gastos() {
   const rol       = localStorage.getItem("rol") ?? "";
@@ -67,10 +77,16 @@ export default function Gastos() {
   const [detalleF, setDetalleF]       = useState<GastoFiscal | null>(null);
 
   // No fiscal
-  const [modalNF, setModalNF]   = useState(false);
+  const [modalNF, setModalNF]     = useState(false);
   const [editingNF, setEditingNF] = useState<GastoNoFiscal | null>(null);
-  const [formNF, setFormNF]     = useState<any>(emptyNoFiscal);
-  const [savingNF, setSavingNF] = useState(false);
+  const [formNF, setFormNF]       = useState<any>(emptyNoFiscal);
+  const [savingNF, setSavingNF]   = useState(false);
+
+  // Pago
+  const [modalPago, setModalPago]         = useState<{ id: string; tipo: "fiscal" | "nofiscal" } | null>(null);
+  const [formPago, setFormPago]           = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+  const [savingPago, setSavingPago]       = useState(false);
+  const [uploadingPago, setUploadingPago] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -178,16 +194,16 @@ export default function Gastos() {
         });
         setFormF(prev => ({
           ...prev,
-          uuid:          getAttr(timbre, "UUID") || getAttr(timbre, "uuid"),
-          fechaEmision:  getAttr(cfdi, "Fecha")  || getAttr(cfdi, "fecha"),
-          rfcEmisor:     getAttr(emisor,   "Rfc") || getAttr(emisor,   "rfc"),
-          nombreEmisor:  getAttr(emisor,   "Nombre") || getAttr(emisor, "nombre"),
-          rfcReceptor:   getAttr(receptor, "Rfc") || getAttr(receptor, "rfc"),
-          nombreReceptor:getAttr(receptor, "Nombre") || getAttr(receptor, "nombre"),
-          subtotal:      parseFloat(getAttr(cfdi, "SubTotal") || "0"),
-          iva:           iva || parseFloat(getAttr(cfdi, "Iva") || "0"),
-          total:         parseFloat(getAttr(cfdi, "Total") || "0"),
-          moneda:        getAttr(cfdi, "Moneda") || "MXN",
+          uuid:           getAttr(timbre, "UUID")    || getAttr(timbre, "uuid"),
+          fechaEmision:   getAttr(cfdi, "Fecha")     || getAttr(cfdi, "fecha"),
+          rfcEmisor:      getAttr(emisor,   "Rfc")   || getAttr(emisor,   "rfc"),
+          nombreEmisor:   getAttr(emisor,   "Nombre")|| getAttr(emisor,   "nombre"),
+          rfcReceptor:    getAttr(receptor, "Rfc")   || getAttr(receptor, "rfc"),
+          nombreReceptor: getAttr(receptor, "Nombre")|| getAttr(receptor, "nombre"),
+          subtotal:  parseFloat(getAttr(cfdi, "SubTotal") || "0"),
+          iva:       iva || parseFloat(getAttr(cfdi, "Iva") || "0"),
+          total:     parseFloat(getAttr(cfdi, "Total") || "0"),
+          moneda:    getAttr(cfdi, "Moneda") || "MXN",
           conceptos,
         }));
         setParsing(false);
@@ -220,6 +236,7 @@ export default function Gastos() {
     setFiscales(prev => prev.filter(g => g._id !== id));
   }
 
+  // ── No fiscal ──────────────────────────────────────────────────────────────
   function openNewNF() {
     setEditingNF(null);
     setFormNF({ ...emptyNoFiscal, fecha: new Date().toISOString().split("T")[0] });
@@ -262,11 +279,46 @@ export default function Gastos() {
     setNoFiscales(prev => prev.filter(g => g._id !== id));
   }
 
+  // ── Pago ───────────────────────────────────────────────────────────────────
+  function abrirModalPago(id: string, tipo: "fiscal" | "nofiscal") {
+    setModalPago({ id, tipo });
+    setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+  }
+
+  async function subirArchivo(file: File): Promise<string> {
+    setUploadingPago(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", UPLOAD_PRESET);
+    const res  = await fetch(CLOUDINARY_RAW, { method: "POST", body: fd });
+    const data = await res.json();
+    setUploadingPago(false);
+    return data.secure_url;
+  }
+
+  async function registrarPago() {
+    if (!modalPago) return;
+    setSavingPago(true);
+    try {
+      const endpoint = modalPago.tipo === "fiscal"
+        ? `/gastos/${modalPago.id}/pagar`
+        : `/gastos-no-fiscales/${modalPago.id}/pagar`;
+      const { data } = await api.post(endpoint, formPago);
+      if (modalPago.tipo === "fiscal") {
+        setFiscales(prev => prev.map(g => g._id === modalPago.id ? { ...g, ...data } : g));
+      } else {
+        setNoFiscales(prev => prev.map(g => g._id === modalPago.id ? { ...g, ...data } : g));
+      }
+      setModalPago(null);
+    } catch {}
+    finally { setSavingPago(false); }
+  }
+
   // ── Reportes ───────────────────────────────────────────────────────────────
   function abrirReporte(tipo: "fiscal" | "nofiscal" | "general", periodo: "semana" | "mes" | "año" | "todo") {
     const periodoLabel: Record<string, string> = { semana: "Semanal", mes: "Mensual", año: "Anual", todo: "General" };
-    const filtrarF  = (g: GastoFiscal)    => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
-    const filtrarNF = (g: GastoNoFiscal)  => periodo === "todo" ? true : enRango(g.fecha, periodo);
+    const filtrarF  = (g: GastoFiscal)   => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
+    const filtrarNF = (g: GastoNoFiscal) => periodo === "todo" ? true : enRango(g.fecha, periodo);
     const gastosFR  = fiscales.filter(filtrarF);
     const gastosNFR = noFiscales.filter(filtrarNF);
     const nfOrdenados = [...gastosNFR].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
@@ -277,6 +329,7 @@ export default function Gastos() {
         <td>${g.nombreEmisor ?? "—"}</td><td>${g.rfcEmisor ?? "—"}</td>
         <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${g.conceptos[0]?.descripcion ?? "—"}</td><td>${g.notas ?? "—"}</td>
+        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : "⏳"}</td>
       </tr>`).join("");
     const rowsNF = nfOrdenados.map(g => {
       acum += g.monto;
@@ -286,6 +339,7 @@ export default function Gastos() {
         <td style="text-align:right">$${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td style="text-align:right">$${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${g.descripcion}</td><td>${g.notas ?? ""}</td>
+        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : "⏳"}</td>
       </tr>`;
     }).join("");
     const totalF  = gastosFR.reduce((a, g) => a + g.total, 0);
@@ -321,13 +375,13 @@ export default function Gastos() {
 ${(tipo==="fiscal"||tipo==="general") ? `
 <div class="section-title">Gastos Fiscales</div>
 ${gastosFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
-<table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th></tr></thead>
+<table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsF}</tbody></table>
 <p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
 ${(tipo==="nofiscal"||tipo==="general") ? `
 <div class="section-title">Gastos No Fiscales</div>
 ${gastosNFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
-<table><thead><tr><th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th></tr></thead>
+<table><thead><tr><th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsNF}</tbody></table>
 <p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
 ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>` : ""}
@@ -340,7 +394,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
-  // ── Filtros aplicados ──────────────────────────────────────────────────────
+  // ── Filtros ────────────────────────────────────────────────────────────────
   const filteredF = fiscales.filter(g => {
     const matchSearch =
       (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -380,6 +434,31 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     { label: "Total general", val: sumaNoFiscal() },
   ];
 
+  // ── Badge de estatus de pago ───────────────────────────────────────────────
+  function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
+    const pagado = estatus === "pagado";
+    return (
+      <div>
+        <span style={{
+          padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600,
+          background: pagado ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+          color: pagado ? "var(--green)" : "var(--red)",
+          border: `1px solid ${pagado ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+          whiteSpace: "nowrap" as const,
+        }}>
+          {pagado ? "✅ Pagado" : "⏳ Pendiente"}
+        </span>
+        {pagado && fechaPago && (
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
+        )}
+        {pagado && comprobante && (
+          <a href={comprobante} target="_blank" rel="noreferrer"
+            style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>Ver comprobante</a>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="page-header">
@@ -407,8 +486,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
         {/* Tabs */}
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)" }}>
           {(["fiscal","nofiscal"] as const).map(t => (
-            <button key={t}
-              onClick={() => { setTab(t); limpiarFiltros(); }}
+            <button key={t} onClick={() => { setTab(t); limpiarFiltros(); }}
               style={{
                 padding: "10px 24px", border: "none", cursor: "pointer",
                 background: "transparent", fontFamily: "var(--font-head)",
@@ -449,7 +527,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           ))}
         </div>
 
-        {/* Tabla fiscal */}
+        {/* ── Tabla fiscal ── */}
         {tab === "fiscal" && (
           <div className="table-card" style={{ overflowX: "auto" }}>
             <div className="table-card-header">
@@ -462,14 +540,10 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
                 <input className="form-input" type="date" value={fechaDesde}
-                  onChange={e => setFechaDesde(e.target.value)}
-                  style={{ width: "auto" }} title="Desde" />
+                  onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
                 <input className="form-input" type="date" value={fechaHasta}
-                  onChange={e => setFechaHasta(e.target.value)}
-                  style={{ width: "auto" }} title="Hasta" />
-                {hayFiltros && (
-                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
-                )}
+                  onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
+                {hayFiltros && <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>}
               </div>
             </div>
             {hayFiltros && (
@@ -494,7 +568,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <thead>
                   <tr>
                     <th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th>
-                    <th>Concepto</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Notas</th><th></th>
+                    <th>Concepto</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Notas</th>
+                    <th>Estatus</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -513,9 +588,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       <td style={{ color: "var(--text-muted)" }}>${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td style={{ fontWeight: 700, color: "var(--red)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
+                      <td><EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} /></td>
                       <td>
-                        <div style={{ display: "flex", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)}>👁️</button>
+                          {g.estatus !== "pagado" && canDelete && (
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                              onClick={() => abrirModalPago(g._id, "fiscal")}>💳</button>
+                          )}
                           {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)}>🗑️</button>}
                         </div>
                       </td>
@@ -527,7 +607,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           </div>
         )}
 
-        {/* Tabla no fiscal */}
+        {/* ── Tabla no fiscal ── */}
         {tab === "nofiscal" && (
           <div className="table-card" style={{ overflowX: "auto" }}>
             <div className="table-card-header">
@@ -540,14 +620,10 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
                 <input className="form-input" type="date" value={fechaDesde}
-                  onChange={e => setFechaDesde(e.target.value)}
-                  style={{ width: "auto" }} title="Desde" />
+                  onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
                 <input className="form-input" type="date" value={fechaHasta}
-                  onChange={e => setFechaHasta(e.target.value)}
-                  style={{ width: "auto" }} title="Hasta" />
-                {hayFiltros && (
-                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
-                )}
+                  onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
+                {hayFiltros && <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>}
               </div>
             </div>
             {hayFiltros && (
@@ -572,7 +648,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <thead>
                   <tr>
                     <th>Fecha</th><th>Quien</th><th>Entrada</th>
-                    <th>Monto</th><th>Acumulado</th><th>Descripción</th><th>Notas</th><th></th>
+                    <th>Monto</th><th>Acumulado</th><th>Descripción</th><th>Notas</th>
+                    <th>Estatus</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -591,9 +668,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                             <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                             <td style={{ fontWeight: 500 }}>{g.descripcion}</td>
                             <td style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
+                            <td><EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} /></td>
                             <td>
-                              <div style={{ display: "flex", gap: 4 }}>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                                 <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
+                                {g.estatus !== "pagado" && canDelete && (
+                                  <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                                    onClick={() => abrirModalPago(g._id, "nofiscal")}>💳</button>
+                                )}
                                 {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️</button>}
                               </div>
                             </td>
@@ -743,6 +825,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 { label: "Receptor",     val: detalleF.nombreReceptor },
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
                 { label: "Quien",        val: detalleF.asesor?.nombre },
+                { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : "⏳ Pendiente" },
+                { label: "Fecha pago",   val: detalleF.fechaPago ? fmt(detalleF.fechaPago) : null },
                 { label: "Notas",        val: detalleF.notas },
               ].map(item => item.val ? (
                 <div key={item.label}>
@@ -751,6 +835,18 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
               ) : null)}
             </div>
+            {detalleF.comprobantePago && (
+              <a href={detalleF.comprobantePago} target="_blank" rel="noreferrer"
+                style={{ display: "inline-block", marginTop: 8, fontSize: "0.82rem", color: "var(--blue)" }}>
+                📎 Ver comprobante de pago
+              </a>
+            )}
+            {detalleF.complementoXml && (
+              <a href={detalleF.complementoXml} target="_blank" rel="noreferrer"
+                style={{ display: "inline-block", marginTop: 4, fontSize: "0.82rem", color: "var(--blue)", marginLeft: 12 }}>
+                🗂️ Ver complemento XML
+              </a>
+            )}
             {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
@@ -780,6 +876,93 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
+              {detalleF.estatus !== "pagado" && canDelete && (
+                <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
+                  onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal"); }}>
+                  💳 Registrar pago
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal pago ── */}
+      {modalPago && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalPago(null)}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <button className="modal-close" onClick={() => setModalPago(null)}>✕</button>
+            <h2 className="modal-title">Registrar pago</h2>
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">Fecha de pago *</label>
+                <input className="form-input" type="date" value={formPago.fechaPago}
+                  onChange={e => setFormPago(p => ({ ...p, fechaPago: e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Comprobante de pago (PDF / imagen)</label>
+                <label style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                  border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)",
+                  cursor: "pointer", background: "var(--surface2)",
+                }}>
+                  <span style={{ fontSize: "1.3rem" }}>{uploadingPago ? "⏳" : "📎"}</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                    {formPago.comprobantePago ? "✅ Archivo subido" : uploadingPago ? "Subiendo..." : "Seleccionar archivo"}
+                  </span>
+                  <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
+                    onChange={async e => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        const url = await subirArchivo(f);
+                        setFormPago(p => ({ ...p, comprobantePago: url }));
+                      }
+                    }} />
+                </label>
+                {formPago.comprobantePago && (
+                  <a href={formPago.comprobantePago} target="_blank" rel="noreferrer"
+                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
+                    Ver archivo subido
+                  </a>
+                )}
+              </div>
+              {modalPago.tipo === "fiscal" && (
+                <div className="form-group span-2">
+                  <label className="form-label">Complemento de pago XML (opcional)</label>
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                    border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)",
+                    cursor: "pointer", background: "var(--surface2)",
+                  }}>
+                    <span style={{ fontSize: "1.3rem" }}>🗂️</span>
+                    <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                      {formPago.complementoXml ? "✅ Complemento subido" : "Seleccionar XML"}
+                    </span>
+                    <input type="file" accept=".xml" style={{ display: "none" }}
+                      onChange={async e => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          const url = await subirArchivo(f);
+                          setFormPago(p => ({ ...p, complementoXml: url }));
+                        }
+                      }} />
+                  </label>
+                  {formPago.complementoXml && (
+                    <a href={formPago.complementoXml} target="_blank" rel="noreferrer"
+                      style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
+                      Ver complemento subido
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalPago(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={registrarPago}
+                disabled={savingPago || uploadingPago}
+                style={{ background: "var(--green)", color: "#fff" }}>
+                {savingPago ? "Registrando..." : "✅ Confirmar pago"}
+              </button>
             </div>
           </div>
         </div>
