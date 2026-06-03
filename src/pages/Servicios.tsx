@@ -182,9 +182,13 @@ export default function Servicios() {
   });
 
   function fmt(date?: string) {
-    if (!date) return "—";
-    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  }
+  if (!date) return "—";
+  // Parsear sin conversión de zona horaria
+  const [year, month, day] = date.split("T")[0].split("-");
+  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short", year: "numeric"
+  });
+}
 
   function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" }) {
     const ref = useRef<HTMLInputElement>(null);

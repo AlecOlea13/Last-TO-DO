@@ -96,10 +96,14 @@ export default function Rentas() {
     return matchSearch && matchFiltro && matchAsesor;
   });
 
-  function fmt(date?: string) {
-    if (!date) return "—";
-    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  }
+ function fmt(date?: string) {
+  if (!date) return "—";
+  // Parsear sin conversión de zona horaria
+  const [year, month, day] = date.split("T")[0].split("-");
+  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short", year: "numeric"
+  });
+}
 
   function diasRestantes(fechaFin?: string) {
     if (!fechaFin) return null;

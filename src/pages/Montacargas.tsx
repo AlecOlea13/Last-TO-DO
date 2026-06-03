@@ -196,9 +196,13 @@ export default function Montacargas() {
   // }
 
   function fmt(date?: string) {
-    if (!date) return "—";
-    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  }
+  if (!date) return "—";
+  // Parsear sin conversión de zona horaria
+  const [year, month, day] = date.split("T")[0].split("-");
+  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short", year: "numeric"
+  });
+}
 
   const filtered = montas.filter(m => {
     const matchSearch =

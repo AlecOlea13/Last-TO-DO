@@ -140,16 +140,20 @@ export default function Gastos() {
     return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
   }
 
-  function fmt(date?: string) {
-    if (!date) return "—";
-    return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  }
+ function fmt(date?: string) {
+  if (!date) return "—";
+  // Parsear sin conversión de zona horaria
+  const [year, month, day] = date.split("T")[0].split("-");
+  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+    day: "2-digit", month: "short", year: "numeric"
+  });
+}
 
   function fmtCorto(date?: string) {
-    if (!date) return "—";
-    const d = new Date(date);
-    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
-  }
+  if (!date) return "—";
+  const [year, month, day] = date.split("T")[0].split("-");
+  return `${day}/${month}/${String(year).slice(2)}`;
+}
 
   // ── XML Parser ─────────────────────────────────────────────────────────────
   function parseXML(file: File) {

@@ -112,7 +112,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
   </tr>`;
-  }).join("");
+}).join("");
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -262,19 +262,28 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ? cot.items.filter((_, idx) => idx !== cot.items.findIndex(i => i.imagen))
     : cot.items;
 
-  const itemsHtml = itemsFiltrados.map(item =>
-    `<tr>
+  const itemsHtml = itemsFiltrados.map(item => {
+  const subHtml = (item.subconceptos ?? []).map(s =>
+    `<div class="subconcept">
+      <span>${s.descripcion}</span>
+      <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+    </div>`
+  ).join("");
+  return `<tr>
       <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center;vertical-align:middle">
         ${item.imagen
           ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
           : `<span style="color:#aaa;font-size:9pt">—</span>`}
       </td>
-      <td style="padding:6px 8px;border:1px solid #ddd;white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd">
+        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+        ${subHtml}
+      </td>
       <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-    </tr>`
-  ).join("");
+    </tr>`;
+}).join("");
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
