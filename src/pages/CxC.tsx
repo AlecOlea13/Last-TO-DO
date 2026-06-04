@@ -31,6 +31,7 @@ type CxC = {
 
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
+const POR_PAGINA     = 70;
 
 export default function CuentasCobrar() {
   const rol       = localStorage.getItem("rol") ?? "";
@@ -42,29 +43,26 @@ export default function CuentasCobrar() {
   const [filtroEstatus, setFiltroEstatus] = useState("todos");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
+  const [pagina, setPagina]     = useState(1);
 
-  // Modal subir XML
   const [modalXml, setModalXml]   = useState(false);
   const [parsing, setParsing]     = useState(false);
   const [savingF, setSavingF]     = useState(false);
   const [formF, setFormF]         = useState<Partial<CxC>>({});
   const [xmlError, setXmlError]   = useState("");
-
-  // Modal detalle
   const [detalle, setDetalle]     = useState<CxC | null>(null);
 
-  // Modal cobro
-  const [modalCobro, setModalCobro]     = useState<CxC | null>(null);
-  const [formCobro, setFormCobro]       = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
-  const [savingCobro, setSavingCobro]   = useState(false);
+  const [modalCobro, setModalCobro]       = useState<CxC | null>(null);
+  const [formCobro, setFormCobro]         = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
+  const [savingCobro, setSavingCobro]     = useState(false);
   const [uploadingComp, setUploadingComp] = useState(false);
 
-  // Modal editar comentarios
   const [modalComent, setModalComent]   = useState<CxC | null>(null);
   const [comentarioEdit, setComentEdit] = useState("");
   const [savingComent, setSavingComent] = useState(false);
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
 
   async function load() {
     try {
@@ -75,23 +73,19 @@ export default function CuentasCobrar() {
   }
 
   function fmt(date?: string) {
-  if (!date) return "—";
-  // Parsear sin conversión de zona horaria
-  const [year, month, day] = date.split("T")[0].split("-");
-  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric"
-  });
-}
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
 
   function fmtCorto(date?: string) {
-  if (!date) return "—";
-  const [year, month, day] = date.split("T")[0].split("-");
-  return `${day}/${month}/${String(year).slice(2)}`;
-}
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return `${day}/${month}/${String(year).slice(2)}`;
+  }
 
   const hayFiltros = filtroEstatus !== "todos" || fechaDesde !== "" || fechaHasta !== "";
 
-  // ── XML Parser ─────────────────────────────────────────────────────────────
   function parseXML(file: File) {
     setParsing(true);
     setXmlError("");
@@ -176,7 +170,6 @@ export default function CuentasCobrar() {
     setCxcs(prev => prev.filter(c => c._id !== id));
   }
 
-  // ── Subir archivo ──────────────────────────────────────────────────────────
   async function subirArchivo(file: File): Promise<string> {
     setUploadingComp(true);
     const fd = new FormData();
@@ -188,7 +181,6 @@ export default function CuentasCobrar() {
     return data.secure_url;
   }
 
-  // ── Cobro ──────────────────────────────────────────────────────────────────
   async function registrarCobro() {
     if (!modalCobro) return;
     setSavingCobro(true);
@@ -201,7 +193,6 @@ export default function CuentasCobrar() {
     finally { setSavingCobro(false); }
   }
 
-  // ── Editar comentarios ─────────────────────────────────────────────────────
   async function guardarComentario() {
     if (!modalComent) return;
     setSavingComent(true);
@@ -213,7 +204,6 @@ export default function CuentasCobrar() {
     finally { setSavingComent(false); }
   }
 
-  // ── Filtros ────────────────────────────────────────────────────────────────
   const filtered = cxcs.filter(c => {
     const matchSearch =
       (c.nombreReceptor ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -227,11 +217,42 @@ export default function CuentasCobrar() {
     return matchSearch && matchEstatus && matchDesde && matchHasta;
   });
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
+  const totalPaginas = Math.ceil(filtered.length / POR_PAGINA);
+  const paginados    = filtered.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+
   const totalPendiente = cxcs.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + c.total, 0);
   const totalCobrado   = cxcs.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
 
-  // ── Reporte ────────────────────────────────────────────────────────────────
+  function Paginador({ total, pag, set }: { total: number; pag: number; set: (p: number) => void }) {
+    if (total <= 1) return null;
+    const pages = Array.from({ length: total }, (_, i) => i + 1)
+      .filter(p => p === 1 || p === total || Math.abs(p - pag) <= 2)
+      .reduce((acc: (number | string)[], p, idx, arr) => {
+        if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push("...");
+        acc.push(p);
+        return acc;
+      }, []);
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderTop: "1px solid var(--border)", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+        <span>Mostrando {(pag - 1) * POR_PAGINA + 1}–{Math.min(pag * POR_PAGINA, filtered.length)} de {filtered.length}</span>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => set(1)} disabled={pag === 1}>«</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => set(pag - 1)} disabled={pag === 1}>‹</button>
+          {pages.map((p, idx) => p === "..." ? (
+            <span key={`e${idx}`} style={{ padding: "0 4px" }}>…</span>
+          ) : (
+            <button key={p} className="btn btn-secondary btn-sm" onClick={() => set(p as number)}
+              style={{ minWidth: 32, background: pag === p ? "var(--accent)" : undefined, color: pag === p ? "#000" : undefined, fontWeight: pag === p ? 700 : undefined }}>
+              {p}
+            </button>
+          ))}
+          <button className="btn btn-secondary btn-sm" onClick={() => set(pag + 1)} disabled={pag === total}>›</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => set(total)} disabled={pag === total}>»</button>
+        </div>
+      </div>
+    );
+  }
+
   function abrirReporte() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
     let acum = 0;
@@ -251,7 +272,6 @@ export default function CuentasCobrar() {
           <td>${c.comentarios ?? "—"}</td>
         </tr>`;
       }).join("");
-
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Cuentas por Cobrar</title>
 <style>
@@ -271,11 +291,9 @@ export default function CuentasCobrar() {
 </style></head><body>
 <div class="header">
   <img src="${logoUrl}" class="logo" alt="Pipsa" />
-  <div>
-    <h1>Cuentas por Cobrar</h1>
-    <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX",{day:"2-digit",month:"long",year:"numeric"})}</p>
-  </div>
+  <div><h1>Cuentas por Cobrar</h1>
+  <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+  <p>Generado el ${new Date().toLocaleDateString("es-MX",{day:"2-digit",month:"long",year:"numeric"})}</p></div>
 </div>
 <table>
   <thead><tr>
@@ -311,8 +329,6 @@ export default function CuentasCobrar() {
       </div>
 
       <div className="page-content">
-
-        {/* Stats */}
         <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
           <div className="stat-card">
             <span className="stat-card-icon">📄</span>
@@ -338,7 +354,6 @@ export default function CuentasCobrar() {
           </div>
         </div>
 
-        {/* Tabla */}
         <div className="table-card" style={{ overflowX: "auto" }}>
           <div className="table-card-header">
             <p className="table-card-title">Todas las cuentas por cobrar</p>
@@ -376,73 +391,76 @@ export default function CuentasCobrar() {
           ) : filtered.length === 0 ? (
             <div className="empty-state"><span className="empty-icon">💰</span><p>Sin cuentas por cobrar{search || hayFiltros ? " con ese filtro" : ""}</p></div>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>No. Factura</th>
-                  <th>Importe</th>
-                  <th>Fecha factura</th>
-                  <th>Concepto</th>
-                  <th>Fecha pago</th>
-                  <th>Complemento</th>
-                  <th>Pendiente</th>
-                  <th>Comentarios</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(c => (
-                  <tr key={c._id}>
-                    <td style={{ fontWeight: 600 }}>{c.nombreReceptor ?? "—"}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: "0.82rem" }}>{c.folioFactura ?? "—"}</td>
-                    <td style={{ fontWeight: 700 }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                    <td>{fmt(c.fechaEmision)}</td>
-                    <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>
-                      {c.conceptos[0]?.descripcion?.slice(0, 45) ?? "—"}
-                      {(c.conceptos[0]?.descripcion?.length ?? 0) > 45 ? "..." : ""}
-                    </td>
-                    <td style={{ fontSize: "0.82rem" }}>{fmt(c.fechaPago)}</td>
-                    <td>
-                      {c.complementoPago
-                        ? <a href={c.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>Ver 📎</a>
-                        : <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>—</span>}
-                    </td>
-                    <td>
-                      {c.estatus === "cobrada"
-                        ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.82rem" }}>$0.00</span>
-                        : <span style={{ color: "var(--red)", fontWeight: 700 }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
-                    </td>
-                    <td style={{ fontSize: "0.8rem", color: "var(--text-muted)", maxWidth: 140 }}>
-                      {c.comentarios
-                        ? <span title={c.comentarios}>{c.comentarios.slice(0, 30)}{c.comentarios.length > 30 ? "..." : ""}</span>
-                        : "—"}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(c)}>👁️</button>
-                        <button className="btn btn-secondary btn-sm" title="Comentarios"
-                          onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
-                        {c.estatus !== "cobrada" && (
-                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                            onClick={() => { setModalCobro(c); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); }}>
-                            💳
-                          </button>
-                        )}
-                        {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteCxc(c._id)}>🗑️</button>}
-                      </div>
-                    </td>
+            <>
+              <table style={{ fontSize: "0.8rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 120 }}>Cliente</th>
+                    <th style={{ minWidth: 80 }}>No. Factura</th>
+                    <th style={{ minWidth: 100 }}>Importe</th>
+                    <th style={{ minWidth: 90 }}>Fecha fact.</th>
+                    <th style={{ minWidth: 160 }}>Concepto</th>
+                    <th style={{ minWidth: 90 }}>Fecha pago</th>
+                    <th style={{ minWidth: 80 }}>Compl.</th>
+                    <th style={{ minWidth: 100 }}>Pendiente</th>
+                    <th style={{ minWidth: 120 }}>Comentarios</th>
+                    <th style={{ minWidth: 110 }}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginados.map(c => (
+                    <tr key={c._id}>
+                      <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
+                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaEmision)}</td>
+                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}
+                        {(c.conceptos[0]?.descripcion?.length ?? 0) > 40 ? "..." : ""}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaPago)}</td>
+                      <td style={{ textAlign: "center" }}>
+                        {c.complementoPago
+                          ? <a href={c.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
+                          : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {c.estatus === "cobrada"
+                          ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.78rem" }}>$0.00</span>
+                          : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
+                      </td>
+                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        {c.comentarios
+                          ? <span title={c.comentarios}>{c.comentarios.slice(0, 25)}{c.comentarios.length > 25 ? "..." : ""}</span>
+                          : "—"}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(c)}>👁️</button>
+                          <button className="btn btn-secondary btn-sm"
+                            onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
+                          {c.estatus !== "cobrada" && (
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                              onClick={() => { setModalCobro(c); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); }}>
+                              💳
+                            </button>
+                          )}
+                          {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteCxc(c._id)}>🗑️</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Paginador total={totalPaginas} pag={pagina} set={setPagina} />
+            </>
           )}
         </div>
       </div>
 
       {/* ── Modal subir XML ── */}
       {modalXml && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalXml(false)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalXml(false); }}>
           <div className="modal" style={{ maxWidth: 560 }}>
             <button className="modal-close" onClick={() => setModalXml(false)}>✕</button>
             <h2 className="modal-title">Subir factura XML</h2>
@@ -461,7 +479,6 @@ export default function CuentasCobrar() {
                 onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
             </label>
             {xmlError && <p style={{ color: "var(--red)", fontSize: "0.85rem" }}>⚠ {xmlError}</p>}
-
             {formF.nombreReceptor && !parsing && (
               <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 16, border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>✅ Datos extraídos</p>
@@ -510,7 +527,7 @@ export default function CuentasCobrar() {
 
       {/* ── Modal detalle ── */}
       {detalle && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetalle(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
           <div className="modal" style={{ maxWidth: 520 }}>
             <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
             <h2 className="modal-title">{detalle.nombreReceptor ?? "Factura"}</h2>
@@ -581,7 +598,7 @@ export default function CuentasCobrar() {
 
       {/* ── Modal registrar cobro ── */}
       {modalCobro && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalCobro(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalCobro(null); }}>
           <div className="modal" style={{ maxWidth: 440 }}>
             <button className="modal-close" onClick={() => setModalCobro(null)}>✕</button>
             <h2 className="modal-title">Registrar cobro</h2>
@@ -597,29 +614,17 @@ export default function CuentasCobrar() {
               </div>
               <div className="form-group span-2">
                 <label className="form-label">Complemento de pago (XML / PDF)</label>
-                <label style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-                  border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)",
-                  cursor: "pointer", background: "var(--surface2)",
-                }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
                   <span style={{ fontSize: "1.3rem" }}>{uploadingComp ? "⏳" : "📎"}</span>
                   <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                     {formCobro.complementoPago ? "✅ Archivo subido" : uploadingComp ? "Subiendo..." : "Seleccionar archivo"}
                   </span>
                   <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }}
-                    onChange={async e => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        const url = await subirArchivo(f);
-                        setFormCobro(p => ({ ...p, complementoPago: url }));
-                      }
-                    }} />
+                    onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormCobro(p => ({ ...p, complementoPago: url })); } }} />
                 </label>
                 {formCobro.complementoPago && (
                   <a href={formCobro.complementoPago} target="_blank" rel="noreferrer"
-                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
-                    Ver archivo subido
-                  </a>
+                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver archivo subido</a>
                 )}
               </div>
               <div className="form-group span-2">
@@ -631,8 +636,7 @@ export default function CuentasCobrar() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalCobro(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={registrarCobro}
-                disabled={savingCobro || uploadingComp}
+              <button className="btn btn-primary" onClick={registrarCobro} disabled={savingCobro || uploadingComp}
                 style={{ background: "var(--green)", color: "#fff" }}>
                 {savingCobro ? "Registrando..." : "✅ Confirmar cobro"}
               </button>
@@ -643,7 +647,7 @@ export default function CuentasCobrar() {
 
       {/* ── Modal comentarios ── */}
       {modalComent && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModalComent(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalComent(null); }}>
           <div className="modal" style={{ maxWidth: 420 }}>
             <button className="modal-close" onClick={() => setModalComent(null)}>✕</button>
             <h2 className="modal-title">Comentarios</h2>
