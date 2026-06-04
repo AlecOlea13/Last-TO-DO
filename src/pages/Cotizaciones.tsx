@@ -39,13 +39,17 @@ type Cotizacion = {
   comentarios: Comentario[];
 };
 
-type Cliente     = { _id: string; nombre: string };
+type Cliente = { _id: string; nombre: string };
 type Montacargas = {
   _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
   tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
   horquillas?: string; desplazadorLateral?: boolean; tipoLlantas?: string;
   voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
   equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
+  costoSemana?: number;
+  costoMes?: number;
+  costoAnual?: number;
+  precioVenta?: number;
 };
 
 const emptyForm: any = {
@@ -88,6 +92,7 @@ export default function Cotizaciones() {
   const [saving, setSaving]                     = useState(false);
   const [savingComentario, setSavingComentario] = useState(false);
   const [uploadingIdx, setUploadingIdx]         = useState<number | null>(null);
+  const [periodoRenta, setPeriodoRenta]         = useState<"semanal" | "mensual" | "anual">("mensual");
 
   useEffect(() => { load(); }, []);
 
@@ -107,12 +112,14 @@ export default function Cotizaciones() {
 
   function openNew() {
     setEditing(null);
+    setPeriodoRenta("mensual");
     setForm({ ...emptyForm, folio: "", items: [{ ...emptyItem, subconceptos: [] }] });
     setModal(true);
   }
 
   function openEdit(c: Cotizacion) {
     setEditing(c);
+    setPeriodoRenta("mensual");
     setForm({
       folio:               c.folio,
       tipo:                c.tipo,
@@ -139,10 +146,7 @@ export default function Cotizaciones() {
   }
 
   function addItem() {
-    setForm((p: any) => ({
-      ...p,
-      items: [...p.items, { ...emptyItem, subconceptos: [] }],
-    }));
+    setForm((p: any) => ({ ...p, items: [...p.items, { ...emptyItem, subconceptos: [] }] }));
   }
 
   function removeItem(i: number) {
@@ -157,7 +161,6 @@ export default function Cotizaciones() {
       const items = [...p.items];
       items[i] = { ...items[i], [field]: val };
       if (field === "cantidad" || field === "precioUnitario") {
-        // Si tiene subconceptos, el precioUnitario viene de la suma de subconceptos
         if (!items[i].subconceptos?.length) {
           items[i].total = items[i].cantidad * items[i].precioUnitario;
         }
@@ -166,14 +169,50 @@ export default function Cotizaciones() {
     });
   }
 
+  // ── Autocompletar concepto desde montacargas ──────────────────────────────
+  function generarConceptoAutomatico(montaId: string, tipo: string, periodo: "semanal" | "mensual" | "anual") {
+    const m = montas.find(m => m._id === montaId);
+    if (!m) return;
+
+    let descripcion = "";
+    let precio = 0;
+
+    if (tipo === "venta") {
+      if (!m.precioVenta) { alert("Este equipo no tiene precio de venta registrado."); return; }
+      descripcion = `Venta de Montacargas ${m.marca ?? ""} ${m.modelo ?? ""} #${m.numeroEconomico}${m.capacidad ? " Capacidad " + m.capacidad : ""}${m.serie ? " Serie " + m.serie : ""}`.trim();
+      precio = m.precioVenta;
+    } else if (tipo === "renta") {
+      const precios: Record<string, number> = {
+        semanal: m.costoSemana ?? 0,
+        mensual: m.costoMes    ?? 0,
+        anual:   m.costoAnual  ?? 0,
+      };
+      precio = precios[periodo];
+      if (!precio) { alert(`Este equipo no tiene costo ${periodo} registrado.`); return; }
+      const periodoLabel: Record<string, string> = { semanal: "semanal", mensual: "mensual", anual: "anual" };
+      descripcion = `Renta de Montacargas ${m.marca ?? ""} ${m.modelo ?? ""} #${m.numeroEconomico}${m.capacidad ? " Capacidad " + m.capacidad : ""}${m.serie ? " Serie " + m.serie : ""} — periodo ${periodoLabel[periodo]}`.trim();
+    }
+
+    if (!descripcion || !precio) return;
+
+    setForm((p: any) => {
+      const items = [...p.items];
+      items[0] = {
+        ...items[0],
+        descripcion,
+        precioUnitario: precio,
+        total: items[0].cantidad * precio,
+        subconceptos: [],
+      };
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
+
   // ── Subconceptos ──────────────────────────────────────────────────────────
   function addSubconcepto(itemIdx: number) {
     setForm((p: any) => {
       const items = [...p.items];
-      items[itemIdx] = {
-        ...items[itemIdx],
-        subconceptos: [...(items[itemIdx].subconceptos ?? []), { ...emptySubconcepto }],
-      };
+      items[itemIdx] = { ...items[itemIdx], subconceptos: [...(items[itemIdx].subconceptos ?? []), { ...emptySubconcepto }] };
       return { ...p, items };
     });
   }
@@ -182,13 +221,8 @@ export default function Cotizaciones() {
     setForm((p: any) => {
       const items = [...p.items];
       const subs  = items[itemIdx].subconceptos?.filter((_: any, i: number) => i !== subIdx) ?? [];
-      const sumaSubconceptos = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
-      items[itemIdx] = {
-        ...items[itemIdx],
-        subconceptos:   subs,
-        precioUnitario: sumaSubconceptos,
-        total:          items[itemIdx].cantidad * sumaSubconceptos,
-      };
+      const suma  = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
+      items[itemIdx] = { ...items[itemIdx], subconceptos: subs, precioUnitario: suma, total: items[itemIdx].cantidad * suma };
       return { ...p, items, ...recalcTotales(items) };
     });
   }
@@ -198,13 +232,8 @@ export default function Cotizaciones() {
       const items = [...p.items];
       const subs  = [...(items[itemIdx].subconceptos ?? [])];
       subs[subIdx] = { ...subs[subIdx], [field]: val };
-      const sumaSubconceptos = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
-      items[itemIdx] = {
-        ...items[itemIdx],
-        subconceptos:   subs,
-        precioUnitario: sumaSubconceptos,
-        total:          items[itemIdx].cantidad * sumaSubconceptos,
-      };
+      const suma = subs.reduce((acc: number, s: SubConcepto) => acc + s.precio, 0);
+      items[itemIdx] = { ...items[itemIdx], subconceptos: subs, precioUnitario: suma, total: items[itemIdx].cantidad * suma };
       return { ...p, items, ...recalcTotales(items) };
     });
   }
@@ -230,7 +259,6 @@ export default function Cotizaciones() {
         const { data } = await api.put(`/cotizaciones/${editing._id}`, form);
         setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
       } else {
-        // folio vacío → el backend lo genera automáticamente
         const payload = { ...form };
         if (!payload.folio) delete payload.folio;
         const { data } = await api.post("/cotizaciones", payload);
@@ -279,13 +307,11 @@ export default function Cotizaciones() {
   }
 
   function fmt(date?: string) {
-  if (!date) return "—";
-  // Parsear sin conversión de zona horaria
-  const [year, month, day] = date.split("T")[0].split("-");
-  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric"
-  });
-}
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
   function fmtHora(date: string) {
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
@@ -299,6 +325,9 @@ export default function Cotizaciones() {
     const matchAsesor = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
   });
+
+  const montaSeleccionada = montas.find(m => m._id === form.montacargas);
+  const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
 
   const modalForm = (
     <div className="modal" style={{ maxWidth: 760 }}>
@@ -364,6 +393,46 @@ export default function Cotizaciones() {
             onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
             placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
         </div>
+
+        {/* ── Autocompletar concepto ── */}
+        {mostrarAutocompletar && (
+          <div className="form-group span-2" style={{
+            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+            borderRadius: "var(--radius-sm)", padding: 12,
+          }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+              ⚡ Autocompletar primer concepto
+            </p>
+            {montaSeleccionada && (
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 10 }}>
+                {montaSeleccionada.marca} {montaSeleccionada.modelo} #{montaSeleccionada.numeroEconomico}
+                {form.tipo === "renta" && (
+                  <> — Semana: {montaSeleccionada.costoSemana ? `$${montaSeleccionada.costoSemana.toLocaleString()}` : "—"} · Mes: {montaSeleccionada.costoMes ? `$${montaSeleccionada.costoMes.toLocaleString()}` : "—"} · Año: {montaSeleccionada.costoAnual ? `$${montaSeleccionada.costoAnual.toLocaleString()}` : "—"}</>
+                )}
+                {form.tipo === "venta" && (
+                  <> — Precio venta: {montaSeleccionada.precioVenta ? `$${montaSeleccionada.precioVenta.toLocaleString()}` : "—"}</>
+                )}
+              </p>
+            )}
+            {form.tipo === "renta" && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                <label className="form-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Periodo:</label>
+                <select className="form-select" value={periodoRenta}
+                  onChange={e => setPeriodoRenta(e.target.value as any)}
+                  style={{ width: "auto" }}>
+                  <option value="semanal">Semanal</option>
+                  <option value="mensual">Mensual</option>
+                  <option value="anual">Anual</option>
+                </select>
+              </div>
+            )}
+            <button className="btn btn-secondary btn-sm"
+              style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
+              onClick={() => generarConceptoAutomatico(form.montacargas, form.tipo, periodoRenta)}>
+              ⚡ Llenar primer concepto automáticamente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Items ── */}
@@ -378,7 +447,6 @@ export default function Cotizaciones() {
             const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
             return (
               <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
-                {/* Fila principal del concepto */}
                 <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
                   <label style={{ cursor: "pointer" }}>
                     {item.imagen ? (
@@ -400,13 +468,11 @@ export default function Cotizaciones() {
                     onChange={e => updateItem(i, "precioUnitario", +e.target.value)}
                     style={{ padding: "8px" }}
                     readOnly={tieneSubconceptos}
-                    title={tieneSubconceptos ? "Calculado desde subconceptos" : ""}
-                  />
+                    title={tieneSubconceptos ? "Calculado desde subconceptos" : ""} />
                   <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
                   <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
                 </div>
 
-                {/* Subconceptos */}
                 <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -416,7 +482,6 @@ export default function Cotizaciones() {
                       + Agregar subconcepto
                     </button>
                   </div>
-
                   {tieneSubconceptos && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {item.subconceptos!.map((sub, si) => (
@@ -580,13 +645,13 @@ export default function Cotizaciones() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) { setModal(false); setEditing(null); } }}>
           {modalForm}
         </div>
       )}
 
       {comentarioModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setComentarioModal(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setComentarioModal(null); }}>
           <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => setComentarioModal(null)}>✕</button>
             <h2 className="modal-title">Comentarios — {comentarioModal.folio}</h2>

@@ -30,6 +30,8 @@ type Monta = {
   costoDia?: number;
   costoSemana?: number;
   costoMes?: number;
+  costoAnual?: number;
+  precioVenta?: number;
   fechaUltimoMantenimiento?: string;
   proximoMantenimiento?: string;
   fechaUltimoServicio?: string;
@@ -48,7 +50,8 @@ const emptyForm = {
   equipoSeguridad: { alarmaReversa: false, torretaAmbar: false, luces: false, extintor: false },
   horometroActual: 0, horasRestantesServicio: 0,
   estatus: "disponible",
-  costoDia: 0, costoSemana: 0, costoMes: 0,
+  costoDia: 0, costoSemana: 0, costoMes: 0, costoAnual: 0,
+  precioVenta: 0,
   fechaUltimoMantenimiento: "", proximoMantenimiento: "",
   fechaUltimoServicio: "", proximoServicio: "",
 };
@@ -64,16 +67,13 @@ const TIPO_BADGE: Record<string, string> = {
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div
-      onClick={() => onChange(!checked)}
-      style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
-        border: "1.5px solid", borderColor: checked ? "var(--accent)" : "var(--border)",
-        background: checked ? "rgba(255,180,0,0.08)" : "var(--input-bg)",
-        transition: "all 0.15s",
-      }}
-    >
+    <div onClick={() => onChange(!checked)} style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+      border: "1.5px solid", borderColor: checked ? "var(--accent)" : "var(--border)",
+      background: checked ? "rgba(255,180,0,0.08)" : "var(--input-bg)",
+      transition: "all 0.15s",
+    }}>
       <span style={{ fontSize: "0.87rem", color: checked ? "var(--accent)" : "var(--text-muted)", fontWeight: checked ? 600 : 400 }}>
         {label}
       </span>
@@ -91,9 +91,6 @@ function SectionLabel({ text }: { text: string }) {
     </p>
   );
 }
-
-// const rol      = localStorage.getItem("rol") ?? "";
-// const canEdit  = !["tecnico", "almacen"].includes(rol);
 
 export default function Montacargas() {
   const rol     = localStorage.getItem("rol") ?? "";
@@ -148,7 +145,11 @@ export default function Montacargas() {
       horometroActual: m.horometroActual ?? 0,
       horasRestantesServicio: m.horasRestantesServicio ?? 0,
       estatus: m.estatus,
-      costoDia: m.costoDia ?? 0, costoSemana: m.costoSemana ?? 0, costoMes: m.costoMes ?? 0,
+      costoDia:    m.costoDia    ?? 0,
+      costoSemana: m.costoSemana ?? 0,
+      costoMes:    m.costoMes    ?? 0,
+      costoAnual:  m.costoAnual  ?? 0,
+      precioVenta: m.precioVenta ?? 0,
       fechaUltimoMantenimiento: m.fechaUltimoMantenimiento ? m.fechaUltimoMantenimiento.split("T")[0] : "",
       proximoMantenimiento:     m.proximoMantenimiento     ? m.proximoMantenimiento.split("T")[0]     : "",
       fechaUltimoServicio:      m.fechaUltimoServicio      ? m.fechaUltimoServicio.split("T")[0]      : "",
@@ -189,20 +190,11 @@ export default function Montacargas() {
     setAsignarModal(null); setClienteSel("");
   }
 
-  // async function regresar(monta: Monta, estatus: "disponible" | "taller") {
-  //   if (!confirm(`¿Regresar el montacargas a "${estatus}"?`)) return;
-  //   const { data } = await api.post(`/montacargas/${monta._id}/regresar`, { estatus });
-  //   setMontas(prev => prev.map(m => m._id === data._id ? data : m));
-  // }
-
   function fmt(date?: string) {
-  if (!date) return "—";
-  // Parsear sin conversión de zona horaria
-  const [year, month, day] = date.split("T")[0].split("-");
-  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric"
-  });
-}
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
 
   const filtered = montas.filter(m => {
     const matchSearch =
@@ -221,9 +213,7 @@ export default function Montacargas() {
           <h1 className="page-title">Montacargas</h1>
           <p className="page-subtitle">{montas.length} equipos en flota</p>
         </div>
-        {canEdit && (
-          <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
-        )}
+        {canEdit && <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>}
       </div>
 
       <div className="page-content">
@@ -267,7 +257,8 @@ export default function Montacargas() {
               <thead>
                 <tr>
                   <th>#</th><th>Marca / Modelo</th><th>Tipo</th><th>Capacidad</th>
-                  <th>Horómetro</th><th>Prox. Mant.</th><th>Estatus</th><th>Cliente</th><th>Costo/mes</th><th></th>
+                  <th>Horómetro</th><th>Prox. Mant.</th><th>Estatus</th><th>Cliente</th>
+                  <th>Costo/mes</th><th>P. Venta</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -287,21 +278,15 @@ export default function Montacargas() {
                     <td><span className={`badge ${ESTATUS_BADGE[m.estatus]}`}>{m.estatus}</span></td>
                     <td>{m.clienteActual?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                     <td>{m.costoMes ? `$${m.costoMes.toLocaleString()}` : "—"}</td>
+                    <td>{m.precioVenta ? `$${m.precioVenta.toLocaleString()}` : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
-                        {canEdit && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>
-                        )}
+                        {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>}
                         {canEdit && m.estatus === "disponible" && (
                           <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
                         )}
-                        {/* {canEdit && m.estatus === "rentado" && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => regresar(m, "disponible")}>Regresar</button>
-                        )} */}
-                        {canEdit && (
-                          <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>
-                        )}
+                        {canEdit && <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>}
                       </div>
                     </td>
                   </tr>
@@ -314,7 +299,7 @@ export default function Montacargas() {
 
       {/* ── Modal nuevo / editar ── */}
       {modal && canEdit && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
           <div className="modal" style={{ maxWidth: 700 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar equipo" : "Nuevo montacargas"}</h2>
@@ -456,6 +441,18 @@ export default function Montacargas() {
                 <label className="form-label">Costo por mes ($)</label>
                 <input className="form-input" type="number" value={form.costoMes} onChange={e => setF("costoMes", +e.target.value)} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Costo anual ($)</label>
+                <input className="form-input" type="number" value={form.costoAnual} onChange={e => setF("costoAnual", +e.target.value)} />
+              </div>
+            </div>
+
+            <SectionLabel text="Precio de venta" />
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Precio de venta ($)</label>
+                <input className="form-input" type="number" value={form.precioVenta} onChange={e => setF("precioVenta", +e.target.value)} />
+              </div>
             </div>
 
             <div className="modal-footer">
@@ -468,37 +465,39 @@ export default function Montacargas() {
 
       {/* ── Modal detalle ── */}
       {detalleModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDetalleModal(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalleModal(null); }}>
           <div className="modal" style={{ maxWidth: 560 }}>
             <button className="modal-close" onClick={() => setDetalleModal(null)}>✕</button>
             <h2 className="modal-title">{detalleModal.numeroEconomico} — {detalleModal.marca} {detalleModal.modelo}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px" }}>
               {[
-                { label: "Serie",              val: detalleModal.serie },
-                { label: "Tipo",               val: detalleModal.tipo },
-                { label: "Capacidad",          val: detalleModal.capacidad },
-                { label: "Altura levante",     val: detalleModal.alturaLevante },
-                { label: "Altura contraído",   val: detalleModal.alturaColapsada },
-                { label: "Horquillas",         val: detalleModal.horquillas },
-                { label: "Desplazador lat.",   val: detalleModal.desplazadorLateral ? "Sí" : null },
-                { label: "Tipo de llantas",    val: detalleModal.tipoLlantas },
-                { label: "Voltaje",            val: detalleModal.voltaje },
-                { label: "Tipo batería",       val: detalleModal.tipoBateria },
-                { label: "Incluye cargador",   val: detalleModal.incluyeCargador ? "Sí" : null },
-                { label: "Alarma reversa",     val: detalleModal.equipoSeguridad?.alarmaReversa ? "✅" : null },
-                { label: "Torreta ámbar",      val: detalleModal.equipoSeguridad?.torretaAmbar  ? "✅" : null },
-                { label: "Luces",              val: detalleModal.equipoSeguridad?.luces         ? "✅" : null },
-                { label: "Extintor",           val: detalleModal.equipoSeguridad?.extintor      ? "✅" : null },
-                { label: "Horómetro",          val: detalleModal.horometroActual ? `${detalleModal.horometroActual} hr` : null },
-                { label: "Horas restantes",    val: detalleModal.horasRestantesServicio ? `${detalleModal.horasRestantesServicio} hr` : null },
-                { label: "Últ. mantenimiento", val: fmt(detalleModal.fechaUltimoMantenimiento) },
-                { label: "Próx. mantenimiento",val: fmt(detalleModal.proximoMantenimiento) },
-                { label: "Últ. servicio",      val: fmt(detalleModal.fechaUltimoServicio) },
-                { label: "Próx. servicio",     val: fmt(detalleModal.proximoServicio) },
-                { label: "Costo día",          val: detalleModal.costoDia    ? `$${detalleModal.costoDia.toLocaleString()}`    : null },
-                { label: "Costo semana",       val: detalleModal.costoSemana ? `$${detalleModal.costoSemana.toLocaleString()}` : null },
-                { label: "Costo mes",          val: detalleModal.costoMes    ? `$${detalleModal.costoMes.toLocaleString()}`    : null },
-                { label: "Cliente actual",     val: detalleModal.clienteActual?.nombre },
+                { label: "Serie",               val: detalleModal.serie },
+                { label: "Tipo",                val: detalleModal.tipo },
+                { label: "Capacidad",           val: detalleModal.capacidad },
+                { label: "Altura levante",      val: detalleModal.alturaLevante },
+                { label: "Altura contraído",    val: detalleModal.alturaColapsada },
+                { label: "Horquillas",          val: detalleModal.horquillas },
+                { label: "Desplazador lat.",    val: detalleModal.desplazadorLateral ? "Sí" : null },
+                { label: "Tipo de llantas",     val: detalleModal.tipoLlantas },
+                { label: "Voltaje",             val: detalleModal.voltaje },
+                { label: "Tipo batería",        val: detalleModal.tipoBateria },
+                { label: "Incluye cargador",    val: detalleModal.incluyeCargador ? "Sí" : null },
+                { label: "Alarma reversa",      val: detalleModal.equipoSeguridad?.alarmaReversa ? "✅" : null },
+                { label: "Torreta ámbar",       val: detalleModal.equipoSeguridad?.torretaAmbar  ? "✅" : null },
+                { label: "Luces",               val: detalleModal.equipoSeguridad?.luces         ? "✅" : null },
+                { label: "Extintor",            val: detalleModal.equipoSeguridad?.extintor      ? "✅" : null },
+                { label: "Horómetro",           val: detalleModal.horometroActual ? `${detalleModal.horometroActual} hr` : null },
+                { label: "Horas restantes",     val: detalleModal.horasRestantesServicio ? `${detalleModal.horasRestantesServicio} hr` : null },
+                { label: "Últ. mantenimiento",  val: fmt(detalleModal.fechaUltimoMantenimiento) },
+                { label: "Próx. mantenimiento", val: fmt(detalleModal.proximoMantenimiento) },
+                { label: "Últ. servicio",       val: fmt(detalleModal.fechaUltimoServicio) },
+                { label: "Próx. servicio",      val: fmt(detalleModal.proximoServicio) },
+                { label: "Costo día",           val: detalleModal.costoDia    ? `$${detalleModal.costoDia.toLocaleString()}`    : null },
+                { label: "Costo semana",        val: detalleModal.costoSemana ? `$${detalleModal.costoSemana.toLocaleString()}` : null },
+                { label: "Costo mes",           val: detalleModal.costoMes    ? `$${detalleModal.costoMes.toLocaleString()}`    : null },
+                { label: "Costo anual",         val: detalleModal.costoAnual  ? `$${detalleModal.costoAnual.toLocaleString()}`  : null },
+                { label: "Precio venta",        val: detalleModal.precioVenta ? `$${detalleModal.precioVenta.toLocaleString()}` : null },
+                { label: "Cliente actual",      val: detalleModal.clienteActual?.nombre },
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
@@ -517,7 +516,7 @@ export default function Montacargas() {
 
       {/* ── Modal asignar cliente ── */}
       {asignarModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setAsignarModal(null)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setAsignarModal(null); }}>
           <div className="modal" style={{ maxWidth: 380 }}>
             <button className="modal-close" onClick={() => setAsignarModal(null)}>✕</button>
             <h2 className="modal-title">Asignar a cliente</h2>
