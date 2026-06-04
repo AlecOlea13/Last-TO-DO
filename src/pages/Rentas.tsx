@@ -16,8 +16,11 @@ type Renta = {
 };
 
 type Cliente     = { _id: string; nombre: string };
-type Montacargas = { _id: string; numeroEconomico: string; marca: string; modelo: string; estatus: string };
-type Asesor      = { _id: string; nombre: string };
+type Montacargas = {
+  _id: string; numeroEconomico: string; marca: string; modelo: string; estatus: string;
+  costoSemana?: number; costoMes?: number; costoAnual?: number;
+};
+type Asesor = { _id: string; nombre: string };
 
 const emptyForm = {
   cliente: "", montacargas: "", asesor: "", fechaInicio: "", fechaFin: "",
@@ -26,29 +29,25 @@ const emptyForm = {
 };
 
 const ESTATUS_BADGE: Record<string, string> = {
-  activa:    "badge-green",
-  vencida:   "badge-amber",
-  terminada: "badge-gray",
+  activa: "badge-green", vencida: "badge-amber", terminada: "badge-gray",
 };
 
 const PERIODO_LABEL: Record<string, string> = {
-  semanal: "📅 Semanal",
-  mensual: "🗓️ Mensual",
-  anual:   "📆 Anual",
+  semanal: "📅 Semanal", mensual: "🗓️ Mensual", anual: "📆 Anual",
 };
 
 export default function Rentas() {
-  const [rentas, setRentas]       = useState<Renta[]>([]);
-  const [clientes, setClientes]   = useState<Cliente[]>([]);
-  const [montas, setMontas]       = useState<Montacargas[]>([]);
-  const [asesores, setAsesores]   = useState<Asesor[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [filtro, setFiltro]       = useState("todos");
+  const [rentas, setRentas]         = useState<Renta[]>([]);
+  const [clientes, setClientes]     = useState<Cliente[]>([]);
+  const [montas, setMontas]         = useState<Montacargas[]>([]);
+  const [asesores, setAsesores]     = useState<Asesor[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [filtro, setFiltro]         = useState("todos");
   const [filtroAsesor, setFiltroAsesor] = useState("todos");
-  const [modal, setModal]         = useState(false);
-  const [form, setForm]           = useState<any>(emptyForm);
-  const [saving, setSaving]       = useState(false);
+  const [modal, setModal]           = useState(false);
+  const [form, setForm]             = useState<any>(emptyForm);
+  const [saving, setSaving]         = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -66,6 +65,29 @@ export default function Rentas() {
       setAsesores(a.data);
     } catch {}
     finally { setLoading(false); }
+  }
+
+  // ── Cuando cambia montacargas o periodo, auto-llenar precio ───────────────
+  function aplicarPrecioAutomatico(montaId: string, periodo: string) {
+    const m = montas.find(m => m._id === montaId);
+    if (!m) return;
+    const precios: Record<string, number> = {
+      semanal: m.costoSemana ?? 0,
+      mensual: m.costoMes    ?? 0,
+      anual:   m.costoAnual  ?? 0,
+    };
+    const precio = precios[periodo] ?? 0;
+    if (precio) setForm((p: any) => ({ ...p, precioMensual: precio }));
+  }
+
+  function handleMontaChange(montaId: string) {
+    setForm((p: any) => ({ ...p, montacargas: montaId }));
+    aplicarPrecioAutomatico(montaId, form.tipoPeriodo);
+  }
+
+  function handlePeriodoChange(periodo: string) {
+    setForm((p: any) => ({ ...p, tipoPeriodo: periodo }));
+    if (form.montacargas) aplicarPrecioAutomatico(form.montacargas, periodo);
   }
 
   async function save() {
@@ -91,30 +113,24 @@ export default function Rentas() {
       (r.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (r.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (r.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchFiltro  = filtro === "todos" || r.estatus === filtro;
-    const matchAsesor  = filtroAsesor === "todos" || r.asesor?._id === filtroAsesor;
+    const matchFiltro = filtro === "todos" || r.estatus === filtro;
+    const matchAsesor = filtroAsesor === "todos" || r.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
   });
 
- function fmt(date?: string) {
-  if (!date) return "—";
-  // Parsear sin conversión de zona horaria
-  const [year, month, day] = date.split("T")[0].split("-");
-  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric"
-  });
-}
+  function fmt(date?: string) {
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
 
   function diasRestantes(fechaFin?: string) {
     if (!fechaFin) return null;
     return Math.ceil((new Date(fechaFin).getTime() - Date.now()) / 86400000);
   }
 
-  const precioLabel = form.tipoPeriodo === "semanal"
-    ? "Precio semanal"
-    : form.tipoPeriodo === "anual"
-    ? "Precio anual"
-    : "Precio mensual";
+  const montaSeleccionada = montas.find(m => m._id === form.montacargas);
+  const precioLabel = form.tipoPeriodo === "semanal" ? "Precio semanal" : form.tipoPeriodo === "anual" ? "Precio anual" : "Precio mensual";
 
   return (
     <>
@@ -133,29 +149,16 @@ export default function Rentas() {
           <div className="table-card-header">
             <p className="table-card-title">Todas las rentas</p>
             <div className="table-toolbar">
-              <input
-                className="search-input"
-                placeholder="🔍 Buscar..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-              <select
-                className="form-select"
-                style={{ width: "auto", padding: "8px 14px" }}
-                value={filtro}
-                onChange={e => setFiltro(e.target.value)}
-              >
+              <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                value={filtro} onChange={e => setFiltro(e.target.value)}>
                 <option value="todos">Todas</option>
                 <option value="activa">Activas</option>
                 <option value="vencida">Vencidas</option>
                 <option value="terminada">Terminadas</option>
               </select>
-              <select
-                className="form-select"
-                style={{ width: "auto", padding: "8px 14px" }}
-                value={filtroAsesor}
-                onChange={e => setFiltroAsesor(e.target.value)}
-              >
+              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
                 <option value="todos">Todos los asesores</option>
                 {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
               </select>
@@ -173,18 +176,9 @@ export default function Rentas() {
             <table>
               <thead>
                 <tr>
-                  <th>Cliente</th>
-                  <th>Equipo</th>
-                  <th>Asesor</th>
-                  <th>Inicio</th>
-                  <th>Fin</th>
-                  <th>Periodo</th>
-                  <th>Precio</th>
-                  <th>Flete</th>
-                  <th>Depósito</th>
-                  <th>Días restantes</th>
-                  <th>Estatus</th>
-                  <th></th>
+                  <th>Cliente</th><th>Equipo</th><th>Asesor</th><th>Inicio</th><th>Fin</th>
+                  <th>Periodo</th><th>Precio</th><th>Flete</th><th>Depósito</th>
+                  <th>Días restantes</th><th>Estatus</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -230,77 +224,118 @@ export default function Rentas() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
           <div className="modal">
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">Nueva renta</h2>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Cliente *</label>
-                <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
+                <select className="form-select" value={form.cliente}
+                  onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
                   <option value="">Selecciona cliente...</option>
                   {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
                 </select>
               </div>
+
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
-                <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
+                <select className="form-select" value={form.montacargas}
+                  onChange={e => handleMontaChange(e.target.value)}>
                   <option value="">Selecciona equipo...</option>
                   {montas.map(m => (
                     <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>
                   ))}
                 </select>
               </div>
+
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Asesor</label>
-                <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
+                <select className="form-select" value={form.asesor}
+                  onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
                   <option value="">Sin asesor</option>
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
               </div>
+
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Tipo de periodo *</label>
-                <div style={{ display: "flex", gap: "10px" }}>
+                <div style={{ display: "flex", gap: 10 }}>
                   {(["semanal", "mensual", "anual"] as const).map(tipo => (
-                    <button
-                      key={tipo}
-                      type="button"
-                      onClick={() => setForm((p: any) => ({ ...p, tipoPeriodo: tipo }))}
+                    <button key={tipo} type="button"
+                      onClick={() => handlePeriodoChange(tipo)}
                       style={{
-                        flex: 1, padding: "10px", borderRadius: "8px", border: "2px solid",
+                        flex: 1, padding: "10px", borderRadius: 8, border: "2px solid",
                         borderColor: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)",
                         background: form.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)",
                         color: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)",
                         fontWeight: form.tipoPeriodo === tipo ? 700 : 400,
                         cursor: "pointer", transition: "all 0.15s",
-                      }}
-                    >
+                      }}>
                       {PERIODO_LABEL[tipo]}
                     </button>
                   ))}
                 </div>
               </div>
+
+              {/* Precios del equipo seleccionado */}
+              {montaSeleccionada && (
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <div style={{
+                    background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+                    borderRadius: "var(--radius-sm)", padding: "10px 14px",
+                    display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center",
+                  }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
+                      ⚡ Precios del equipo
+                    </span>
+                    {[
+                      { label: "Semanal", val: montaSeleccionada.costoSemana, key: "semanal" },
+                      { label: "Mensual", val: montaSeleccionada.costoMes,    key: "mensual" },
+                      { label: "Anual",   val: montaSeleccionada.costoAnual,  key: "anual"   },
+                    ].map(p => (
+                      <div key={p.key} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{p.label}</span>
+                        <span style={{
+                          fontWeight: 700, fontSize: "0.9rem",
+                          color: form.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)",
+                        }}>
+                          {p.val ? `$${p.val.toLocaleString()}` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
                 <label className="form-label">Fecha inicio *</label>
-                <input className="form-input" type="date" value={form.fechaInicio} onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaInicio}
+                  onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha fin</label>
-                <input className="form-input" type="date" value={form.fechaFin} onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaFin}
+                  onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))} />
               </div>
+
               <div className="form-group">
                 <label className="form-label">{precioLabel} *</label>
-                <input className="form-input" type="number" value={form.precioMensual} onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.precioMensual}
+                  onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Flete</label>
-                <input className="form-input" type="number" value={form.flete} onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.flete}
+                  onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Depósito</label>
-                <input className="form-input" type="number" value={form.deposito} onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.deposito}
+                  onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))} />
               </div>
             </div>
+
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>
