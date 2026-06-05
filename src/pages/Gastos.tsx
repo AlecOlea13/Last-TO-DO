@@ -49,6 +49,17 @@ const emptyNoFiscal = {
   asesor: "", entrada: "", monto: 0, descripcion: "", notas: "",
 };
 
+const emptyManual = {
+  nombreEmisor: "",
+  rfcEmisor: "",
+  folioFactura: "",
+  fechaEmision: new Date().toISOString().split("T")[0],
+  total: 0,
+  descripcion: "",
+  asesor: "",
+  notas: "",
+};
+
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
@@ -74,6 +85,11 @@ export default function Gastos() {
   const [formF, setFormF]             = useState<Partial<GastoFiscal>>({});
   const [xmlError, setXmlError]       = useState("");
   const [detalleF, setDetalleF]       = useState<GastoFiscal | null>(null);
+
+  // Captura manual
+  const [modalManual, setModalManual] = useState(false);
+  const [formManual, setFormManual]   = useState<any>(emptyManual);
+  const [savingManual, setSavingManual] = useState(false);
 
   const [modalNF, setModalNF]     = useState(false);
   const [editingNF, setEditingNF] = useState<GastoNoFiscal | null>(null);
@@ -229,6 +245,43 @@ export default function Gastos() {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setSavingF(false); }
+  }
+
+  // ── Captura manual ─────────────────────────────────────────────────────────
+  async function saveManual() {
+    if (!formManual.nombreEmisor || !formManual.total) return;
+    setSavingManual(true);
+    try {
+      const total = Number(formManual.total);
+      const iva   = Math.round(total / 1.16 * 0.16 * 100) / 100;
+      const subtotal = Math.round((total - iva) * 100) / 100;
+      const payload: any = {
+        nombreEmisor:  formManual.nombreEmisor,
+        rfcEmisor:     formManual.rfcEmisor || undefined,
+        fechaEmision:  formManual.fechaEmision,
+        total,
+        subtotal,
+        iva,
+        conceptos: [{
+          descripcion:   formManual.descripcion || formManual.nombreEmisor,
+          cantidad:      1,
+          valorUnitario: subtotal,
+          importe:       subtotal,
+        }],
+        notas: [
+          formManual.folioFactura ? `Folio: ${formManual.folioFactura}` : "",
+          formManual.notas,
+        ].filter(Boolean).join(" — ") || undefined,
+      };
+      if (formManual.asesor) payload.asesor = formManual.asesor;
+      const { data } = await api.post("/gastos", payload);
+      setFiscales(prev => [data, ...prev]);
+      setModalManual(false);
+      setFormManual(emptyManual);
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingManual(false); }
   }
 
   async function deleteFiscal(id: string) {
@@ -506,10 +559,19 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               </button>
             ))}
           </div>
-          {tab === "fiscal"
-            ? <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalFiscal(true); }}>+ Subir XML</button>
-            : <button className="btn btn-primary" onClick={openNewNF}>+ Nuevo gasto</button>
-          }
+          {tab === "fiscal" && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn btn-secondary" onClick={() => { setFormManual(emptyManual); setModalManual(true); }}>
+                ✏️ Captura manual
+              </button>
+              <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalFiscal(true); }}>
+                + Subir XML
+              </button>
+            </div>
+          )}
+          {tab === "nofiscal" && (
+            <button className="btn btn-primary" onClick={openNewNF}>+ Nuevo gasto</button>
+          )}
         </div>
       </div>
 
@@ -734,6 +796,79 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           </div>
         )}
       </div>
+
+      {/* ── Modal captura manual ── */}
+      {modalManual && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalManual(false); }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => setModalManual(false)}>✕</button>
+            <h2 className="modal-title">Captura manual de factura</h2>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Proveedor *</label>
+                <input className="form-input" value={formManual.nombreEmisor}
+                  onChange={e => setFormManual((p: any) => ({ ...p, nombreEmisor: e.target.value }))}
+                  placeholder="Nombre del proveedor" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">RFC</label>
+                <input className="form-input" value={formManual.rfcEmisor}
+                  onChange={e => setFormManual((p: any) => ({ ...p, rfcEmisor: e.target.value }))}
+                  placeholder="Opcional" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">No. Factura</label>
+                <input className="form-input" value={formManual.folioFactura}
+                  onChange={e => setFormManual((p: any) => ({ ...p, folioFactura: e.target.value }))}
+                  placeholder="Ej. FES2246" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha *</label>
+                <input className="form-input" type="date" value={formManual.fechaEmision}
+                  onChange={e => setFormManual((p: any) => ({ ...p, fechaEmision: e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Monto total con IVA *</label>
+                <input className="form-input" type="number" value={formManual.total}
+                  onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))}
+                  placeholder="0.00" />
+                {formManual.total > 0 && (
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+                    Subtotal: ${(formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formManual.total - formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Concepto / Descripción</label>
+                <input className="form-input" value={formManual.descripcion}
+                  onChange={e => setFormManual((p: any) => ({ ...p, descripcion: e.target.value }))}
+                  placeholder="Ej. Renta de montacargas enero" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formManual.asesor}
+                  onChange={e => setFormManual((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas</label>
+                <input className="form-input" value={formManual.notas}
+                  onChange={e => setFormManual((p: any) => ({ ...p, notas: e.target.value }))}
+                  placeholder="Opcional" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalManual(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveManual}
+                disabled={savingManual || !formManual.nombreEmisor || !formManual.total}>
+                {savingManual ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal subir XML fiscal ── */}
       {modalFiscal && (
