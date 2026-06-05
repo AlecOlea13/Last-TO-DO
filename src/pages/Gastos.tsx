@@ -62,12 +62,9 @@ const emptyManual = {
 
 const POR_PAGINA = 70;
 
+// Base64 data URLs se abren/descargan directo — no depende de Cloudinary
 function urlArchivo(url?: string): string {
   if (!url) return "";
-  // Forzar descarga del recurso original (sin transformaciones)
-  if (url.includes("/image/upload/")) {
-    return url.replace("/image/upload/", "/image/upload/fl_attachment/");
-  }
   return url;
 }
 
@@ -395,19 +392,22 @@ export default function Gastos() {
     setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
   }
 
+  // Convierte archivo a base64 y lo guarda directo en MongoDB
   async function subirArchivo(file: File): Promise<string> {
-  setUploadingPago(true);
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", "pipsa productos");
-  // Siempre usar image/upload — Cloudinary acepta PDFs aquí también
-  const res  = await fetch("https://api.cloudinary.com/v1_1/dijxgoytw/image/upload", { method: "POST", body: fd });
-  const data = await res.json();
-  setUploadingPago(false);
-  // Para PDFs, Cloudinary devuelve URL sin extensión — forzar .pdf
-  const url: string = data.secure_url;
-  return url;
-}
+    setUploadingPago(true);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setUploadingPago(false);
+        resolve(reader.result as string); // "data:application/pdf;base64,..."
+      };
+      reader.onerror = () => {
+        setUploadingPago(false);
+        reject(new Error("Error al leer el archivo"));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
   async function reemplazarComprobante(gastoId: string, file: File) {
     setReemplazandoComp(true);
@@ -580,8 +580,10 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
         )}
         {pagado && comprobante && (
-          <a href={urlArchivo(comprobante)} target="_blank" rel="noreferrer"
-            style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>Ver comprobante</a>
+          <a href={urlArchivo(comprobante)} download target="_blank" rel="noreferrer"
+            style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>
+            📎 Descargar comprobante
+          </a>
         )}
       </div>
     );
@@ -1153,9 +1155,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {detalleF.comprobantePago && (
-                  <a href={urlArchivo(detalleF.comprobantePago)} target="_blank" rel="noreferrer"
+                  <a href={urlArchivo(detalleF.comprobantePago)} download target="_blank" rel="noreferrer"
                     style={{ fontSize: "0.82rem", color: "var(--blue)" }}>
-                    📎 Ver comprobante
+                    📎 Descargar comprobante
                   </a>
                 )}
                 {canDelete && (
@@ -1169,9 +1171,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             )}
 
             {detalleF.complementoXml && (
-              <a href={urlArchivo(detalleF.complementoXml)} target="_blank" rel="noreferrer"
+              <a href={urlArchivo(detalleF.complementoXml)} download target="_blank" rel="noreferrer"
                 style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>
-                🗂️ Ver complemento XML
+                🗂️ Descargar complemento XML
               </a>
             )}
 
@@ -1235,14 +1237,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
                   <span style={{ fontSize: "1.3rem" }}>{uploadingPago ? "⏳" : "📎"}</span>
                   <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                    {formPago.comprobantePago ? "✅ Archivo subido" : uploadingPago ? "Subiendo..." : "Seleccionar archivo"}
+                    {formPago.comprobantePago ? "✅ Archivo listo" : uploadingPago ? "Procesando..." : "Seleccionar archivo"}
                   </span>
                   <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
                     onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, comprobantePago: url })); } }} />
                 </label>
                 {formPago.comprobantePago && (
-                  <a href={urlArchivo(formPago.comprobantePago)} target="_blank" rel="noreferrer"
-                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver archivo subido</a>
+                  <a href={urlArchivo(formPago.comprobantePago)} download target="_blank" rel="noreferrer"
+                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
+                    📎 Ver archivo seleccionado
+                  </a>
                 )}
               </div>
               {modalPago.tipo === "fiscal" && (
@@ -1251,14 +1255,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
                     <span style={{ fontSize: "1.3rem" }}>🗂️</span>
                     <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                      {formPago.complementoXml ? "✅ Complemento subido" : "Seleccionar XML"}
+                      {formPago.complementoXml ? "✅ Complemento listo" : "Seleccionar XML"}
                     </span>
-                    <input type="file" accept=".xml" style={{ display: "none" }}
+                    <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }}
                       onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, complementoXml: url })); } }} />
                   </label>
                   {formPago.complementoXml && (
-                    <a href={urlArchivo(formPago.complementoXml)} target="_blank" rel="noreferrer"
-                      style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver complemento subido</a>
+                    <a href={urlArchivo(formPago.complementoXml)} download target="_blank" rel="noreferrer"
+                      style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
+                      🗂️ Ver complemento seleccionado
+                    </a>
                   )}
                 </div>
               )}
