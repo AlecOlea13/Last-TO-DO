@@ -64,6 +64,10 @@ const POR_PAGINA = 70;
 
 function urlArchivo(url?: string): string {
   if (!url) return "";
+  // Forzar descarga del recurso original (sin transformaciones)
+  if (url.includes("/image/upload/")) {
+    return url.replace("/image/upload/", "/image/upload/fl_attachment/");
+  }
   return url;
 }
 
@@ -392,19 +396,18 @@ export default function Gastos() {
   }
 
   async function subirArchivo(file: File): Promise<string> {
-    setUploadingPago(true);
-    const esPDF = file.type === "application/pdf";
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", esPDF ? "pipsa-docs" : "pipsa productos");
-    const endpoint = esPDF
-      ? "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload"
-      : "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
-    const res  = await fetch(endpoint, { method: "POST", body: fd });
-    const data = await res.json();
-    setUploadingPago(false);
-    return data.secure_url;
-  }
+  setUploadingPago(true);
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", "pipsa productos");
+  // Siempre usar image/upload — Cloudinary acepta PDFs aquí también
+  const res  = await fetch("https://api.cloudinary.com/v1_1/dijxgoytw/image/upload", { method: "POST", body: fd });
+  const data = await res.json();
+  setUploadingPago(false);
+  // Para PDFs, Cloudinary devuelve URL sin extensión — forzar .pdf
+  const url: string = data.secure_url;
+  return url;
+}
 
   async function reemplazarComprobante(gastoId: string, file: File) {
     setReemplazandoComp(true);
