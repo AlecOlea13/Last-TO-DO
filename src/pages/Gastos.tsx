@@ -60,15 +60,11 @@ const emptyManual = {
   notas: "",
 };
 
-// const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
-// const UPLOAD_PRESET  = "pipsa productos";
-const POR_PAGINA     = 70;
+const POR_PAGINA = 70;
 
-// Fuerza visualización/descarga correcta de archivos en Cloudinary
 function urlArchivo(url?: string): string {
   if (!url) return "";
-  return url.replace("/raw/upload/", "/raw/upload/fl_attachment/")
-            .replace("/image/upload/", "/raw/upload/fl_attachment/");
+  return url;
 }
 
 export default function Gastos() {
@@ -111,6 +107,8 @@ export default function Gastos() {
   const [formPago, setFormPago]           = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
   const [savingPago, setSavingPago]       = useState(false);
   const [uploadingPago, setUploadingPago] = useState(false);
+
+  const [reemplazandoComp, setReemplazandoComp] = useState(false);
 
   const [paginaF, setPaginaF]   = useState(1);
   const [paginaNF, setPaginaNF] = useState(1);
@@ -208,7 +206,6 @@ export default function Gastos() {
           valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || "0"),
           importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
-        // Solo leer IVA del nodo Impuestos raíz, no de cada concepto
         let iva = 0;
         const impuestos = cfdi.querySelector("Impuestos") ?? cfdi.getElementsByTagName("Impuestos")[0];
         if (impuestos) {
@@ -395,20 +392,31 @@ export default function Gastos() {
   }
 
   async function subirArchivo(file: File): Promise<string> {
-  setUploadingPago(true);
-  const esPDF = file.type === "application/pdf";
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", esPDF ? "pipsa-docs" : "pipsa productos");
-  if (esPDF) fd.append("resource_type", "raw");
-  const endpoint = esPDF
-    ? "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload"
-    : "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
-  const res  = await fetch(endpoint, { method: "POST", body: fd });
-  const data = await res.json();
-  setUploadingPago(false);
-  return data.secure_url;
-}
+    setUploadingPago(true);
+    const esPDF = file.type === "application/pdf";
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", esPDF ? "pipsa-docs" : "pipsa productos");
+    const endpoint = esPDF
+      ? "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload"
+      : "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
+    const res  = await fetch(endpoint, { method: "POST", body: fd });
+    const data = await res.json();
+    setUploadingPago(false);
+    return data.secure_url;
+  }
+
+  async function reemplazarComprobante(gastoId: string, file: File) {
+    setReemplazandoComp(true);
+    try {
+      const url = await subirArchivo(file);
+      const { data } = await api.put(`/gastos/${gastoId}`, { comprobantePago: url });
+      setFiscales(prev => prev.map(g => g._id === gastoId ? { ...g, comprobantePago: data.comprobantePago } : g));
+      setDetalleF(prev => prev ? { ...prev, comprobantePago: data.comprobantePago } : null);
+      alert("✅ Comprobante actualizado");
+    } catch { alert("Error al reemplazar comprobante"); }
+    finally { setReemplazandoComp(false); }
+  }
 
   async function registrarPago() {
     if (!modalPago) return;
@@ -552,7 +560,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     { label: "Total general", val: sumaNoFiscal() },
   ];
 
-  // ── Subcomponentes ────────────────────────────────────────────────────────
   function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
     const pagado = estatus === "pagado";
     return (
@@ -679,7 +686,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           ))}
         </div>
 
-        {/* ── Tabla fiscal — reorganizada con cards en lugar de scroll horizontal ── */}
+        {/* ── Tabla fiscal ── */}
         {tab === "fiscal" && (
           <div className="table-card">
             <div className="table-card-header">
@@ -729,17 +736,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       alignItems: "start",
                       fontSize: "0.8rem",
                     }}>
-                      {/* Fecha + quien */}
                       <div>
                         <p style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{g.asesor?.nombre ?? "—"}</p>
                       </div>
-                      {/* Proveedor + RFC */}
                       <div>
                         <p style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</p>
                         <p style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)", marginTop: 2 }}>{g.rfcEmisor ?? "—"}</p>
                       </div>
-                      {/* Concepto + notas */}
                       <div>
                         <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
                           {g.conceptos[0]?.descripcion?.slice(0, 60) ?? "—"}
@@ -747,22 +751,18 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         </p>
                         {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>{g.notas.slice(0, 40)}</p>}
                       </div>
-                      {/* Subtotal + IVA */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ whiteSpace: "nowrap" }}>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
-                      {/* Total */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
                           ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                         </p>
                       </div>
-                      {/* Estatus */}
                       <div>
                         <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
                       </div>
-                      {/* Acciones */}
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
                         {canDelete && (
@@ -780,22 +780,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                     </div>
                   ))}
                 </div>
-                {/* Header fijo arriba */}
-                <style>{`
-                  .gastos-header {
-                    display: grid;
-                    grid-template-columns: 110px 1fr 1fr 100px 100px 120px 130px;
-                    gap: 0;
-                    padding: 8px 20px;
-                    background: var(--surface2);
-                    border-bottom: 1px solid var(--border);
-                    font-size: 0.7rem;
-                    font-weight: 700;
-                    color: var(--text-muted);
-                    text-transform: uppercase;
-                    letter-spacing: 0.06em;
-                  }
-                `}</style>
                 <Paginador total={totalPaginasF} pag={paginaF} count={filteredF.length} set={setPaginaF} />
               </>
             )}
@@ -861,7 +845,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                           <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.entrada ?? "—"}</p></div>
                           <div><p style={{ fontWeight: 600 }}>${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p></div>
                           <div><p style={{ color: "var(--text-muted)" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p></div>
-                          <div><p style={{ fontWeight: 500, fontSize: "0.78rem" }}>{g.descripcion}</p>
+                          <div>
+                            <p style={{ fontWeight: 500, fontSize: "0.78rem" }}>{g.descripcion}</p>
                             {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{g.notas}</p>}
                           </div>
                           <div>
@@ -1160,18 +1145,33 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
               ) : null)}
             </div>
-            {detalleF.comprobantePago && (
-              <a href={urlArchivo(detalleF.comprobantePago)} target="_blank" rel="noreferrer"
-                style={{ display: "inline-block", marginTop: 8, fontSize: "0.82rem", color: "var(--blue)" }}>
-                📎 Ver comprobante de pago
-              </a>
+
+            {/* Comprobante + reemplazar */}
+            {detalleF.estatus === "pagado" && (
+              <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                {detalleF.comprobantePago && (
+                  <a href={urlArchivo(detalleF.comprobantePago)} target="_blank" rel="noreferrer"
+                    style={{ fontSize: "0.82rem", color: "var(--blue)" }}>
+                    📎 Ver comprobante
+                  </a>
+                )}
+                {canDelete && (
+                  <label style={{ cursor: "pointer", fontSize: "0.82rem", color: "var(--accent)", display: "flex", alignItems: "center", gap: 4 }}>
+                    {reemplazandoComp ? "⏳ Subiendo..." : "🔄 Reemplazar comprobante"}
+                    <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) reemplazarComprobante(detalleF._id, f); }} />
+                  </label>
+                )}
+              </div>
             )}
+
             {detalleF.complementoXml && (
               <a href={urlArchivo(detalleF.complementoXml)} target="_blank" rel="noreferrer"
-                style={{ display: "inline-block", marginTop: 4, fontSize: "0.82rem", color: "var(--blue)", marginLeft: 12 }}>
+                style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>
                 🗂️ Ver complemento XML
               </a>
             )}
+
             {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
