@@ -87,9 +87,15 @@ export default function Gastos() {
   const [detalleF, setDetalleF]       = useState<GastoFiscal | null>(null);
 
   // Captura manual
-  const [modalManual, setModalManual] = useState(false);
-  const [formManual, setFormManual]   = useState<any>(emptyManual);
+  const [modalManual, setModalManual]   = useState(false);
+  const [formManual, setFormManual]     = useState<any>(emptyManual);
   const [savingManual, setSavingManual] = useState(false);
+
+  // Edición fiscal
+  const [editingF, setEditingF]         = useState<GastoFiscal | null>(null);
+  const [modalEditF, setModalEditF]     = useState(false);
+  const [formEditF, setFormEditF]       = useState<any>({});
+  const [savingEditF, setSavingEditF]   = useState(false);
 
   const [modalNF, setModalNF]     = useState(false);
   const [editingNF, setEditingNF] = useState<GastoNoFiscal | null>(null);
@@ -252,16 +258,14 @@ export default function Gastos() {
     if (!formManual.nombreEmisor || !formManual.total) return;
     setSavingManual(true);
     try {
-      const total = Number(formManual.total);
-      const iva   = Math.round(total / 1.16 * 0.16 * 100) / 100;
+      const total    = Number(formManual.total);
+      const iva      = Math.round(total / 1.16 * 0.16 * 100) / 100;
       const subtotal = Math.round((total - iva) * 100) / 100;
       const payload: any = {
         nombreEmisor:  formManual.nombreEmisor,
         rfcEmisor:     formManual.rfcEmisor || undefined,
         fechaEmision:  formManual.fechaEmision,
-        total,
-        subtotal,
-        iva,
+        total, subtotal, iva,
         conceptos: [{
           descripcion:   formManual.descripcion || formManual.nombreEmisor,
           cantidad:      1,
@@ -282,6 +286,54 @@ export default function Gastos() {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setSavingManual(false); }
+  }
+
+  // ── Edición fiscal ─────────────────────────────────────────────────────────
+  function openEditF(g: GastoFiscal) {
+    setEditingF(g);
+    setFormEditF({
+      nombreEmisor: g.nombreEmisor ?? "",
+      rfcEmisor:    g.rfcEmisor    ?? "",
+      fechaEmision: g.fechaEmision ? g.fechaEmision.split("T")[0] : "",
+      total:        g.total,
+      descripcion:  g.conceptos[0]?.descripcion ?? "",
+      asesor:       g.asesor?._id ?? "",
+      notas:        g.notas ?? "",
+    });
+    setModalEditF(true);
+  }
+
+  async function saveEditF() {
+    if (!editingF || !formEditF.nombreEmisor || !formEditF.total) return;
+    setSavingEditF(true);
+    try {
+      const total    = Number(formEditF.total);
+      const iva      = Math.round(total / 1.16 * 0.16 * 100) / 100;
+      const subtotal = Math.round((total - iva) * 100) / 100;
+      const payload: any = {
+        nombreEmisor: formEditF.nombreEmisor,
+        rfcEmisor:    formEditF.rfcEmisor || undefined,
+        fechaEmision: formEditF.fechaEmision,
+        total, subtotal, iva,
+        notas: formEditF.notas || undefined,
+      };
+      if (formEditF.asesor) payload.asesor = formEditF.asesor;
+      if (formEditF.descripcion) {
+        payload.conceptos = [{
+          descripcion:   formEditF.descripcion,
+          cantidad:      1,
+          valorUnitario: subtotal,
+          importe:       subtotal,
+        }];
+      }
+      const { data } = await api.put(`/gastos/${editingF._id}`, payload);
+      setFiscales(prev => prev.map(g => g._id === editingF._id ? { ...g, ...data } : g));
+      setModalEditF(false);
+      setEditingF(null);
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingEditF(false); }
   }
 
   async function deleteFiscal(id: string) {
@@ -667,7 +719,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       <th style={{ minWidth: 90 }}>Total</th>
                       <th style={{ minWidth: 100 }}>Notas</th>
                       <th style={{ minWidth: 110 }}>Estatus</th>
-                      <th style={{ minWidth: 90 }}></th>
+                      <th style={{ minWidth: 110 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -690,6 +742,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         <td>
                           <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)}>👁️</button>
+                            {canDelete && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)}>✏️</button>
+                            )}
                             {g.estatus !== "pagado" && canDelete && (
                               <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
                                 onClick={() => abrirModalPago(g._id, "fiscal")}>💳</button>
@@ -864,6 +919,72 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <button className="btn btn-primary" onClick={saveManual}
                 disabled={savingManual || !formManual.nombreEmisor || !formManual.total}>
                 {savingManual ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal editar fiscal ── */}
+      {modalEditF && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalEditF(false); }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => setModalEditF(false)}>✕</button>
+            <h2 className="modal-title">Editar factura fiscal</h2>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Proveedor *</label>
+                <input className="form-input" value={formEditF.nombreEmisor}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, nombreEmisor: e.target.value }))}
+                  placeholder="Nombre del proveedor" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">RFC</label>
+                <input className="form-input" value={formEditF.rfcEmisor}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))}
+                  placeholder="Opcional" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha</label>
+                <input className="form-input" type="date" value={formEditF.fechaEmision}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, fechaEmision: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Monto total con IVA *</label>
+                <input className="form-input" type="number" value={formEditF.total}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, total: +e.target.value }))} />
+                {formEditF.total > 0 && (
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+                    Subtotal: ${(formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formEditF.total - formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Concepto / Descripción</label>
+                <input className="form-input" value={formEditF.descripcion}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))}
+                  placeholder="Ej. Renta de montacargas enero" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formEditF.asesor}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Notas</label>
+                <input className="form-input" value={formEditF.notas}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, notas: e.target.value }))}
+                  placeholder="Opcional" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalEditF(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveEditF}
+                disabled={savingEditF || !formEditF.nombreEmisor || !formEditF.total}>
+                {savingEditF ? "Guardando..." : "Actualizar"}
               </button>
             </div>
           </div>
@@ -1050,6 +1171,12 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
+              {canDelete && (
+                <button className="btn btn-secondary"
+                  onClick={() => { setDetalleF(null); openEditF(detalleF); }}>
+                  ✏️ Editar
+                </button>
+              )}
               {detalleF.estatus !== "pagado" && canDelete && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
                   onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal"); }}>
