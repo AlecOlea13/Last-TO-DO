@@ -650,3 +650,54 @@ function abrirVentana(html: string) {
   if (win) win.focus();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+export async function descargarPDF(cot: CotizacionReporte) {
+  const { default: jsPDF } = await import("jspdf");
+  const { default: html2canvas } = await import("html2canvas");
+
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? htmlVentaRenta(cot)
+    : htmlServicio(cot);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:850px;height:2000px;border:none;visibility:hidden;";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument!;
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  await new Promise(r => setTimeout(r, 1500));
+
+  const canvas = await html2canvas(doc.body, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    width: 850,
+    windowWidth: 850,
+    backgroundColor: "#ffffff",
+  });
+
+  document.body.removeChild(iframe);
+
+  const pdf   = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgW  = pageW;
+  const imgH  = (canvas.height * pageW) / canvas.width;
+
+  let yOffset = 0;
+  let page    = 0;
+
+  while (yOffset < imgH) {
+    if (page > 0) pdf.addPage();
+    pdf.addImage(
+      canvas.toDataURL("image/jpeg", 0.92),
+      "JPEG", 0, -yOffset, imgW, imgH
+    );
+    yOffset += pageH;
+    page++;
+  }
+
+  pdf.save(`${cot.folio}.pdf`);
+}

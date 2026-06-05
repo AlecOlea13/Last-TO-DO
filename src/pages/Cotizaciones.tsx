@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { generarReporte, imprimirReporte } from "../utils/generarReporte";
+// import { generarReporte, imprimirReporte } from "../utils/generarReporte";
+import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
 type SubConcepto = { descripcion: string; precio: number };
 type Item = {
@@ -631,7 +632,7 @@ export default function Cotizaciones() {
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
-                        <button className="btn btn-primary btn-sm" onClick={() => imprimirReporte(c)} title="Imprimir">🖨️</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => descargarPDF(c)} title="Descargar PDF">📥 PDF</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
                         <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
                       </div>
