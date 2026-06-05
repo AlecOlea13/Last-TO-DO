@@ -60,8 +60,8 @@ const emptyManual = {
   notas: "",
 };
 
-const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
-const UPLOAD_PRESET  = "pipsa productos";
+// const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
+// const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
 // Fuerza visualización/descarga correcta de archivos en Cloudinary
@@ -395,15 +395,20 @@ export default function Gastos() {
   }
 
   async function subirArchivo(file: File): Promise<string> {
-    setUploadingPago(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", UPLOAD_PRESET);
-    const res  = await fetch(CLOUDINARY_RAW, { method: "POST", body: fd });
-    const data = await res.json();
-    setUploadingPago(false);
-    return data.secure_url;
-  }
+  setUploadingPago(true);
+  const esPDF = file.type === "application/pdf";
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", esPDF ? "pipsa-docs" : "pipsa productos");
+  if (esPDF) fd.append("resource_type", "raw");
+  const endpoint = esPDF
+    ? "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload"
+    : "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
+  const res  = await fetch(endpoint, { method: "POST", body: fd });
+  const data = await res.json();
+  setUploadingPago(false);
+  return data.secure_url;
+}
 
   async function registrarPago() {
     if (!modalPago) return;
