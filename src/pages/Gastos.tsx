@@ -60,7 +60,7 @@ const emptyManual = {
   notas: "",
 };
 
-const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
+const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
@@ -206,15 +206,18 @@ export default function Gastos() {
           importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
         let iva = 0;
-        const traslados = Array.from(
-          cfdi.querySelectorAll("Traslado").length > 0
-            ? cfdi.querySelectorAll("Traslado")
-            : cfdi.getElementsByTagName("Traslado")
-        );
-        traslados.forEach(t => {
-          const imp = parseFloat(getAttr(t, "Importe") || "0");
-          if (!isNaN(imp)) iva += imp;
-        });
+        const impuestos = cfdi.querySelector("Impuestos") ?? cfdi.getElementsByTagName("Impuestos")[0];
+        if (impuestos) {
+          const traslados = Array.from(
+            impuestos.querySelectorAll("Traslado").length > 0
+              ? impuestos.querySelectorAll("Traslado")
+              : impuestos.getElementsByTagName("Traslado")
+          );
+          traslados.forEach(t => {
+            const imp = parseFloat(getAttr(t, "Importe") || "0");
+            if (!isNaN(imp)) iva += imp;
+          });
+        }
         setFormF(prev => ({
           ...prev,
           uuid:           getAttr(timbre, "UUID")    || getAttr(timbre, "uuid"),
