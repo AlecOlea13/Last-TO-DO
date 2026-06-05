@@ -60,9 +60,16 @@ const emptyManual = {
   notas: "",
 };
 
-const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
+const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
+
+// Fuerza visualización/descarga correcta de archivos en Cloudinary
+function urlArchivo(url?: string): string {
+  if (!url) return "";
+  return url.replace("/raw/upload/", "/raw/upload/fl_attachment/")
+            .replace("/image/upload/", "/raw/upload/fl_attachment/");
+}
 
 export default function Gastos() {
   const rol       = localStorage.getItem("rol") ?? "";
@@ -86,16 +93,14 @@ export default function Gastos() {
   const [xmlError, setXmlError]       = useState("");
   const [detalleF, setDetalleF]       = useState<GastoFiscal | null>(null);
 
-  // Captura manual
   const [modalManual, setModalManual]   = useState(false);
   const [formManual, setFormManual]     = useState<any>(emptyManual);
   const [savingManual, setSavingManual] = useState(false);
 
-  // Edición fiscal
-  const [editingF, setEditingF]         = useState<GastoFiscal | null>(null);
-  const [modalEditF, setModalEditF]     = useState(false);
-  const [formEditF, setFormEditF]       = useState<any>({});
-  const [savingEditF, setSavingEditF]   = useState(false);
+  const [editingF, setEditingF]       = useState<GastoFiscal | null>(null);
+  const [modalEditF, setModalEditF]   = useState(false);
+  const [formEditF, setFormEditF]     = useState<any>({});
+  const [savingEditF, setSavingEditF] = useState(false);
 
   const [modalNF, setModalNF]     = useState(false);
   const [editingNF, setEditingNF] = useState<GastoNoFiscal | null>(null);
@@ -139,7 +144,7 @@ export default function Gastos() {
 
   function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
     if (!dateStr) return false;
-    const d   = new Date(dateStr);
+    const d = new Date(dateStr);
     const now = new Date();
     if (tipo === "semana") {
       const lunes = new Date(now);
@@ -158,7 +163,6 @@ export default function Gastos() {
   function sumaFiscal(tipo?: "semana" | "mes" | "año") {
     return fiscales.filter(g => tipo ? enRango(g.fechaEmision, tipo) : true).reduce((acc, g) => acc + g.total, 0);
   }
-
   function sumaNoFiscal(tipo?: "semana" | "mes" | "año") {
     return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
   }
@@ -168,7 +172,6 @@ export default function Gastos() {
     const [year, month, day] = date.split("T")[0].split("-");
     return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
-
   function fmtCorto(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
@@ -205,6 +208,7 @@ export default function Gastos() {
           valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || "0"),
           importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
+        // Solo leer IVA del nodo Impuestos raíz, no de cada concepto
         let iva = 0;
         const impuestos = cfdi.querySelector("Impuestos") ?? cfdi.getElementsByTagName("Impuestos")[0];
         if (impuestos) {
@@ -256,7 +260,6 @@ export default function Gastos() {
     finally { setSavingF(false); }
   }
 
-  // ── Captura manual ─────────────────────────────────────────────────────────
   async function saveManual() {
     if (!formManual.nombreEmisor || !formManual.total) return;
     setSavingManual(true);
@@ -265,9 +268,9 @@ export default function Gastos() {
       const iva      = Math.round(total / 1.16 * 0.16 * 100) / 100;
       const subtotal = Math.round((total - iva) * 100) / 100;
       const payload: any = {
-        nombreEmisor:  formManual.nombreEmisor,
-        rfcEmisor:     formManual.rfcEmisor || undefined,
-        fechaEmision:  formManual.fechaEmision,
+        nombreEmisor: formManual.nombreEmisor,
+        rfcEmisor:    formManual.rfcEmisor || undefined,
+        fechaEmision: formManual.fechaEmision,
         total, subtotal, iva,
         conceptos: [{
           descripcion:   formManual.descripcion || formManual.nombreEmisor,
@@ -291,7 +294,6 @@ export default function Gastos() {
     finally { setSavingManual(false); }
   }
 
-  // ── Edición fiscal ─────────────────────────────────────────────────────────
   function openEditF(g: GastoFiscal) {
     setEditingF(g);
     setFormEditF({
@@ -545,6 +547,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     { label: "Total general", val: sumaNoFiscal() },
   ];
 
+  // ── Subcomponentes ────────────────────────────────────────────────────────
   function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
     const pagado = estatus === "pagado";
     return (
@@ -562,7 +565,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
         )}
         {pagado && comprobante && (
-          <a href={comprobante} target="_blank" rel="noreferrer"
+          <a href={urlArchivo(comprobante)} target="_blank" rel="noreferrer"
             style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>Ver comprobante</a>
         )}
       </div>
@@ -671,9 +674,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           ))}
         </div>
 
-        {/* ── Tabla fiscal ── */}
+        {/* ── Tabla fiscal — reorganizada con cards en lugar de scroll horizontal ── */}
         {tab === "fiscal" && (
-          <div className="table-card" style={{ overflowX: "auto" }}>
+          <div className="table-card">
             <div className="table-card-header">
               <p className="table-card-title">Facturas fiscales</p>
               <div className="table-toolbar">
@@ -709,56 +712,85 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
             ) : (
               <>
-                <table style={{ fontSize: "0.8rem" }}>
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 90 }}>Fecha</th>
-                      <th style={{ minWidth: 100 }}>Quien</th>
-                      <th style={{ minWidth: 140 }}>Proveedor</th>
-                      <th style={{ minWidth: 110 }}>RFC</th>
-                      <th style={{ minWidth: 160 }}>Concepto</th>
-                      <th style={{ minWidth: 90 }}>Subtotal</th>
-                      <th style={{ minWidth: 80 }}>IVA</th>
-                      <th style={{ minWidth: 90 }}>Total</th>
-                      <th style={{ minWidth: 100 }}>Notas</th>
-                      <th style={{ minWidth: 110 }}>Estatus</th>
-                      <th style={{ minWidth: 110 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginadosF.map(g => (
-                      <tr key={g._id}>
-                        <td style={{ whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</td>
-                        <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</td>
-                        <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{g.nombreEmisor ?? "—"}</td>
-                        <td style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)" }}>{g.rfcEmisor ?? "—"}</td>
-                        <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          {g.conceptos[0]?.descripcion?.slice(0, 45) ?? "—"}
-                          {(g.conceptos[0]?.descripcion?.length ?? 0) > 45 ? "..." : ""}
-                          {g.conceptos.length > 1 && <span style={{ marginLeft: 4, fontSize: "0.68rem", background: "var(--surface3)", padding: "1px 4px", borderRadius: 4 }}>+{g.conceptos.length - 1}</span>}
-                        </td>
-                        <td style={{ whiteSpace: "nowrap" }}>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                        <td style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                        <td style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                        <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
-                        <td><EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} /></td>
-                        <td>
-                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)}>👁️</button>
-                            {canDelete && (
-                              <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)}>✏️</button>
-                            )}
-                            {g.estatus !== "pagado" && canDelete && (
-                              <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                                onClick={() => abrirModalPago(g._id, "fiscal")}>💳</button>
-                            )}
-                            {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)}>🗑️</button>}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {paginadosF.map((g, idx) => (
+                    <div key={g._id} style={{
+                      display: "grid",
+                      gridTemplateColumns: "110px 1fr 1fr 100px 100px 120px 130px",
+                      gap: 0,
+                      padding: "12px 20px",
+                      borderBottom: "1px solid var(--border)",
+                      background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                      alignItems: "start",
+                      fontSize: "0.8rem",
+                    }}>
+                      {/* Fecha + quien */}
+                      <div>
+                        <p style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{g.asesor?.nombre ?? "—"}</p>
+                      </div>
+                      {/* Proveedor + RFC */}
+                      <div>
+                        <p style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</p>
+                        <p style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)", marginTop: 2 }}>{g.rfcEmisor ?? "—"}</p>
+                      </div>
+                      {/* Concepto + notas */}
+                      <div>
+                        <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                          {g.conceptos[0]?.descripcion?.slice(0, 60) ?? "—"}
+                          {(g.conceptos[0]?.descripcion?.length ?? 0) > 60 ? "..." : ""}
+                        </p>
+                        {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>{g.notas.slice(0, 40)}</p>}
+                      </div>
+                      {/* Subtotal + IVA */}
+                      <div style={{ textAlign: "right" }}>
+                        <p style={{ whiteSpace: "nowrap" }}>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                      </div>
+                      {/* Total */}
+                      <div style={{ textAlign: "right" }}>
+                        <p style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
+                          ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      {/* Estatus */}
+                      <div>
+                        <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
+                      </div>
+                      {/* Acciones */}
+                      <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
+                        {canDelete && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)} title="Editar">✏️</button>
+                        )}
+                        {g.estatus !== "pagado" && canDelete && (
+                          <button className="btn btn-secondary btn-sm"
+                            style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                            onClick={() => abrirModalPago(g._id, "fiscal")} title="Registrar pago">💳</button>
+                        )}
+                        {canDelete && (
+                          <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)} title="Eliminar">🗑️</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Header fijo arriba */}
+                <style>{`
+                  .gastos-header {
+                    display: grid;
+                    grid-template-columns: 110px 1fr 1fr 100px 100px 120px 130px;
+                    gap: 0;
+                    padding: 8px 20px;
+                    background: var(--surface2);
+                    border-bottom: 1px solid var(--border);
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    color: var(--text-muted);
+                    text-transform: uppercase;
+                    letter-spacing: 0.06em;
+                  }
+                `}</style>
                 <Paginador total={totalPaginasF} pag={paginaF} count={filteredF.length} set={setPaginaF} />
               </>
             )}
@@ -767,7 +799,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
 
         {/* ── Tabla no fiscal ── */}
         {tab === "nofiscal" && (
-          <div className="table-card" style={{ overflowX: "auto" }}>
+          <div className="table-card">
             <div className="table-card-header">
               <p className="table-card-title">Gastos no fiscales</p>
               <div className="table-toolbar">
@@ -803,51 +835,47 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
             ) : (
               <>
-                <table style={{ fontSize: "0.8rem" }}>
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 90 }}>Fecha</th>
-                      <th style={{ minWidth: 100 }}>Quien</th>
-                      <th style={{ minWidth: 80 }}>Entrada</th>
-                      <th style={{ minWidth: 100 }}>Monto</th>
-                      <th style={{ minWidth: 100 }}>Acumulado</th>
-                      <th style={{ minWidth: 180 }}>Descripción</th>
-                      <th style={{ minWidth: 100 }}>Notas</th>
-                      <th style={{ minWidth: 110 }}>Estatus</th>
-                      <th style={{ minWidth: 90 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      let acum = 0;
-                      return paginadosNF.map(g => {
-                        acum += g.monto;
-                        return (
-                          <tr key={g._id}>
-                            <td style={{ whiteSpace: "nowrap" }}>{fmt(g.fecha)}</td>
-                            <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</td>
-                            <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{g.entrada ?? "—"}</td>
-                            <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                            <td style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                            <td style={{ fontWeight: 500, fontSize: "0.78rem" }}>{g.descripcion}</td>
-                            <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.notas ?? "—"}</td>
-                            <td><EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} /></td>
-                            <td>
-                              <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                                <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
-                                {g.estatus !== "pagado" && canDelete && (
-                                  <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                                    onClick={() => abrirModalPago(g._id, "nofiscal")}>💳</button>
-                                )}
-                                {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️</button>}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {(() => {
+                    let acum = 0;
+                    return paginadosNF.map((g, idx) => {
+                      acum += g.monto;
+                      return (
+                        <div key={g._id} style={{
+                          display: "grid",
+                          gridTemplateColumns: "110px 90px 80px 110px 110px 1fr 120px 90px",
+                          gap: 0,
+                          padding: "12px 20px",
+                          borderBottom: "1px solid var(--border)",
+                          background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                          alignItems: "start",
+                          fontSize: "0.8rem",
+                        }}>
+                          <div><p style={{ whiteSpace: "nowrap" }}>{fmt(g.fecha)}</p></div>
+                          <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</p></div>
+                          <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.entrada ?? "—"}</p></div>
+                          <div><p style={{ fontWeight: 600 }}>${g.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p></div>
+                          <div><p style={{ color: "var(--text-muted)" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p></div>
+                          <div><p style={{ fontWeight: 500, fontSize: "0.78rem" }}>{g.descripcion}</p>
+                            {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{g.notas}</p>}
+                          </div>
+                          <div>
+                            <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
+                          </div>
+                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
+                            {g.estatus !== "pagado" && canDelete && (
+                              <button className="btn btn-secondary btn-sm"
+                                style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                                onClick={() => abrirModalPago(g._id, "nofiscal")}>💳</button>
+                            )}
+                            {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️</button>}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
                 <Paginador total={totalPaginasNF} pag={paginaNF} count={filteredNF.length} set={setPaginaNF} />
               </>
             )}
@@ -888,8 +916,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="form-group span-2">
                 <label className="form-label">Monto total con IVA *</label>
                 <input className="form-input" type="number" value={formManual.total}
-                  onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))}
-                  placeholder="0.00" />
+                  onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))} placeholder="0.00" />
                 {formManual.total > 0 && (
                   <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
                     Subtotal: ${(formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formManual.total - formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
@@ -913,8 +940,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="form-group">
                 <label className="form-label">Notas</label>
                 <input className="form-input" value={formManual.notas}
-                  onChange={e => setFormManual((p: any) => ({ ...p, notas: e.target.value }))}
-                  placeholder="Opcional" />
+                  onChange={e => setFormManual((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
             <div className="modal-footer">
@@ -938,14 +964,12 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="form-group">
                 <label className="form-label">Proveedor *</label>
                 <input className="form-input" value={formEditF.nombreEmisor}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, nombreEmisor: e.target.value }))}
-                  placeholder="Nombre del proveedor" />
+                  onChange={e => setFormEditF((p: any) => ({ ...p, nombreEmisor: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">RFC</label>
                 <input className="form-input" value={formEditF.rfcEmisor}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))}
-                  placeholder="Opcional" />
+                  onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" />
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha</label>
@@ -965,8 +989,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="form-group span-2">
                 <label className="form-label">Concepto / Descripción</label>
                 <input className="form-input" value={formEditF.descripcion}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))}
-                  placeholder="Ej. Renta de montacargas enero" />
+                  onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Quien realizó el gasto</label>
@@ -979,8 +1002,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div className="form-group">
                 <label className="form-label">Notas</label>
                 <input className="form-input" value={formEditF.notas}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, notas: e.target.value }))}
-                  placeholder="Opcional" />
+                  onChange={e => setFormEditF((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" />
               </div>
             </div>
             <div className="modal-footer">
@@ -1134,13 +1156,13 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               ) : null)}
             </div>
             {detalleF.comprobantePago && (
-              <a href={detalleF.comprobantePago} target="_blank" rel="noreferrer"
+              <a href={urlArchivo(detalleF.comprobantePago)} target="_blank" rel="noreferrer"
                 style={{ display: "inline-block", marginTop: 8, fontSize: "0.82rem", color: "var(--blue)" }}>
                 📎 Ver comprobante de pago
               </a>
             )}
             {detalleF.complementoXml && (
-              <a href={detalleF.complementoXml} target="_blank" rel="noreferrer"
+              <a href={urlArchivo(detalleF.complementoXml)} target="_blank" rel="noreferrer"
                 style={{ display: "inline-block", marginTop: 4, fontSize: "0.82rem", color: "var(--blue)", marginLeft: 12 }}>
                 🗂️ Ver complemento XML
               </a>
@@ -1175,10 +1197,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
               {canDelete && (
-                <button className="btn btn-secondary"
-                  onClick={() => { setDetalleF(null); openEditF(detalleF); }}>
-                  ✏️ Editar
-                </button>
+                <button className="btn btn-secondary" onClick={() => { setDetalleF(null); openEditF(detalleF); }}>✏️ Editar</button>
               )}
               {detalleF.estatus !== "pagado" && canDelete && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
@@ -1214,7 +1233,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                     onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, comprobantePago: url })); } }} />
                 </label>
                 {formPago.comprobantePago && (
-                  <a href={formPago.comprobantePago} target="_blank" rel="noreferrer"
+                  <a href={urlArchivo(formPago.comprobantePago)} target="_blank" rel="noreferrer"
                     style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver archivo subido</a>
                 )}
               </div>
@@ -1230,7 +1249,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, complementoXml: url })); } }} />
                   </label>
                   {formPago.complementoXml && (
-                    <a href={formPago.complementoXml} target="_blank" rel="noreferrer"
+                    <a href={urlArchivo(formPago.complementoXml)} target="_blank" rel="noreferrer"
                       style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver complemento subido</a>
                   )}
                 </div>
