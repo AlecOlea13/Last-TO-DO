@@ -1,24 +1,17 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-// import { generarReporte, imprimirReporte } from "../utils/generarReporte";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
 type SubConcepto = { descripcion: string; precio: number };
 type Item = {
-  cantidad: number;
-  descripcion: string;
-  precioUnitario: number;
-  total: number;
-  imagen?: string;
-  subconceptos?: SubConcepto[];
+  cantidad: number; descripcion: string; precioUnitario: number;
+  total: number; imagen?: string; subconceptos?: SubConcepto[];
 };
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
 type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: string; rol: string }; fecha: string };
 
 type Cotizacion = {
-  _id: string;
-  folio: string;
-  tipo: "servicio" | "renta" | "venta";
+  _id: string; folio: string; tipo: "servicio" | "renta" | "venta";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
     _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
@@ -28,29 +21,25 @@ type Cotizacion = {
     equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
   };
   asesor?: { _id: string; nombre: string; puesto: string; telefono: string; email: string };
-  fecha: string;
-  lugar: string;
-  descripcionServicio?: string;
-  items: Item[];
-  subtotal: number;
-  iva: number;
-  total: number;
+  fecha: string; lugar: string; descripcionServicio?: string;
+  items: Item[]; subtotal: number; iva: number; total: number;
   estatus: "borrador" | "enviada" | "aceptada" | "rechazada";
-  notas?: string;
-  comentarios: Comentario[];
+  notas?: string; comentarios: Comentario[];
 };
 
-type Cliente = { _id: string; nombre: string };
+type Cliente    = { _id: string; nombre: string };
 type Montacargas = {
   _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
   tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
   horquillas?: string; desplazadorLateral?: boolean; tipoLlantas?: string;
   voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
   equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
-  costoSemana?: number;
-  costoMes?: number;
-  costoAnual?: number;
-  precioVenta?: number;
+  costoSemana?: number; costoMes?: number; costoAnual?: number; precioVenta?: number;
+};
+type TipoServicio = {
+  _id: string; nombre: string; descripcion?: string; intervaloHrs?: number;
+  itemsChecklist: string[]; precioTotal: number;
+  refacciones: { refaccion: { _id: string; nombre: string; unidad: string }; cantidad: number }[];
 };
 
 const emptyForm: any = {
@@ -59,16 +48,11 @@ const emptyForm: any = {
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "borrador", notas: "",
 };
-
 const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "", subconceptos: [] };
 const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
-const TIPO_BADGE: Record<string, string> = {
-  servicio: "badge-amber", renta: "badge-blue", venta: "badge-green",
-};
-const ESTATUS_BADGE: Record<string, string> = {
-  borrador: "badge-gray", enviada: "badge-blue", aceptada: "badge-green", rechazada: "badge-red",
-};
+const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green" };
+const ESTATUS_BADGE: Record<string, string> = { borrador: "badge-gray", enviada: "badge-blue", aceptada: "badge-green", rechazada: "badge-red" };
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
@@ -81,6 +65,7 @@ export default function Cotizaciones() {
   const [clientes, setClientes]                 = useState<Cliente[]>([]);
   const [montas, setMontas]                     = useState<Montacargas[]>([]);
   const [asesores, setAsesores]                 = useState<Asesor[]>([]);
+  const [tiposServicio, setTiposServicio]       = useState<TipoServicio[]>([]);
   const [loading, setLoading]                   = useState(true);
   const [search, setSearch]                     = useState("");
   const [filtro, setFiltro]                     = useState("todos");
@@ -99,14 +84,16 @@ export default function Cotizaciones() {
 
   async function load() {
     try {
-      const [co, cl, mo, as] = await Promise.all([
+      const [co, cl, mo, as, ts] = await Promise.all([
         api.get("/cotizaciones"), api.get("/clientes"),
         api.get("/montacargas"), api.get("/asesores"),
+        api.get("/tipos-servicio"),
       ]);
       setCotizaciones(co.data);
       setClientes(cl.data.filter((c: any) => c.estatus === "activo"));
       setMontas(mo.data);
       setAsesores(as.data);
+      setTiposServicio(ts.data);
     } catch {}
     finally { setLoading(false); }
   }
@@ -122,20 +109,13 @@ export default function Cotizaciones() {
     setEditing(c);
     setPeriodoRenta("mensual");
     setForm({
-      folio:               c.folio,
-      tipo:                c.tipo,
-      cliente:             c.cliente?._id ?? "",
-      montacargas:         c.montacargas?._id ?? "",
-      asesor:              c.asesor?._id ?? "",
-      fecha:               c.fecha.split("T")[0],
-      lugar:               c.lugar,
+      folio: c.folio, tipo: c.tipo, cliente: c.cliente?._id ?? "",
+      montacargas: c.montacargas?._id ?? "", asesor: c.asesor?._id ?? "",
+      fecha: c.fecha.split("T")[0], lugar: c.lugar,
       descripcionServicio: c.descripcionServicio ?? "",
-      items:               c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
-      subtotal:            c.subtotal,
-      iva:                 c.iva,
-      total:               c.total,
-      estatus:             c.estatus,
-      notas:               c.notas ?? "",
+      items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
+      subtotal: c.subtotal, iva: c.iva, total: c.total,
+      estatus: c.estatus, notas: c.notas ?? "",
     });
     setModal(true);
   }
@@ -170,46 +150,69 @@ export default function Cotizaciones() {
     });
   }
 
-  // ── Autocompletar concepto desde montacargas ──────────────────────────────
+  // ── Autocompletar desde montacargas ──
   function generarConceptoAutomatico(montaId: string, tipo: string, periodo: "semanal" | "mensual" | "anual") {
     const m = montas.find(m => m._id === montaId);
     if (!m) return;
-
-    let descripcion = "";
-    let precio = 0;
-
+    let descripcion = ""; let precio = 0;
     if (tipo === "venta") {
       if (!m.precioVenta) { alert("Este equipo no tiene precio de venta registrado."); return; }
       descripcion = `Venta de Montacargas ${m.marca ?? ""} ${m.modelo ?? ""} #${m.numeroEconomico}${m.capacidad ? " Capacidad " + m.capacidad : ""}${m.serie ? " Serie " + m.serie : ""}`.trim();
       precio = m.precioVenta;
     } else if (tipo === "renta") {
-      const precios: Record<string, number> = {
-        semanal: m.costoSemana ?? 0,
-        mensual: m.costoMes    ?? 0,
-        anual:   m.costoAnual  ?? 0,
-      };
+      const precios: Record<string, number> = { semanal: m.costoSemana ?? 0, mensual: m.costoMes ?? 0, anual: m.costoAnual ?? 0 };
       precio = precios[periodo];
       if (!precio) { alert(`Este equipo no tiene costo ${periodo} registrado.`); return; }
       const periodoLabel: Record<string, string> = { semanal: "semanal", mensual: "mensual", anual: "anual" };
       descripcion = `Renta de Montacargas ${m.marca ?? ""} ${m.modelo ?? ""} #${m.numeroEconomico}${m.capacidad ? " Capacidad " + m.capacidad : ""}${m.serie ? " Serie " + m.serie : ""} — periodo ${periodoLabel[periodo]}`.trim();
     }
-
     if (!descripcion || !precio) return;
+    setForm((p: any) => {
+      const items = [...p.items];
+      items[0] = { ...items[0], descripcion, precioUnitario: precio, total: items[0].cantidad * precio, subconceptos: [] };
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
+
+  // ── Autocompletar desde tipo de servicio ──
+  function aplicarTipoServicio(tipoId: string) {
+    const t = tiposServicio.find(t => t._id === tipoId);
+    if (!t) return;
+
+    // Construir descripción con checklist y refacciones
+    const checklist = (t.itemsChecklist ?? []).map(item => `• ${item}`).join("\n");
+    const refaccionesList = t.refacciones.length > 0
+      ? "\n\nRefacciones:\n" + t.refacciones.map(r => `• ${r.cantidad} ${r.refaccion.unidad} ${r.refaccion.nombre}`).join("\n")
+      : "";
+
+    const descripcionCompleta = [
+      t.nombre,
+      t.descripcion ? `\n${t.descripcion}` : "",
+      checklist ? `\n\nSolo se checa:\n${checklist}` : "",
+      refaccionesList,
+    ].filter(Boolean).join("");
+
+    const precio = t.precioTotal ?? 0;
 
     setForm((p: any) => {
       const items = [...p.items];
       items[0] = {
         ...items[0],
-        descripcion,
+        descripcion: descripcionCompleta,
         precioUnitario: precio,
         total: items[0].cantidad * precio,
         subconceptos: [],
       };
-      return { ...p, items, ...recalcTotales(items) };
+      return {
+        ...p,
+        descripcionServicio: t.descripcion ?? p.descripcionServicio,
+        items,
+        ...recalcTotales(items),
+      };
     });
   }
 
-  // ── Subconceptos ──────────────────────────────────────────────────────────
+  // ── Subconceptos ──
   function addSubconcepto(itemIdx: number) {
     setForm((p: any) => {
       const items = [...p.items];
@@ -217,7 +220,6 @@ export default function Cotizaciones() {
       return { ...p, items };
     });
   }
-
   function removeSubconcepto(itemIdx: number, subIdx: number) {
     setForm((p: any) => {
       const items = [...p.items];
@@ -227,7 +229,6 @@ export default function Cotizaciones() {
       return { ...p, items, ...recalcTotales(items) };
     });
   }
-
   function updateSubconcepto(itemIdx: number, subIdx: number, field: keyof SubConcepto, val: any) {
     setForm((p: any) => {
       const items = [...p.items];
@@ -242,8 +243,7 @@ export default function Cotizaciones() {
   async function subirImagen(i: number, file: File) {
     setUploadingIdx(i);
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", UPLOAD_PRESET);
+    formData.append("file", file); formData.append("upload_preset", UPLOAD_PRESET);
     try {
       const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
       const data = await res.json();
@@ -265,9 +265,7 @@ export default function Cotizaciones() {
         const { data } = await api.post("/cotizaciones", payload);
         setCotizaciones(prev => [data, ...prev]);
       }
-      setModal(false);
-      setEditing(null);
-      load();
+      setModal(false); setEditing(null); load();
     } catch {}
     finally { setSaving(false); }
   }
@@ -298,13 +296,8 @@ export default function Cotizaciones() {
   async function eliminarComentario(cotId: string, comentId: string) {
     if (!confirm("¿Eliminar este comentario?")) return;
     await api.delete(`/cotizaciones/${cotId}/comentarios/${comentId}`);
-    setCotizaciones(prev => prev.map(c => c._id === cotId
-      ? { ...c, comentarios: c.comentarios.filter(cm => cm._id !== comentId) } : c
-    ));
-    setComentarioModal(prev => prev
-      ? { ...prev, comentarios: prev.comentarios.filter(cm => cm._id !== comentId) }
-      : null
-    );
+    setCotizaciones(prev => prev.map(c => c._id === cotId ? { ...c, comentarios: c.comentarios.filter(cm => cm._id !== comentId) } : c));
+    setComentarioModal(prev => prev ? { ...prev, comentarios: prev.comentarios.filter(cm => cm._id !== comentId) } : null);
   }
 
   function fmt(date?: string) {
@@ -312,7 +305,6 @@ export default function Cotizaciones() {
     const [year, month, day] = date.split("T")[0].split("-");
     return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
-
   function fmtHora(date: string) {
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
@@ -327,7 +319,7 @@ export default function Cotizaciones() {
     return matchSearch && matchFiltro && matchAsesor;
   });
 
-  const montaSeleccionada = montas.find(m => m._id === form.montacargas);
+  const montaSeleccionada   = montas.find(m => m._id === form.montacargas);
   const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
 
   const modalForm = (
@@ -395,7 +387,33 @@ export default function Cotizaciones() {
             placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
         </div>
 
-        {/* ── Autocompletar concepto ── */}
+        {/* ── Autocompletar desde tipo de servicio ── */}
+        {form.tipo === "servicio" && tiposServicio.length > 0 && (
+          <div className="form-group span-2" style={{
+            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+            borderRadius: "var(--radius-sm)", padding: 12,
+          }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+              ⚙️ Autocompletar desde tipo de servicio
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select className="form-select" defaultValue=""
+                onChange={e => { if (e.target.value) aplicarTipoServicio(e.target.value); }}>
+                <option value="">Selecciona un tipo de servicio...</option>
+                {tiposServicio.map(t => (
+                  <option key={t._id} value={t._id}>
+                    {t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}{t.precioTotal ? ` — $${t.precioTotal.toLocaleString()}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                Llena el primer concepto
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Autocompletar desde montacargas ── */}
         {mostrarAutocompletar && (
           <div className="form-group span-2" style={{
             background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
@@ -418,9 +436,7 @@ export default function Cotizaciones() {
             {form.tipo === "renta" && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                 <label className="form-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Periodo:</label>
-                <select className="form-select" value={periodoRenta}
-                  onChange={e => setPeriodoRenta(e.target.value as any)}
-                  style={{ width: "auto" }}>
+                <select className="form-select" value={periodoRenta} onChange={e => setPeriodoRenta(e.target.value as any)} style={{ width: "auto" }}>
                   <option value="semanal">Semanal</option>
                   <option value="mensual">Mensual</option>
                   <option value="anual">Anual</option>
@@ -588,10 +604,7 @@ export default function Cotizaciones() {
           ) : (
             <table>
               <thead>
-                <tr>
-                  <th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th>
-                  <th>Fecha</th><th>Total</th><th>Estatus</th><th>Comentarios</th><th></th>
-                </tr>
+                <tr><th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Total</th><th>Estatus</th><th>Comentarios</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(c => (
@@ -618,13 +631,7 @@ export default function Cotizaciones() {
                           style={{ position: "relative" }}>
                           💬
                           {c.comentarios?.length > 0 && (
-                            <span style={{
-                              position: "absolute", top: -6, right: -6,
-                              background: "var(--accent)", color: "#000",
-                              borderRadius: "50%", width: 16, height: 16,
-                              fontSize: "0.65rem", fontWeight: 700,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>{c.comentarios.length}</span>
+                            <span style={{ position: "absolute", top: -6, right: -6, background: "var(--accent)", color: "#000", borderRadius: "50%", width: 16, height: 16, fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{c.comentarios.length}</span>
                           )}
                         </button>
                       )}
@@ -660,9 +667,7 @@ export default function Cotizaciones() {
               <span className={`badge ${TIPO_BADGE[comentarioModal.tipo]}`}>{comentarioModal.tipo}</span>
               <span className={`badge ${ESTATUS_BADGE[comentarioModal.estatus]}`}>{comentarioModal.estatus}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>
-              {comentarioModal.cliente?.nombre ?? "Sin cliente"}
-            </p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>{comentarioModal.cliente?.nombre ?? "Sin cliente"}</p>
             <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {comentarioModal.comentarios.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0" }}>
@@ -679,8 +684,7 @@ export default function Cotizaciones() {
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{fmtHora(cm.fecha)}</span>
                         {["developer", "gerencia"].includes(rol) && (
-                          <button onClick={() => eliminarComentario(comentarioModal._id, cm._id)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}>🗑️</button>
+                          <button onClick={() => eliminarComentario(comentarioModal._id, cm._id)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem", padding: 0 }}>🗑️</button>
                         )}
                       </div>
                     </div>
@@ -699,8 +703,7 @@ export default function Cotizaciones() {
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Ctrl + Enter para enviar</p>
                 <div className="modal-footer" style={{ paddingTop: 8 }}>
                   <button className="btn btn-secondary" onClick={() => setComentarioModal(null)}>Cerrar</button>
-                  <button className="btn btn-primary" onClick={enviarComentario}
-                    disabled={savingComentario || !nuevoComentario.trim()}>
+                  <button className="btn btn-primary" onClick={enviarComentario} disabled={savingComentario || !nuevoComentario.trim()}>
                     {savingComentario ? "Enviando..." : "Agregar comentario"}
                   </button>
                 </div>
