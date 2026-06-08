@@ -23,6 +23,7 @@ type GastoFiscal = {
   moneda?: string;
   asesor?: { _id: string; nombre: string };
   notas?: string;
+  folioFactura?: string;
   estatus?: "pendiente" | "pagado";
   fechaPago?: string;
   comprobantePago?: string;
@@ -62,7 +63,6 @@ const emptyManual = {
 
 const POR_PAGINA = 70;
 
-// Base64 data URLs se abren/descargan directo — no depende de Cloudinary
 function urlArchivo(url?: string): string {
   if (!url) return "";
   return url;
@@ -266,9 +266,10 @@ export default function Gastos() {
       const iva      = Math.round(total / 1.16 * 0.16 * 100) / 100;
       const subtotal = Math.round((total - iva) * 100) / 100;
       const payload: any = {
-        nombreEmisor: formManual.nombreEmisor,
-        rfcEmisor:    formManual.rfcEmisor || undefined,
-        fechaEmision: formManual.fechaEmision,
+        nombreEmisor:  formManual.nombreEmisor,
+        rfcEmisor:     formManual.rfcEmisor  || undefined,
+        fechaEmision:  formManual.fechaEmision,
+        folioFactura:  formManual.folioFactura || undefined,
         total, subtotal, iva,
         conceptos: [{
           descripcion:   formManual.descripcion || formManual.nombreEmisor,
@@ -276,10 +277,7 @@ export default function Gastos() {
           valorUnitario: subtotal,
           importe:       subtotal,
         }],
-        notas: [
-          formManual.folioFactura ? `Folio: ${formManual.folioFactura}` : "",
-          formManual.notas,
-        ].filter(Boolean).join(" — ") || undefined,
+        notas: formManual.notas || undefined,
       };
       if (formManual.asesor) payload.asesor = formManual.asesor;
       const { data } = await api.post("/gastos", payload);
@@ -302,6 +300,7 @@ export default function Gastos() {
       descripcion:  g.conceptos[0]?.descripcion ?? "",
       asesor:       g.asesor?._id ?? "",
       notas:        g.notas ?? "",
+      folioFactura: g.folioFactura ?? "",
     });
     setModalEditF(true);
   }
@@ -317,6 +316,7 @@ export default function Gastos() {
         nombreEmisor: formEditF.nombreEmisor,
         rfcEmisor:    formEditF.rfcEmisor || undefined,
         fechaEmision: formEditF.fechaEmision,
+        folioFactura: formEditF.folioFactura || undefined,
         total, subtotal, iva,
         notas: formEditF.notas || undefined,
       };
@@ -392,14 +392,13 @@ export default function Gastos() {
     setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
   }
 
-  // Convierte archivo a base64 y lo guarda directo en MongoDB
   async function subirArchivo(file: File): Promise<string> {
     setUploadingPago(true);
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         setUploadingPago(false);
-        resolve(reader.result as string); // "data:application/pdf;base64,..."
+        resolve(reader.result as string);
       };
       reader.onerror = () => {
         setUploadingPago(false);
@@ -451,6 +450,7 @@ export default function Gastos() {
       <tr>
         <td>${fmtCorto(g.fechaEmision)}</td><td>${g.asesor?.nombre ?? "—"}</td>
         <td>${g.nombreEmisor ?? "—"}</td><td>${g.rfcEmisor ?? "—"}</td>
+        <td>${g.folioFactura ?? "—"}</td>
         <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${g.conceptos[0]?.descripcion ?? "—"}</td><td>${g.notas ?? "—"}</td>
         <td style="text-align:center">${g.estatus === "pagado" ? "✅" : "⏳"}</td>
@@ -499,7 +499,7 @@ export default function Gastos() {
 ${(tipo==="fiscal"||tipo==="general") ? `
 <div class="section-title">Gastos Fiscales</div>
 ${gastosFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
-<table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th><th>Pago</th></tr></thead>
+<table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th>No. Factura</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsF}</tbody></table>
 <p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
 ${(tipo==="nofiscal"||tipo==="general") ? `
@@ -523,6 +523,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.rfcEmisor    ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (g.folioFactura ?? "").toLowerCase().includes(search.toLowerCase()) ||
       g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
     const matchAsesor = filtroAsesor === "todos" || g.asesor?._id === filtroAsesor;
     const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
@@ -733,7 +734,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
                       display: "grid",
-                      gridTemplateColumns: "110px 1fr 1fr 100px 100px 120px 130px",
+                      gridTemplateColumns: "110px 1fr 90px 1fr 100px 100px 120px 130px",
                       gap: 0,
                       padding: "12px 20px",
                       borderBottom: "1px solid var(--border)",
@@ -741,14 +742,24 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       alignItems: "start",
                       fontSize: "0.8rem",
                     }}>
+                      {/* Fecha + quien */}
                       <div>
                         <p style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{g.asesor?.nombre ?? "—"}</p>
                       </div>
+                      {/* Proveedor + RFC */}
                       <div>
                         <p style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</p>
                         <p style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)", marginTop: 2 }}>{g.rfcEmisor ?? "—"}</p>
                       </div>
+                      {/* No. Factura */}
+                      <div>
+                        {g.folioFactura
+                          ? <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--accent)" }}>📄 {g.folioFactura}</p>
+                          : <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>—</p>
+                        }
+                      </div>
+                      {/* Concepto + notas */}
                       <div>
                         <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
                           {g.conceptos[0]?.descripcion?.slice(0, 60) ?? "—"}
@@ -756,18 +767,22 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         </p>
                         {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>{g.notas.slice(0, 40)}</p>}
                       </div>
+                      {/* Subtotal + IVA */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ whiteSpace: "nowrap" }}>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
+                      {/* Total */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
                           ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                         </p>
                       </div>
+                      {/* Estatus */}
                       <div>
                         <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
                       </div>
+                      {/* Acciones */}
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
                         {canDelete && (
@@ -967,6 +982,11 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" />
               </div>
               <div className="form-group">
+                <label className="form-label">No. Factura</label>
+                <input className="form-input" value={formEditF.folioFactura}
+                  onChange={e => setFormEditF((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Fecha</label>
                 <input className="form-input" type="date" value={formEditF.fechaEmision}
                   onChange={e => setFormEditF((p: any) => ({ ...p, fechaEmision: e.target.value }))} />
@@ -981,7 +1001,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   </p>
                 )}
               </div>
-              <div className="form-group span-2">
+              <div className="form-group">
                 <label className="form-label">Concepto / Descripción</label>
                 <input className="form-input" value={formEditF.descripcion}
                   onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))} />
@@ -1136,6 +1156,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 8 }}>
               {[
                 { label: "Fecha",        val: fmt(detalleF.fechaEmision) },
+                { label: "No. Factura",  val: detalleF.folioFactura },
                 { label: "RFC Emisor",   val: detalleF.rfcEmisor },
                 { label: "Receptor",     val: detalleF.nombreReceptor },
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
@@ -1151,7 +1172,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               ) : null)}
             </div>
 
-            {/* Comprobante + reemplazar */}
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {detalleF.comprobantePago && (
