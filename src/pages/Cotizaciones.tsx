@@ -25,6 +25,9 @@ type Cotizacion = {
   items: Item[]; subtotal: number; iva: number; total: number;
   estatus: "borrador" | "enviada" | "aceptada" | "rechazada";
   notas?: string; comentarios: Comentario[];
+  equipoMarca?:  string;
+  equipoModelo?: string;
+  equipoSerie?:  string;
 };
 
 type Cliente    = { _id: string; nombre: string };
@@ -47,6 +50,7 @@ const emptyForm: any = {
   fecha: new Date().toISOString().split("T")[0], lugar: "Zapopán, Jal",
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "borrador", notas: "",
+  equipoMarca: "", equipoModelo: "", equipoSerie: "",
 };
 const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "", subconceptos: [] };
 const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
@@ -116,6 +120,9 @@ export default function Cotizaciones() {
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
       subtotal: c.subtotal, iva: c.iva, total: c.total,
       estatus: c.estatus, notas: c.notas ?? "",
+      equipoMarca:  c.equipoMarca  ?? "",
+      equipoModelo: c.equipoModelo ?? "",
+      equipoSerie:  c.equipoSerie  ?? "",
     });
     setModal(true);
   }
@@ -150,7 +157,6 @@ export default function Cotizaciones() {
     });
   }
 
-  // ── Autocompletar desde montacargas ──
   function generarConceptoAutomatico(montaId: string, tipo: string, periodo: "semanal" | "mensual" | "anual") {
     const m = montas.find(m => m._id === montaId);
     if (!m) return;
@@ -174,45 +180,27 @@ export default function Cotizaciones() {
     });
   }
 
-  // ── Autocompletar desde tipo de servicio ──
   function aplicarTipoServicio(tipoId: string) {
     const t = tiposServicio.find(t => t._id === tipoId);
     if (!t) return;
-
-    // Construir descripción con checklist y refacciones
     const checklist = (t.itemsChecklist ?? []).map(item => `• ${item}`).join("\n");
     const refaccionesList = t.refacciones.length > 0
       ? "\n\nRefacciones:\n" + t.refacciones.map(r => `• ${r.cantidad} ${r.refaccion.unidad} ${r.refaccion.nombre}`).join("\n")
       : "";
-
     const descripcionCompleta = [
       t.nombre,
       t.descripcion ? `\n${t.descripcion}` : "",
       checklist ? `\n\nSolo se checa:\n${checklist}` : "",
       refaccionesList,
     ].filter(Boolean).join("");
-
     const precio = t.precioTotal ?? 0;
-
     setForm((p: any) => {
       const items = [...p.items];
-      items[0] = {
-        ...items[0],
-        descripcion: descripcionCompleta,
-        precioUnitario: precio,
-        total: items[0].cantidad * precio,
-        subconceptos: [],
-      };
-      return {
-        ...p,
-        descripcionServicio: t.descripcion ?? p.descripcionServicio,
-        items,
-        ...recalcTotales(items),
-      };
+      items[0] = { ...items[0], descripcion: descripcionCompleta, precioUnitario: precio, total: items[0].cantidad * precio, subconceptos: [] };
+      return { ...p, descripcionServicio: t.descripcion ?? p.descripcionServicio, items, ...recalcTotales(items) };
     });
   }
 
-  // ── Subconceptos ──
   function addSubconcepto(itemIdx: number) {
     setForm((p: any) => {
       const items = [...p.items];
@@ -319,7 +307,7 @@ export default function Cotizaciones() {
     return matchSearch && matchFiltro && matchAsesor;
   });
 
-  const montaSeleccionada   = montas.find(m => m._id === form.montacargas);
+  const montaSeleccionada    = montas.find(m => m._id === form.montacargas);
   const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
 
   const modalForm = (
@@ -363,6 +351,34 @@ export default function Cotizaciones() {
             {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
           </select>
         </div>
+
+        {/* ── Datos opcionales del equipo ── */}
+        <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
+            🔧 Datos del equipo (opcionales — aparecen en el reporte)
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Marca</label>
+              <input className="form-input" value={form.equipoMarca ?? ""}
+                onChange={e => setForm((p: any) => ({ ...p, equipoMarca: e.target.value }))}
+                placeholder="Ej. Yale" />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Modelo</label>
+              <input className="form-input" value={form.equipoModelo ?? ""}
+                onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))}
+                placeholder="Ej. YL_456" />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Serie</label>
+              <input className="form-input" value={form.equipoSerie ?? ""}
+                onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))}
+                placeholder="Ej. 1A3234RT45" />
+            </div>
+          </div>
+        </div>
+
         <div className="form-group">
           <label className="form-label">Fecha</label>
           <input className="form-input" type="date" value={form.fecha} onChange={e => setForm((p: any) => ({ ...p, fecha: e.target.value }))} />

@@ -12,27 +12,16 @@ export type CotizacionReporte = {
   tipo: string;
   cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
-    numeroEconomico?: string;
-    marca: string;
-    modelo: string;
-    capacidad?: string;
-    tipo?: string;
-    serie?: string;
-    alturaColapsada?: string;
-    alturaLevante?: string;
-    horquillas?: string;
-    desplazadorLateral?: boolean;
-    tipoLlantas?: string;
-    voltaje?: string;
-    tipoBateria?: string;
-    incluyeCargador?: boolean;
-    equipoSeguridad?: {
-      alarmaReversa?: boolean;
-      torretaAmbar?: boolean;
-      luces?: boolean;
-      extintor?: boolean;
-    };
+    numeroEconomico?: string; marca: string; modelo: string; capacidad?: string;
+    tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
+    horquillas?: string; desplazadorLateral?: boolean; tipoLlantas?: string;
+    voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
+    equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
   };
+  // ── Datos opcionales del equipo (sin montacargas del catálogo) ──
+  equipoMarca?:  string;
+  equipoModelo?: string;
+  equipoSerie?:  string;
   asesor?: { nombre: string; puesto: string; telefono: string; email: string };
   fecha: string;
   lugar: string;
@@ -45,30 +34,16 @@ export type CotizacionReporte = {
 };
 
 export type OrdenTrabajoReporte = {
-  folio: string;
-  fecha: string;
+  folio: string; fecha: string;
   cliente?: { nombre: string; direccion?: string; telefono?: string };
   montacargas?: {
-    numeroEconomico?: string;
-    marca?: string;
-    modelo?: string;
-    serie?: string;
-    horometro?: number;
-    horometroCierre?: number;
+    numeroEconomico?: string; marca?: string; modelo?: string; serie?: string;
+    horometro?: number; horometroCierre?: number;
   };
-  tipoServicio?: string;
-  tecnico?: string;
-  problema?: string;
-  manoDeObra?: string;
-  notasCierre?: string;
-  refacciones?: {
-    cantidad: number;
-    descripcion: string;
-    precio?: number;
-  }[];
-  costoRefacciones?: number;
-  costoManoObra?: number;
-  observaciones?: string;
+  tipoServicio?: string; tecnico?: string; problema?: string;
+  manoDeObra?: string; notasCierre?: string;
+  refacciones?: { cantidad: number; descripcion: string; precio?: number }[];
+  costoRefacciones?: number; costoManoObra?: number; observaciones?: string;
 };
 
 function specRow(label: string, val?: string | null) {
@@ -93,26 +68,36 @@ function htmlServicio(cot: CotizacionReporte): string {
   const clienteTel      = cot.cliente?.telefono  ?? "";
   const clienteContacto = cot.cliente?.contacto  ?? "";
 
+  // Datos del equipo — desde catálogo o desde campos manuales
+  const equipoMarca  = cot.montacargas?.marca  ?? cot.equipoMarca  ?? "";
+  const equipoModelo = cot.montacargas?.modelo ?? cot.equipoModelo ?? "";
+  const equipoSerie  = cot.montacargas?.serie  ?? cot.equipoSerie  ?? "";
+  const equipoTexto  = [
+    equipoMarca  ? `Marca: ${equipoMarca}`   : "",
+    equipoModelo ? `Modelo: ${equipoModelo}` : "",
+    equipoSerie  ? `Serie: ${equipoSerie}`   : "",
+  ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
+
   const itemsHtml = cot.items.map(item => {
-  const subHtml = (item.subconceptos ?? []).map(s =>
-    `<div class="subconcept">
-      <span>${s.descripcion}</span>
-      <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-    </div>`
-  ).join("");
-  return `<tr>
-    <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
-    <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
-      ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
-    </td>
-    <td style="padding:6px 8px;border:1px solid #ddd">
-      <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
-      ${subHtml}
-    </td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-  </tr>`;
-}).join("");
+    const subHtml = (item.subconceptos ?? []).map(s =>
+      `<div class="subconcept">
+        <span>${s.descripcion}</span>
+        <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+      </div>`
+    ).join("");
+    return `<tr>
+      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center">
+        ${item.imagen ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px" />` : ""}
+      </td>
+      <td style="padding:6px 8px;border:1px solid #ddd">
+        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+        ${subHtml}
+      </td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+    </tr>`;
+  }).join("");
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -126,6 +111,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
+    ".equipo-info { font-size: 10pt; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; padding: 7px 12px; margin-bottom: 10px; color: #333; }",
     ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; white-space: pre-wrap; }",
     ".intro { margin-bottom: 10px; font-size: 10pt; }",
     "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }",
@@ -165,8 +151,10 @@ function htmlServicio(cot: CotizacionReporte): string {
     clienteDirec    ? clienteDirec + "<br>"                    : "",
     clienteTel      ? "Tel. " + clienteTel + "<br>"            : "",
     clienteContacto ? "At&#39;n: " + clienteContacto + "<br>" : "",
-    cot.montacargas ? "Montacargas <strong>" + cot.montacargas.marca + " " + cot.montacargas.modelo + ".</strong>" : "",
     "</div>",
+
+    // ── Datos del equipo (si existen) ──
+    equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
 
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
@@ -228,19 +216,24 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 
   const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
 
+  // Datos del equipo — desde catálogo o desde campos manuales
+  const equipoMarca  = m?.marca  ?? cot.equipoMarca  ?? "";
+  const equipoModelo = m?.modelo ?? cot.equipoModelo ?? "";
+  const equipoSerie  = m?.serie  ?? cot.equipoSerie  ?? "";
+
   const specsRows = [
-    specRow("Marca",              m?.marca),
-    specRow("Modelo",             m?.modelo),
-    specRow("Serie",              m?.serie),
+    specRow("Marca",              equipoMarca  || null),
+    specRow("Modelo",             equipoModelo || null),
+    specRow("Serie",              equipoSerie  || null),
     specRow("Sistema",            m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
     specRow("Capacidad de carga", m?.capacidad),
     specRow("Altura de levante",  m?.alturaLevante),
-    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                   : "",
-    !esElectrico ? specRow("Horquillas",          m?.horquillas)                        : "",
-    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null)  : "",
-    esElectrico  ? specRow("Voltaje",             m?.voltaje)                           : "",
-    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                       : "",
-    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)     : "",
+    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                  : "",
+    !esElectrico ? specRow("Horquillas",          m?.horquillas)                       : "",
+    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null) : "",
+    esElectrico  ? specRow("Voltaje",             m?.voltaje)                          : "",
+    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                      : "",
+    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)    : "",
     specRow("Tipo de llantas",    m?.tipoLlantas),
   ].join("");
 
@@ -263,13 +256,13 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     : cot.items;
 
   const itemsHtml = itemsFiltrados.map(item => {
-  const subHtml = (item.subconceptos ?? []).map(s =>
-    `<div class="subconcept">
-      <span>${s.descripcion}</span>
-      <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-    </div>`
-  ).join("");
-  return `<tr>
+    const subHtml = (item.subconceptos ?? []).map(s =>
+      `<div class="subconcept">
+        <span>${s.descripcion}</span>
+        <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+      </div>`
+    ).join("");
+    return `<tr>
       <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center;vertical-align:middle">
         ${item.imagen
           ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
@@ -283,7 +276,9 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     </tr>`;
-}).join("");
+  }).join("");
+
+  const hayEspecsEquipo = specsRows.length > 0 || segHtml.length > 0;
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -341,13 +336,13 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     fotoEquipo
       ? `<div class="section-title">Fotografía del Equipo</div>
          <div class="foto-equipo">
-           <img src="${fotoEquipo}" alt="${m?.marca ?? ""} ${m?.modelo ?? ""}" />
-           <p class="foto-caption">${m?.marca ?? ""} ${m?.modelo ?? ""} ${m?.capacidad ? "— " + m.capacidad : ""}</p>
+           <img src="${fotoEquipo}" alt="${equipoMarca} ${equipoModelo}" />
+           <p class="foto-caption">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
          </div>`
       : "",
 
-    m ? '<div class="section-title">Datos del Equipo</div>' : "",
-    m ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
+    hayEspecsEquipo ? '<div class="section-title">Datos del Equipo</div>' : "",
+    hayEspecsEquipo ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
 
     itemsFiltrados.length > 0 ? '<div class="section-title">Conceptos</div>' : "",
     itemsFiltrados.length > 0 ? `<table>
@@ -365,9 +360,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    cot.tipo === "renta"
-      ? `<p class="precio-nota">* El precio indicado corresponde a la renta mensual del equipo.</p>`
-      : "",
+    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta mensual del equipo.</p>` : "",
     "</div>",
 
     '<div class="conditions">',
@@ -400,8 +393,8 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const fechaObj = new Date(ot.fecha);
-  const dia = String(fechaObj.getDate()).padStart(2, "0");
-  const mes = fechaObj.toLocaleDateString("es-MX", { month: "short" });
+  const dia  = String(fechaObj.getDate()).padStart(2, "0");
+  const mes  = fechaObj.toLocaleDateString("es-MX", { month: "short" });
   const anio = String(fechaObj.getFullYear()).slice(2);
 
   const refaccionesHtml = (ot.refacciones ?? []).map(r =>
@@ -611,16 +604,12 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 }
 
 export function generarReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? htmlVentaRenta(cot)
-    : htmlServicio(cot);
+  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
   abrirVentana(html);
 }
 
 export function imprimirReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? htmlVentaRenta(cot)
-    : htmlServicio(cot);
+  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
   const htmlConPrint = html.replace(
     `window.onload = function() { document.title = '${cot.folio}'; };`,
     `window.onload = function() { document.title = '${cot.folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
@@ -650,32 +639,25 @@ function abrirVentana(html: string) {
   if (win) win.focus();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+
 export async function descargarPDF(cot: CotizacionReporte) {
-  const { default: jsPDF } = await import("jspdf");
+  const { default: jsPDF }       = await import("jspdf");
   const { default: html2canvas } = await import("html2canvas");
 
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? htmlVentaRenta(cot)
-    : htmlServicio(cot);
+  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
 
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:850px;height:2000px;border:none;visibility:hidden;";
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument!;
-  doc.open();
-  doc.write(html);
-  doc.close();
+  doc.open(); doc.write(html); doc.close();
 
   await new Promise(r => setTimeout(r, 1500));
 
   const canvas = await html2canvas(doc.body, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    width: 850,
-    windowWidth: 850,
-    backgroundColor: "#ffffff",
+    scale: 2, useCORS: true, allowTaint: true,
+    width: 850, windowWidth: 850, backgroundColor: "#ffffff",
   });
 
   document.body.removeChild(iframe);
@@ -686,17 +668,11 @@ export async function descargarPDF(cot: CotizacionReporte) {
   const imgW  = pageW;
   const imgH  = (canvas.height * pageW) / canvas.width;
 
-  let yOffset = 0;
-  let page    = 0;
-
+  let yOffset = 0; let page = 0;
   while (yOffset < imgH) {
     if (page > 0) pdf.addPage();
-    pdf.addImage(
-      canvas.toDataURL("image/jpeg", 0.92),
-      "JPEG", 0, -yOffset, imgW, imgH
-    );
-    yOffset += pageH;
-    page++;
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -yOffset, imgW, imgH);
+    yOffset += pageH; page++;
   }
 
   pdf.save(`${cot.folio}.pdf`);
