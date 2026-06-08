@@ -179,7 +179,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     "<li>El servicio solo incluye lo señalado en esta cotización.</li>",
     "<li>De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.</li>",
     "<li>Vigencia de la cotización, es de 15 días naturales.</li>",
-    "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
+    // "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
     "<li>Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.</li>",
     "<li>En partes eléctricas no hay garantía.</li>",
     "<li>Las existencias son salvo previa venta.</li>",
