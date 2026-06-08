@@ -18,7 +18,6 @@ export type CotizacionReporte = {
     voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
     equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
   };
-  // ── Datos opcionales del equipo (sin montacargas del catálogo) ──
   equipoMarca?:  string;
   equipoModelo?: string;
   equipoSerie?:  string;
@@ -68,7 +67,6 @@ function htmlServicio(cot: CotizacionReporte): string {
   const clienteTel      = cot.cliente?.telefono  ?? "";
   const clienteContacto = cot.cliente?.contacto  ?? "";
 
-  // Datos del equipo — desde catálogo o desde campos manuales
   const equipoMarca  = cot.montacargas?.marca  ?? cot.equipoMarca  ?? "";
   const equipoModelo = cot.montacargas?.modelo ?? cot.equipoModelo ?? "";
   const equipoSerie  = cot.montacargas?.serie  ?? cot.equipoSerie  ?? "";
@@ -153,7 +151,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     clienteContacto ? "At&#39;n: " + clienteContacto + "<br>" : "",
     "</div>",
 
-    // ── Datos del equipo (si existen) ──
     equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
 
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
@@ -179,7 +176,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     "<li>El servicio solo incluye lo señalado en esta cotización.</li>",
     "<li>De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.</li>",
     "<li>Vigencia de la cotización, es de 15 días naturales.</li>",
-    // "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
+    "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
     "<li>Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.</li>",
     "<li>En partes eléctricas no hay garantía.</li>",
     "<li>Las existencias son salvo previa venta.</li>",
@@ -214,12 +211,11 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
   const tipoLabel   = cot.tipo === "renta" ? "RENTA" : "VENTA";
   const esElectrico = m?.tipo === "electrico";
 
-  const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
-
-  // Datos del equipo — desde catálogo o desde campos manuales
   const equipoMarca  = m?.marca  ?? cot.equipoMarca  ?? "";
   const equipoModelo = m?.modelo ?? cot.equipoModelo ?? "";
   const equipoSerie  = m?.serie  ?? cot.equipoSerie  ?? "";
+
+  const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
 
   const specsRows = [
     specRow("Marca",              equipoMarca  || null),
@@ -644,20 +640,37 @@ export async function descargarPDF(cot: CotizacionReporte) {
   const { default: jsPDF }       = await import("jspdf");
   const { default: html2canvas } = await import("html2canvas");
 
-  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? htmlVentaRenta(cot)
+    : htmlServicio(cot);
 
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:850px;height:2000px;border:none;visibility:hidden;";
+  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:850px;height:1px;border:none;visibility:hidden;";
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument!;
   doc.open(); doc.write(html); doc.close();
 
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 1800));
 
-  const canvas = await html2canvas(doc.body, {
-    scale: 2, useCORS: true, allowTaint: true,
-    width: 850, windowWidth: 850, backgroundColor: "#ffffff",
+  // Medir altura real del contenido
+  const body      = doc.body;
+  const alturaReal = Math.max(body.scrollHeight, body.offsetHeight, 1200);
+  iframe.style.height = alturaReal + "px";
+
+  await new Promise(r => setTimeout(r, 300));
+
+  const canvas = await html2canvas(body, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    width: 850,
+    height: alturaReal,
+    windowWidth: 850,
+    windowHeight: alturaReal,
+    backgroundColor: "#ffffff",
+    scrollY: 0,
+    scrollX: 0,
   });
 
   document.body.removeChild(iframe);
@@ -665,14 +678,37 @@ export async function descargarPDF(cot: CotizacionReporte) {
   const pdf   = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
-  const imgW  = pageW;
-  const imgH  = (canvas.height * pageW) / canvas.width;
 
-  let yOffset = 0; let page = 0;
-  while (yOffset < imgH) {
-    if (page > 0) pdf.addPage();
-    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, -yOffset, imgW, imgH);
-    yOffset += pageH; page++;
+  const scale = pageW / canvas.width;
+  const imgH  = canvas.height * scale;
+
+  if (imgH <= pageH) {
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageW, imgH);
+  } else {
+    const pageImgH = pageH / scale;
+    let srcY = 0;
+    let page = 0;
+
+    while (srcY < canvas.height) {
+      if (page > 0) pdf.addPage();
+
+      const sliceH    = Math.min(pageImgH, canvas.height - srcY);
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width  = canvas.width;
+      pageCanvas.height = sliceH;
+      const ctx = pageCanvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      ctx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+      pdf.addImage(
+        pageCanvas.toDataURL("image/jpeg", 0.95),
+        "JPEG", 0, 0, pageW, sliceH * scale
+      );
+
+      srcY += pageImgH;
+      page++;
+    }
   }
 
   pdf.save(`${cot.folio}.pdf`);

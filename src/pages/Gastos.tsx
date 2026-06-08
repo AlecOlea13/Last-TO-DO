@@ -79,9 +79,10 @@ export default function Gastos() {
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
 
-  const [filtroAsesor, setFiltroAsesor] = useState("todos");
-  const [fechaDesde, setFechaDesde]     = useState("");
-  const [fechaHasta, setFechaHasta]     = useState("");
+  const [filtroEstatus, setFiltroEstatus] = useState<"pendiente" | "pagado" | "todos">("pendiente");
+  const [filtroAsesor, setFiltroAsesor]   = useState("todos");
+  const [fechaDesde, setFechaDesde]       = useState("");
+  const [fechaHasta, setFechaHasta]       = useState("");
 
   const [modalFiscal, setModalFiscal] = useState(false);
   const [parsing, setParsing]         = useState(false);
@@ -115,8 +116,8 @@ export default function Gastos() {
   const [paginaNF, setPaginaNF] = useState(1);
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setPaginaF(1);  }, [search, filtroAsesor, fechaDesde, fechaHasta, tab]);
-  useEffect(() => { setPaginaNF(1); }, [search, filtroAsesor, fechaDesde, fechaHasta, tab]);
+  useEffect(() => { setPaginaF(1);  }, [search, filtroAsesor, filtroEstatus, fechaDesde, fechaHasta, tab]);
+  useEffect(() => { setPaginaNF(1); }, [search, filtroAsesor, filtroEstatus, fechaDesde, fechaHasta, tab]);
 
   async function load() {
     try {
@@ -134,12 +135,13 @@ export default function Gastos() {
 
   function limpiarFiltros() {
     setFiltroAsesor("todos");
+    setFiltroEstatus("pendiente");
     setFechaDesde("");
     setFechaHasta("");
     setSearch("");
   }
 
-  const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "";
+  const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "" || filtroEstatus !== "todos";
 
   function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
     if (!dateStr) return false;
@@ -220,7 +222,6 @@ export default function Gastos() {
             if (!isNaN(imp)) iva += imp;
           });
         }
-        // Folio: Serie + Folio del CFDI (ej. "A" + "1234" → "A1234")
         const folioFactura = [getAttr(cfdi, "Serie"), getAttr(cfdi, "Folio")]
           .filter(Boolean).join("") || undefined;
 
@@ -404,14 +405,8 @@ export default function Gastos() {
     setUploadingPago(true);
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        setUploadingPago(false);
-        resolve(reader.result as string);
-      };
-      reader.onerror = () => {
-        setUploadingPago(false);
-        reject(new Error("Error al leer el archivo"));
-      };
+      reader.onload = () => { setUploadingPago(false); resolve(reader.result as string); };
+      reader.onerror = () => { setUploadingPago(false); reject(new Error("Error al leer el archivo")); };
       reader.readAsDataURL(file);
     });
   }
@@ -533,11 +528,12 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.folioFactura ?? "").toLowerCase().includes(search.toLowerCase()) ||
       g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
-    const matchAsesor = filtroAsesor === "todos" || g.asesor?._id === filtroAsesor;
+    const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
+    const matchEstatus = filtroEstatus === "todos" || g.estatus === filtroEstatus;
     const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
     const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
     const matchHasta = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
-    return matchSearch && matchAsesor && matchDesde && matchHasta;
+    return matchSearch && matchAsesor && matchEstatus && matchDesde && matchHasta;
   });
 
   const filteredNF = noFiscales.filter(g => {
@@ -545,11 +541,12 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       g.descripcion.toLowerCase().includes(search.toLowerCase()) ||
       (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.notas ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchAsesor = filtroAsesor === "todos" || g.asesor?._id === filtroAsesor;
+    const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
+    const matchEstatus = filtroEstatus === "todos" || g.estatus === filtroEstatus;
     const fecha = new Date(g.fecha);
     const matchDesde = !fechaDesde || fecha >= new Date(fechaDesde);
     const matchHasta = !fechaHasta || fecha <= new Date(fechaHasta + "T23:59:59");
-    return matchSearch && matchAsesor && matchDesde && matchHasta;
+    return matchSearch && matchAsesor && matchEstatus && matchDesde && matchHasta;
   });
 
   const totalPaginasF  = Math.ceil(filteredF.length  / POR_PAGINA);
@@ -707,6 +704,13 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <p className="table-card-title">Facturas fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+                {/* Filtro estatus */}
+                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                  value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
+                  <option value="pendiente">⏳ Pendientes</option>
+                  <option value="pagado">✅ Pagadas</option>
+                  <option value="todos">Todas</option>
+                </select>
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
                   value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
                   <option value="todos">Todos</option>
@@ -716,26 +720,27 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
                 <input className="form-input" type="date" value={fechaHasta}
                   onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
-                {hayFiltros && <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>}
+                {(filtroAsesor !== "todos" || fechaDesde || fechaHasta) && (
+                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
+                )}
               </div>
             </div>
-            {hayFiltros && (
+            {filteredF.length > 0 && (
               <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
-                🔍 Mostrando {filteredF.length} resultado{filteredF.length !== 1 ? "s" : ""}
+                Mostrando {filteredF.length} factura{filteredF.length !== 1 ? "s" : ""}
+                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : "pagadas"}` : ""}
                 {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
                 {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
                 {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
-                {filteredF.length > 0 && (
-                  <span style={{ marginLeft: 12, fontWeight: 700 }}>
-                    Total: ${filteredF.reduce((acc, g) => acc + g.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                  </span>
-                )}
+                <span style={{ marginLeft: 12, fontWeight: 700 }}>
+                  Total: ${filteredF.reduce((acc, g) => acc + g.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </span>
               </div>
             )}
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}</p></div>
             ) : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -743,31 +748,25 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                     <div key={g._id} style={{
                       display: "grid",
                       gridTemplateColumns: "110px 1fr 90px 1fr 100px 100px 120px 130px",
-                      gap: 0,
-                      padding: "12px 20px",
+                      gap: 0, padding: "12px 20px",
                       borderBottom: "1px solid var(--border)",
                       background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
-                      alignItems: "start",
-                      fontSize: "0.8rem",
+                      alignItems: "start", fontSize: "0.8rem",
                     }}>
-                      {/* Fecha + quien */}
                       <div>
                         <p style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{g.asesor?.nombre ?? "—"}</p>
                       </div>
-                      {/* Proveedor + RFC */}
                       <div>
                         <p style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</p>
                         <p style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)", marginTop: 2 }}>{g.rfcEmisor ?? "—"}</p>
                       </div>
-                      {/* No. Factura */}
                       <div>
                         {g.folioFactura
                           ? <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--accent)" }}>📄 {g.folioFactura}</p>
                           : <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>—</p>
                         }
                       </div>
-                      {/* Concepto + notas */}
                       <div>
                         <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
                           {g.conceptos[0]?.descripcion?.slice(0, 60) ?? "—"}
@@ -775,22 +774,18 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         </p>
                         {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2, fontStyle: "italic" }}>{g.notas.slice(0, 40)}</p>}
                       </div>
-                      {/* Subtotal + IVA */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ whiteSpace: "nowrap" }}>${g.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
-                      {/* Total */}
                       <div style={{ textAlign: "right" }}>
                         <p style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
                           ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                         </p>
                       </div>
-                      {/* Estatus */}
                       <div>
                         <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
                       </div>
-                      {/* Acciones */}
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
                         {canDelete && (
@@ -821,6 +816,13 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <p className="table-card-title">Gastos no fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+                {/* Filtro estatus */}
+                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
+                  value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
+                  <option value="pendiente">⏳ Pendientes</option>
+                  <option value="pagado">✅ Pagados</option>
+                  <option value="todos">Todos</option>
+                </select>
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
                   value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
                   <option value="todos">Todos</option>
@@ -830,26 +832,27 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
                 <input className="form-input" type="date" value={fechaHasta}
                   onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
-                {hayFiltros && <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>}
+                {(filtroAsesor !== "todos" || fechaDesde || fechaHasta) && (
+                  <button className="btn btn-secondary btn-sm" onClick={limpiarFiltros}>✕ Limpiar</button>
+                )}
               </div>
             </div>
-            {hayFiltros && (
+            {filteredNF.length > 0 && (
               <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
-                🔍 Mostrando {filteredNF.length} resultado{filteredNF.length !== 1 ? "s" : ""}
+                Mostrando {filteredNF.length} gasto{filteredNF.length !== 1 ? "s" : ""}
+                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}
                 {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
                 {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
                 {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
-                {filteredNF.length > 0 && (
-                  <span style={{ marginLeft: 12, fontWeight: 700 }}>
-                    Total: ${filteredNF.reduce((acc, g) => acc + g.monto, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                  </span>
-                )}
+                <span style={{ marginLeft: 12, fontWeight: 700 }}>
+                  Total: ${filteredNF.reduce((acc, g) => acc + g.monto, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </span>
               </div>
             )}
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredNF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{search || hayFiltros ? " con ese filtro" : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}</p></div>
             ) : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -861,12 +864,10 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         <div key={g._id} style={{
                           display: "grid",
                           gridTemplateColumns: "110px 90px 80px 110px 110px 1fr 120px 90px",
-                          gap: 0,
-                          padding: "12px 20px",
+                          gap: 0, padding: "12px 20px",
                           borderBottom: "1px solid var(--border)",
                           background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
-                          alignItems: "start",
-                          fontSize: "0.8rem",
+                          alignItems: "start", fontSize: "0.8rem",
                         }}>
                           <div><p style={{ whiteSpace: "nowrap" }}>{fmt(g.fecha)}</p></div>
                           <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</p></div>
