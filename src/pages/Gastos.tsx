@@ -220,6 +220,10 @@ export default function Gastos() {
             if (!isNaN(imp)) iva += imp;
           });
         }
+        // Folio: Serie + Folio del CFDI (ej. "A" + "1234" → "A1234")
+        const folioFactura = [getAttr(cfdi, "Serie"), getAttr(cfdi, "Folio")]
+          .filter(Boolean).join("") || undefined;
+
         setFormF(prev => ({
           ...prev,
           uuid:           getAttr(timbre, "UUID")    || getAttr(timbre, "uuid"),
@@ -232,6 +236,7 @@ export default function Gastos() {
           iva:       iva || parseFloat(getAttr(cfdi, "Iva") || "0"),
           total:     parseFloat(getAttr(cfdi, "Total") || "0"),
           moneda:    getAttr(cfdi, "Moneda") || "MXN",
+          folioFactura,
           conceptos,
         }));
         setParsing(false);
@@ -248,7 +253,10 @@ export default function Gastos() {
     if (!formF.nombreEmisor && !formF.rfcEmisor) return;
     setSavingF(true);
     try {
-      const { data } = await api.post("/gastos", formF);
+      const { data } = await api.post("/gastos", {
+        ...formF,
+        folioFactura: formF.folioFactura || undefined,
+      });
       setFiscales(prev => [data, ...prev]);
       setModalFiscal(false);
       setFormF({});
@@ -1052,14 +1060,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>✅ Datos extraídos</p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 20px", fontSize: "0.85rem" }}>
                   {[
-                    { label: "Proveedor", val: formF.nombreEmisor },
-                    { label: "RFC",       val: formF.rfcEmisor },
-                    { label: "Fecha",     val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
-                    { label: "UUID",      val: (formF.uuid ?? "").slice(0, 20) + "..." },
-                    { label: "Subtotal",  val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "IVA",       val: `$${(formF.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Total",     val: `$${(formF.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Conceptos", val: `${formF.conceptos?.length ?? 0} concepto(s)` },
+                    { label: "Proveedor",   val: formF.nombreEmisor },
+                    { label: "RFC",         val: formF.rfcEmisor },
+                    { label: "Fecha",       val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
+                    { label: "No. Factura", val: formF.folioFactura || "—" },
+                    { label: "UUID",        val: (formF.uuid ?? "").slice(0, 20) + "..." },
+                    { label: "Subtotal",    val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "IVA",         val: `$${(formF.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "Total",       val: `$${(formF.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
                   ].map(item => (
                     <div key={item.label}>
                       <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
