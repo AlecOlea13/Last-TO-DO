@@ -70,10 +70,12 @@ function htmlServicio(cot: CotizacionReporte): string {
   const equipoMarca  = cot.montacargas?.marca  ?? cot.equipoMarca  ?? "";
   const equipoModelo = cot.montacargas?.modelo ?? cot.equipoModelo ?? "";
   const equipoSerie  = cot.montacargas?.serie  ?? cot.equipoSerie  ?? "";
+
+  // FIX 3: Marca, Modelo, Serie en negritas
   const equipoTexto  = [
-    equipoMarca  ? `Marca: ${equipoMarca}`   : "",
-    equipoModelo ? `Modelo: ${equipoModelo}` : "",
-    equipoSerie  ? `Serie: ${equipoSerie}`   : "",
+    equipoMarca  ? `<strong>Marca:</strong> ${equipoMarca}`   : "",
+    equipoModelo ? `<strong>Modelo:</strong> ${equipoModelo}` : "",
+    equipoSerie  ? `<strong>Serie:</strong> ${equipoSerie}`   : "",
   ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
   const itemsHtml = cot.items.map(item => {
@@ -123,7 +125,8 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".conditions strong { color: #222; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
     ".conditions li { margin-bottom: 2px; }",
-    ".signature { margin-top: 28px; text-align: center; font-size: 10pt; }",
+    // FIX 1: page-break-inside avoid en signature
+    ".signature { margin-top: 28px; text-align: center; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
@@ -146,9 +149,10 @@ function htmlServicio(cot: CotizacionReporte): string {
 
     '<div class="client-info">',
     `<strong>${clienteNombre}.</strong><br>`,
-    clienteDirec    ? clienteDirec + "<br>"                    : "",
-    clienteTel      ? "Tel. " + clienteTel + "<br>"            : "",
-    clienteContacto ? "At&#39;n: " + clienteContacto + "<br>" : "",
+    clienteDirec    ? clienteDirec + "<br>"                                                  : "",
+    clienteTel      ? "Tel. " + clienteTel + "<br>"                                          : "",
+    // FIX 2: At'n en negritas
+    clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>"              : "",
     "</div>",
 
     equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
@@ -505,7 +509,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
         <strong>C. Bahías de Huatulco No.99</strong><br>
         Col. Agua Blanca Industrial C.P. 45235<br>
         Tels. 33 3856 8329 / 33 3440 0214<br>
-        Zapopan, Jal., Méx.<br>
+        Zapopán, Jal., Méx.<br>
         <strong>pipsamontacargas@hotmail.com</strong><br>
         <strong>www.pipsamontacargas.com</strong>
       </div>
@@ -654,7 +658,7 @@ export async function descargarPDF(cot: CotizacionReporte) {
   await new Promise(r => setTimeout(r, 1800));
 
   // Medir altura real del contenido
-  const body      = doc.body;
+  const body       = doc.body;
   const alturaReal = Math.max(body.scrollHeight, body.offsetHeight, 1200);
   iframe.style.height = alturaReal + "px";
 
@@ -692,7 +696,7 @@ export async function descargarPDF(cot: CotizacionReporte) {
     while (srcY < canvas.height) {
       if (page > 0) pdf.addPage();
 
-      const sliceH    = Math.min(pageImgH, canvas.height - srcY);
+      const sliceH     = Math.min(pageImgH, canvas.height - srcY);
       const pageCanvas = document.createElement("canvas");
       pageCanvas.width  = canvas.width;
       pageCanvas.height = sliceH;
