@@ -141,7 +141,7 @@ export default function Gastos() {
     setSearch("");
   }
 
-  const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "" || filtroEstatus !== "todos";
+  // const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "";
 
   function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
     if (!dateStr) return false;
