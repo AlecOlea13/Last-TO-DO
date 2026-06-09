@@ -529,7 +529,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.folioFactura ?? "").toLowerCase().includes(search.toLowerCase()) ||
       g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
     const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
-    const matchEstatus = filtroEstatus === "todos" || g.estatus === filtroEstatus;
+    const matchEstatus = filtroEstatus === "todos" || 
+      (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
     const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
     const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
     const matchHasta = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
@@ -542,7 +543,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.notas ?? "").toLowerCase().includes(search.toLowerCase());
     const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
-    const matchEstatus = filtroEstatus === "todos" || g.estatus === filtroEstatus;
+    const matchEstatus = filtroEstatus === "todos" || 
+    (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
     const fecha = new Date(g.fecha);
     const matchDesde = !fechaDesde || fecha >= new Date(fechaDesde);
     const matchHasta = !fechaHasta || fecha <= new Date(fechaHasta + "T23:59:59");
