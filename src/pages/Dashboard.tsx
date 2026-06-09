@@ -197,6 +197,7 @@ export default function Dashboard() {
   { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
   { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
   { to: "/dashboard/cxc", icon: "💰", label: "CxC", roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores", roles: ["developer","gerencia","oficina"] },
 ];
 
   const navItems = allNav.filter(item => item.roles.includes(rol));

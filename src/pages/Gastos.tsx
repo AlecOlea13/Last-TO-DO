@@ -22,6 +22,7 @@ type GastoFiscal = {
   total: number;
   moneda?: string;
   asesor?: { _id: string; nombre: string };
+  proveedor?: { _id: string; nombre: string; email?: string };
   notas?: string;
   folioFactura?: string;
   estatus?: "pendiente" | "pagado";
@@ -34,6 +35,7 @@ type GastoNoFiscal = {
   _id: string;
   fecha: string;
   asesor?: { _id: string; nombre: string };
+  proveedor?: { _id: string; nombre: string; email?: string };
   entrada?: string;
   monto: number;
   descripcion: string;
@@ -43,22 +45,18 @@ type GastoNoFiscal = {
   comprobantePago?: string;
 };
 
-type Asesor = { _id: string; nombre: string };
+type Asesor    = { _id: string; nombre: string };
+type Proveedor = { _id: string; nombre: string; email?: string };
 
 const emptyNoFiscal = {
   fecha: new Date().toISOString().split("T")[0],
-  asesor: "", entrada: "", monto: 0, descripcion: "", notas: "",
+  asesor: "", proveedor: "", entrada: "", monto: 0, descripcion: "", notas: "",
 };
 
 const emptyManual = {
-  nombreEmisor: "",
-  rfcEmisor: "",
-  folioFactura: "",
+  nombreEmisor: "", rfcEmisor: "", folioFactura: "",
   fechaEmision: new Date().toISOString().split("T")[0],
-  total: 0,
-  descripcion: "",
-  asesor: "",
-  notas: "",
+  total: 0, descripcion: "", asesor: "", notas: "", proveedor: "",
 };
 
 const POR_PAGINA = 70;
@@ -76,6 +74,7 @@ export default function Gastos() {
   const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
   const [noFiscales, setNoFiscales] = useState<GastoNoFiscal[]>([]);
   const [asesores, setAsesores]     = useState<Asesor[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
 
@@ -121,14 +120,16 @@ export default function Gastos() {
 
   async function load() {
     try {
-      const [f, nf, as] = await Promise.all([
+      const [f, nf, as, pr] = await Promise.all([
         api.get("/gastos"),
         api.get("/gastos-no-fiscales"),
         api.get("/asesores"),
+        api.get("/proveedores"),
       ]);
       setFiscales(f.data);
       setNoFiscales(nf.data);
       setAsesores(as.data);
+      setProveedores(pr.data.filter((p: any) => p.activo));
     } catch {}
     finally { setLoading(false); }
   }
@@ -140,8 +141,6 @@ export default function Gastos() {
     setFechaHasta("");
     setSearch("");
   }
-
-  // const hayFiltros = filtroAsesor !== "todos" || fechaDesde !== "" || fechaHasta !== "";
 
   function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
     if (!dateStr) return false;
@@ -254,10 +253,9 @@ export default function Gastos() {
     if (!formF.nombreEmisor && !formF.rfcEmisor) return;
     setSavingF(true);
     try {
-      const { data } = await api.post("/gastos", {
-        ...formF,
-        folioFactura: formF.folioFactura || undefined,
-      });
+      const payload: any = { ...formF, folioFactura: formF.folioFactura || undefined };
+      if (!payload.proveedor) delete payload.proveedor;
+      const { data } = await api.post("/gastos", payload);
       setFiscales(prev => [data, ...prev]);
       setModalFiscal(false);
       setFormF({});
@@ -288,7 +286,8 @@ export default function Gastos() {
         }],
         notas: formManual.notas || undefined,
       };
-      if (formManual.asesor) payload.asesor = formManual.asesor;
+      if (formManual.asesor)    payload.asesor    = formManual.asesor;
+      if (formManual.proveedor) payload.proveedor = formManual.proveedor;
       const { data } = await api.post("/gastos", payload);
       setFiscales(prev => [data, ...prev]);
       setModalManual(false);
@@ -307,7 +306,8 @@ export default function Gastos() {
       fechaEmision: g.fechaEmision ? g.fechaEmision.split("T")[0] : "",
       total:        g.total,
       descripcion:  g.conceptos[0]?.descripcion ?? "",
-      asesor:       g.asesor?._id ?? "",
+      asesor:       g.asesor?._id    ?? "",
+      proveedor:    g.proveedor?._id ?? "",
       notas:        g.notas ?? "",
       folioFactura: g.folioFactura ?? "",
     });
@@ -328,6 +328,7 @@ export default function Gastos() {
         folioFactura: formEditF.folioFactura || undefined,
         total, subtotal, iva,
         notas: formEditF.notas || undefined,
+        proveedor: formEditF.proveedor || null,
       };
       if (formEditF.asesor) payload.asesor = formEditF.asesor;
       if (formEditF.descripcion) {
@@ -364,7 +365,8 @@ export default function Gastos() {
     setEditingNF(g);
     setFormNF({
       fecha:       g.fecha.split("T")[0],
-      asesor:      g.asesor?._id ?? "",
+      asesor:      g.asesor?._id    ?? "",
+      proveedor:   g.proveedor?._id ?? "",
       entrada:     g.entrada ?? "",
       monto:       g.monto,
       descripcion: g.descripcion,
@@ -377,11 +379,13 @@ export default function Gastos() {
     if (!formNF.descripcion || !formNF.monto) return;
     setSavingNF(true);
     try {
+      const body = { ...formNF };
+      if (!body.proveedor) delete body.proveedor;
       if (editingNF) {
-        const { data } = await api.put(`/gastos-no-fiscales/${editingNF._id}`, formNF);
+        const { data } = await api.put(`/gastos-no-fiscales/${editingNF._id}`, body);
         setNoFiscales(prev => prev.map(g => g._id === editingNF._id ? data : g));
       } else {
-        const { data } = await api.post("/gastos-no-fiscales", formNF);
+        const { data } = await api.post("/gastos-no-fiscales", body);
         setNoFiscales(prev => [data, ...prev]);
       }
       setModalNF(false);
@@ -529,7 +533,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.folioFactura ?? "").toLowerCase().includes(search.toLowerCase()) ||
       g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
     const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
-    const matchEstatus = filtroEstatus === "todos" || 
+    const matchEstatus = filtroEstatus === "todos" ||
       (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
     const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
     const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
@@ -543,8 +547,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (g.notas ?? "").toLowerCase().includes(search.toLowerCase());
     const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
-    const matchEstatus = filtroEstatus === "todos" || 
-    (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
+    const matchEstatus = filtroEstatus === "todos" ||
+      (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
     const fecha = new Date(g.fecha);
     const matchDesde = !fechaDesde || fecha >= new Date(fechaDesde);
     const matchHasta = !fechaHasta || fecha <= new Date(fechaHasta + "T23:59:59");
@@ -627,6 +631,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     );
   }
 
+  const selectorProveedor = (value: string, onChange: (v: string) => void) => (
+    <div className="form-group">
+      <label className="form-label">Proveedor del catálogo</label>
+      <select className="form-select" value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">Sin vincular</option>
+        {proveedores.map(p => <option key={p._id} value={p._id}>{p.nombre}{p.email ? ` — ${p.email}` : ""}</option>)}
+      </select>
+    </div>
+  );
+
   return (
     <>
       <div className="page-header">
@@ -706,7 +720,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <p className="table-card-title">Facturas fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-                {/* Filtro estatus */}
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
                   value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
                   <option value="pendiente">⏳ Pendientes</option>
@@ -762,6 +775,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       <div>
                         <p style={{ fontWeight: 600 }}>{g.nombreEmisor ?? "—"}</p>
                         <p style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "var(--text-muted)", marginTop: 2 }}>{g.rfcEmisor ?? "—"}</p>
+                        {g.proveedor && (
+                          <p style={{ fontSize: "0.68rem", color: "var(--blue)", marginTop: 2 }}>🏭 {g.proveedor.nombre}</p>
+                        )}
                       </div>
                       <div>
                         {g.folioFactura
@@ -818,7 +834,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <p className="table-card-title">Gastos no fiscales</p>
               <div className="table-toolbar">
                 <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-                {/* Filtro estatus */}
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
                   value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
                   <option value="pendiente">⏳ Pendientes</option>
@@ -878,6 +893,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                           <div><p style={{ color: "var(--text-muted)" }}>${acum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p></div>
                           <div>
                             <p style={{ fontWeight: 500, fontSize: "0.78rem" }}>{g.descripcion}</p>
+                            {g.proveedor && <p style={{ fontSize: "0.68rem", color: "var(--blue)", marginTop: 2 }}>🏭 {g.proveedor.nombre}</p>}
                             {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{g.notas}</p>}
                           </div>
                           <div>
@@ -958,6 +974,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
               </div>
+              {selectorProveedor(formManual.proveedor, v => setFormManual((p: any) => ({ ...p, proveedor: v })))}
               <div className="form-group">
                 <label className="form-label">Notas</label>
                 <input className="form-input" value={formManual.notas}
@@ -1025,6 +1042,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
               </div>
+              {selectorProveedor(formEditF.proveedor ?? "", v => setFormEditF((p: any) => ({ ...p, proveedor: v })))}
               <div className="form-group">
                 <label className="form-label">Notas</label>
                 <input className="form-input" value={formEditF.notas}
@@ -1086,6 +1104,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                     {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                   </select>
                 </div>
+                {selectorProveedor(formF.proveedor as any ?? "", v => setFormF(p => ({ ...p, proveedor: v as any })))}
                 <div className="form-group">
                   <label className="form-label">Notas (opcional)</label>
                   <input className="form-input" value={formF.notas ?? ""}
@@ -1140,6 +1159,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   onChange={e => setFormNF((p: any) => ({ ...p, descripcion: e.target.value }))}
                   placeholder="Ej. LALO SERVICIO DE PARCHE LLANTAS" />
               </div>
+              {selectorProveedor(formNF.proveedor ?? "", v => setFormNF((p: any) => ({ ...p, proveedor: v })))}
               <div className="form-group span-2">
                 <label className="form-label">Notas</label>
                 <input className="form-input" value={formNF.notas}
@@ -1172,6 +1192,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 { label: "Receptor",     val: detalleF.nombreReceptor },
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
                 { label: "Quien",        val: detalleF.asesor?.nombre },
+                { label: "Proveedor",    val: detalleF.proveedor ? `🏭 ${detalleF.proveedor.nombre}${detalleF.proveedor.email ? ` — ${detalleF.proveedor.email}` : ""}` : null },
                 { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : "⏳ Pendiente" },
                 { label: "Fecha pago",   val: detalleF.fechaPago ? fmt(detalleF.fechaPago) : null },
                 { label: "Notas",        val: detalleF.notas },
