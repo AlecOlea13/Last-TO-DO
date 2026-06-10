@@ -54,7 +54,8 @@ function specRow(label: string, val?: string | null) {
 }
 
 function htmlServicio(cot: CotizacionReporte): string {
-  const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
+  const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
@@ -180,7 +181,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     "<li>El servicio solo incluye lo señalado en esta cotización.</li>",
     "<li>De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.</li>",
     "<li>Vigencia de la cotización, es de 15 días naturales.</li>",
-    "<li><strong>Para confirmar el servicio de reparación, se deberán realizar transferencia del 50% del importe de esta cotización.</strong></li>",
     "<li>Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.</li>",
     "<li>En partes eléctricas no hay garantía.</li>",
     "<li>Las existencias son salvo previa venta.</li>",
@@ -202,7 +202,8 @@ function htmlServicio(cot: CotizacionReporte): string {
 }
 
 function htmlVentaRenta(cot: CotizacionReporte): string {
-  const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
+  const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Richard Kimche";
