@@ -26,7 +26,7 @@ type Orden = {
 };
 
 type TipoServicioItem = {
-  refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string };
+  nombre: string;
   cantidad: number;
 };
 
@@ -44,7 +44,7 @@ type RefaccionUsada = {
 };
 
 const emptyRefaccion = { nombre: "", numeroParte: "", categoria: "", unidad: "pieza", stock: 0, stockMinimo: 1, precio: 0 };
-const emptyTipo = { nombre: "", descripcion: "", intervaloHrs: "", itemsChecklist: [] as string[], precioTotal: 0, refacciones: [] as { refaccion: string; cantidad: number }[] };
+const emptyTipo = { nombre: "", descripcion: "", intervaloHrs: "", itemsChecklist: [] as string[], precioTotal: 0, refacciones: [] as { nombre: string; cantidad: number }[] };
 const emptyUsada = { descripcion: "", numeroParte: "", condicion: "desgastada", servicio: "", notas: "", fotos: [] as string[] };
 
 const ESTATUS_BADGE: Record<string, string> = {
@@ -189,7 +189,7 @@ export default function Almacen() {
       intervaloHrs: t.intervaloHrs ?? "",
       itemsChecklist: [...(t.itemsChecklist ?? [])],
       precioTotal: t.precioTotal ?? 0,
-      refacciones: t.refacciones.map(r => ({ refaccion: r.refaccion._id, cantidad: r.cantidad })),
+      refacciones: t.refacciones.map(r => ({ nombre: r.nombre ?? "", cantidad: r.cantidad })),
     });
     setNuevoCheckItem("");
     setTipoModal(true);
@@ -202,7 +202,7 @@ export default function Almacen() {
   function removeCheckItem(i: number) {
     setTipoForm((p: any) => ({ ...p, itemsChecklist: p.itemsChecklist.filter((_: any, idx: number) => idx !== i) }));
   }
-  function addRefaccionTipo() { setTipoForm((p: any) => ({ ...p, refacciones: [...p.refacciones, { refaccion: "", cantidad: 1 }] })); }
+  function addRefaccionTipo() { setTipoForm((p: any) => ({ ...p, refacciones: [...p.refacciones, { nombre: "", cantidad: 1 }] })); }
   function removeRefaccionTipo(i: number) { setTipoForm((p: any) => ({ ...p, refacciones: p.refacciones.filter((_: any, idx: number) => idx !== i) })); }
   function updateRefaccionTipo(i: number, field: string, val: any) {
     setTipoForm((p: any) => { const refs = [...p.refacciones]; refs[i] = { ...refs[i], [field]: val }; return { ...p, refacciones: refs }; });
@@ -217,7 +217,7 @@ export default function Almacen() {
         intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null,
         itemsChecklist: tipoForm.itemsChecklist,
         precioTotal: +tipoForm.precioTotal || 0,
-        refacciones: tipoForm.refacciones.filter((r: any) => r.refaccion),
+        refacciones: tipoForm.refacciones.filter((r: any) => r.nombre?.trim()),
       };
       if (editingTipo) {
         const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload);
@@ -295,7 +295,7 @@ export default function Almacen() {
           <p className="page-subtitle">{refacciones.length} refacciones en inventario</p>
         </div>
         {canAddRefac && tab === "inventario" && <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>}
-        {canEdit && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
+        {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
         {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
       </div>
 
@@ -325,7 +325,7 @@ export default function Almacen() {
           <button onClick={() => { setTab("inventario"); setSearch(""); }} style={tabStyle("inventario")}>📦 Inventario</button>
           <button onClick={() => { setTab("ordenes"); setSearch(""); }} style={tabStyle("ordenes")}>📋 Órdenes</button>
           {canUsadas && <button onClick={() => { setTab("usadas"); setSearch(""); }} style={tabStyle("usadas")}>🔩 Refacciones usadas</button>}
-          {canEdit && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
+          {canSurtir && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
         </div>
 
         <div className="table-card">
@@ -444,14 +444,14 @@ export default function Almacen() {
                             ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>
                             : t.refacciones.map((r, i) => (
                               <span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>
-                                {r.cantidad}× {r.refaccion.nombre}
+                                {r.cantidad}× {r.nombre}
                               </span>
                             ))
                           }
                         </div>
                       </td>
                       <td>
-                        {canEdit && (
+                        {canSurtir && (
                           <div style={{ display: "flex", gap: 4 }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button>
                             <button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button>
@@ -657,12 +657,11 @@ export default function Almacen() {
       )}
 
       {/* ── Modal tipo servicio ── */}
-      {tipoModal && canEdit && (
+      {tipoModal && canSurtir && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTipoModal(false)}>
           <div className="modal" style={{ maxWidth: 640 }}>
             <button className="modal-close" onClick={() => setTipoModal(false)}>✕</button>
             <h2 className="modal-title">{editingTipo ? "Editar tipo de servicio" : "Nuevo tipo de servicio"}</h2>
-
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Nombre *</label>
@@ -689,7 +688,6 @@ export default function Almacen() {
               </div>
             </div>
 
-            {/* ── Checklist de lo que se checa ── */}
             <div style={{ marginTop: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
@@ -717,7 +715,6 @@ export default function Almacen() {
               )}
             </div>
 
-            {/* ── Refacciones ── */}
             <div style={{ marginTop: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
@@ -726,16 +723,17 @@ export default function Almacen() {
                 <button className="btn btn-secondary btn-sm" onClick={addRefaccionTipo}>+ Agregar</button>
               </div>
               {tipoForm.refacciones.length === 0 ? (
-                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Sin refacciones — este tipo no generará orden automática</p>
+                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Sin refacciones sugeridas para este tipo</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {tipoForm.refacciones.map((r: any, i: number) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 32px", gap: 8, alignItems: "center" }}>
-                      <select className="form-select" value={r.refaccion} onChange={e => updateRefaccionTipo(i, "refaccion", e.target.value)}>
-                        <option value="">Selecciona refacción...</option>
-                        {refacciones.map(ref => <option key={ref._id} value={ref._id}>{ref.nombre}{ref.numeroParte ? ` (#${ref.numeroParte})` : ""}</option>)}
-                      </select>
-                      <input className="form-input" type="number" min={1} value={r.cantidad} onChange={e => updateRefaccionTipo(i, "cantidad", +e.target.value)} style={{ padding: "8px", textAlign: "center" }} />
+                      <input className="form-input" value={r.nombre}
+                        onChange={e => updateRefaccionTipo(i, "nombre", e.target.value)}
+                        placeholder="Ej. Filtro de aceite, Bujías..." />
+                      <input className="form-input" type="number" min={1} value={r.cantidad}
+                        onChange={e => updateRefaccionTipo(i, "cantidad", +e.target.value)}
+                        style={{ padding: "8px", textAlign: "center" }} />
                       <button className="btn btn-danger btn-icon" onClick={() => removeRefaccionTipo(i)}>✕</button>
                     </div>
                   ))}
