@@ -42,7 +42,7 @@ type Montacargas = {
 type TipoServicio = {
   _id: string; nombre: string; descripcion?: string; intervaloHrs?: number;
   itemsChecklist: string[]; precioTotal: number;
-  refacciones: { refaccion: { _id: string; nombre: string; unidad: string }; cantidad: number }[];
+  refacciones: { nombre: string; cantidad: number }[];
 };
 
 const emptyForm: any = {
@@ -185,7 +185,7 @@ export default function Cotizaciones() {
     if (!t) return;
     const checklist = (t.itemsChecklist ?? []).map(item => `• ${item}`).join("\n");
     const refaccionesList = t.refacciones.length > 0
-      ? "\n\nRefacciones:\n" + t.refacciones.map(r => `• ${r.cantidad} ${r.refaccion.unidad} ${r.refaccion.nombre}`).join("\n")
+      ? "\n\nRefacciones:\n" + t.refacciones.map(r => `• ${r.cantidad} ${r.nombre}`).join("\n")
       : "";
     const descripcionCompleta = [
       t.nombre,
@@ -352,7 +352,6 @@ export default function Cotizaciones() {
           </select>
         </div>
 
-        {/* ── Datos opcionales del equipo ── */}
         <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
           <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
             🔧 Datos del equipo (opcionales — aparecen en el reporte)
@@ -403,7 +402,6 @@ export default function Cotizaciones() {
             placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
         </div>
 
-        {/* ── Autocompletar desde tipo de servicio ── */}
         {form.tipo === "servicio" && tiposServicio.length > 0 && (
           <div className="form-group span-2" style={{
             background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
@@ -429,7 +427,6 @@ export default function Cotizaciones() {
           </div>
         )}
 
-        {/* ── Autocompletar desde montacargas ── */}
         {mostrarAutocompletar && (
           <div className="form-group span-2" style={{
             background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
@@ -468,7 +465,6 @@ export default function Cotizaciones() {
         )}
       </div>
 
-      {/* ── Items ── */}
       <div style={{ marginTop: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Conceptos</p>

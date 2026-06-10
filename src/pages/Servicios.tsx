@@ -55,7 +55,7 @@ const ORDEN_BADGE: Record<string, string> = {
 
 export default function Servicios() {
   const rol       = localStorage.getItem("rol") ?? "";
-  const canCreate = ["developer", "gerencia"].includes(rol);
+  const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
 
   const [servicios, setServicios]     = useState<Servicio[]>([]);
   const [montas, setMontas]           = useState<Monta[]>([]);
@@ -321,7 +321,7 @@ export default function Servicios() {
       </div>
 
       {/* ── Modal nuevo servicio ── */}
-      {modal && canCreate && (
+      {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal">
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
