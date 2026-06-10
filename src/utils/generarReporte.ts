@@ -57,10 +57,10 @@ function htmlServicio(cot: CotizacionReporte): string {
   const fecha   = new Date(cot.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
-  const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
-  const asesorPuesto = cot.asesor?.puesto   ?? "Asesor comercial";
-  const asesorTel    = cot.asesor?.telefono ?? "33 1322 5453";
-  const asesorEmail  = cot.asesor?.email    ?? "juanpablo@pipsamontacargas.com";
+  // const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
+  // const asesorPuesto = cot.asesor?.puesto   ?? "Asesor comercial";
+  // const asesorTel    = cot.asesor?.telefono ?? "33 1322 5453";
+  // const asesorEmail  = cot.asesor?.email    ?? "juanpablo@pipsamontacargas.com";
 
   const clienteNombre   = cot.cliente?.nombre    ?? "";
   const clienteDirec    = cot.cliente?.direccion ?? "";
@@ -141,8 +141,8 @@ function htmlServicio(cot: CotizacionReporte): string {
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Col. Agua blanca industrial<br>",
-    "45602, Zapopán, Jal.<br>",
+    "Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>",
+    "45602, Zapópan, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
     "</div>",
@@ -188,13 +188,13 @@ function htmlServicio(cot: CotizacionReporte): string {
     "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
     "</div>",
 
-    '<div class="signature">',
-    "<strong>A T E N T A M E N T E.</strong>",
-    `<div class="name">${asesorNombre}.</div>`,
-    `${asesorPuesto}.<br>`,
-    `Cel. ${asesorTel}<br>`,
-    asesorEmail,
-    "</div>",
+    // '<div class="signature">',
+    // "<strong>A T E N T A M E N T E.</strong>",
+    // `<div class="name">${asesorNombre}.</div>`,
+    // `${asesorPuesto}.<br>`,
+    // `Cel. ${asesorTel}<br>`,
+    // asesorEmail,
+    // "</div>",
 
     `<script>window.onload = function() { document.title = '${cot.folio}'; };</script>`,
     "</body>", "</html>",
