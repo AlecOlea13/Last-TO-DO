@@ -55,7 +55,7 @@ function App() {
           <Route path="cxc" element={
             <ProtectedRoute roles={["developer","gerencia","oficina"]}><CxC /></ProtectedRoute>} />
                 <Route path="proveedores" element={
-            <ProtectedRoute roles={["developer","gerencia"]}><Proveedores /></ProtectedRoute>
+            <ProtectedRoute roles={["developer","gerencia","oficina"]}><Proveedores /></ProtectedRoute>
           } />
         </Route>
          
