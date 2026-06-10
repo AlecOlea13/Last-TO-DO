@@ -15,7 +15,7 @@ const emptyForm = { nombre: "", rfc: "", email: "", telefono: "", notas: "" };
 
 export default function Proveedores() {
   const rol = localStorage.getItem("rol") ?? "";
-  const canEdit = ["developer", "gerencia"].includes(rol);
+  const canEdit = ["developer", "gerencia", "oficina"].includes(rol);
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading]         = useState(true);
