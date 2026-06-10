@@ -657,12 +657,17 @@ export async function descargarPDF(cot: CotizacionReporte) {
 
   await new Promise(r => setTimeout(r, 1800));
 
-  // Medir altura real del contenido
   const body       = doc.body;
   const alturaReal = Math.max(body.scrollHeight, body.offsetHeight, 1200);
   iframe.style.height = alturaReal + "px";
 
   await new Promise(r => setTimeout(r, 300));
+
+  // Obtener posición del bloque .signature para evitar cortarlo
+  const signatureEl = doc.querySelector(".signature") as HTMLElement | null;
+  const signatureTop = signatureEl
+    ? signatureEl.getBoundingClientRect().top + (iframe.contentWindow?.scrollY ?? 0)
+    : null;
 
   const canvas = await html2canvas(body, {
     scale: 2,
@@ -683,20 +688,44 @@ export async function descargarPDF(cot: CotizacionReporte) {
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
 
-  const scale = pageW / canvas.width;
-  const imgH  = canvas.height * scale;
+  const scale    = pageW / canvas.width;
+  const imgH     = canvas.height * scale;
+  const pageImgH = pageH / scale;  // altura de página en píxeles del canvas
 
   if (imgH <= pageH) {
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageW, imgH);
   } else {
-    const pageImgH = pageH / scale;
+    // Calcular puntos de corte inteligentes
+    const totalPx = canvas.height;
+    const cuts: number[] = [];
+    let cursor = 0;
+
+    while (cursor < totalPx) {
+      let nextCut = cursor + pageImgH;
+      if (nextCut >= totalPx) break;
+
+      // Si el corte cae dentro del bloque signature, retroceder antes de él
+      if (signatureTop !== null) {
+        const signatureTopPx = signatureTop * 2; // canvas scale=2
+        if (nextCut > signatureTopPx && cursor < signatureTopPx) {
+          // El corte partiría el signature — retroceder al inicio del signature
+          nextCut = signatureTopPx - 10;
+        }
+      }
+
+      cuts.push(nextCut);
+      cursor = nextCut;
+    }
+
+    // Generar páginas usando los puntos de corte
     let srcY = 0;
     let page = 0;
+    const allCuts = [...cuts, totalPx];
 
-    while (srcY < canvas.height) {
+    for (const cutY of allCuts) {
       if (page > 0) pdf.addPage();
 
-      const sliceH     = Math.min(pageImgH, canvas.height - srcY);
+      const sliceH     = cutY - srcY;
       const pageCanvas = document.createElement("canvas");
       pageCanvas.width  = canvas.width;
       pageCanvas.height = sliceH;
@@ -710,7 +739,7 @@ export async function descargarPDF(cot: CotizacionReporte) {
         "JPEG", 0, 0, pageW, sliceH * scale
       );
 
-      srcY += pageImgH;
+      srcY = cutY;
       page++;
     }
   }
