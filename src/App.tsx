@@ -54,10 +54,11 @@ function App() {
           } />
           <Route path="cxc" element={
             <ProtectedRoute roles={["developer","gerencia","oficina"]}><CxC /></ProtectedRoute>} />
-        </Route>
-          <Route path="proveedores" element={
+                <Route path="proveedores" element={
             <ProtectedRoute roles={["developer","gerencia"]}><Proveedores /></ProtectedRoute>
           } />
+        </Route>
+         
 
         <Route path="/dashboard/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       </Routes>
