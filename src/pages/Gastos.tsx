@@ -104,18 +104,12 @@ export default function Gastos() {
   const [formNF, setFormNF]       = useState<any>(emptyNoFiscal);
   const [savingNF, setSavingNF]   = useState(false);
 
-  // Modal pago individual
   const [modalPago, setModalPago]         = useState<{ id: string; tipo: "fiscal" | "nofiscal"; gasto?: GastoFiscal } | null>(null);
   const [formPago, setFormPago]           = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
   const [savingPago, setSavingPago]       = useState(false);
   const [uploadingPago, setUploadingPago] = useState(false);
 
-  // Pago múltiple
   const [pagoMultipleIds, setPagoMultipleIds] = useState<string[]>([]);
-  // const [modalPagoMultiple, setModalPagoMultiple] = useState(false);
-  // const [formPagoMultiple, setFormPagoMultiple]   = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
-  // const [savingPagoMultiple, setSavingPagoMultiple] = useState(false);
-
   const [reemplazandoComp, setReemplazandoComp] = useState(false);
 
   const [paginaF, setPaginaF]   = useState(1);
@@ -438,7 +432,6 @@ export default function Gastos() {
   async function registrarPago() {
     if (!modalPago) return;
 
-    // Si hay múltiples seleccionados, usar endpoint múltiple
     if (pagoMultipleIds.length > 1) {
       setSavingPago(true);
       try {
@@ -457,7 +450,6 @@ export default function Gastos() {
       return;
     }
 
-    // Pago individual
     setSavingPago(true);
     try {
       const endpoint = modalPago.tipo === "fiscal"
@@ -473,6 +465,12 @@ export default function Gastos() {
       setPagoMultipleIds([]);
     } catch {}
     finally { setSavingPago(false); }
+  }
+
+  function toggleSeleccion(id: string) {
+    setPagoMultipleIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   }
 
   function abrirReporte(tipo: "fiscal" | "nofiscal" | "general", periodo: "semana" | "mes" | "año" | "todo") {
@@ -605,24 +603,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     { label: "Total general", val: sumaNoFiscal() },
   ];
 
-  // Facturas del mismo proveedor pendientes (para pago múltiple)
   const gastosDelMismoProveedor = modalPago?.tipo === "fiscal" && modalPago.gasto
-    ? filteredF.filter(g =>
-        g.estatus !== "pagado" &&
-        g.nombreEmisor === modalPago.gasto!.nombreEmisor
-      )
+    ? filteredF.filter(g => g.estatus !== "pagado" && g.nombreEmisor === modalPago.gasto!.nombreEmisor)
     : [];
 
   const totalSeleccionado = pagoMultipleIds.reduce((acc, id) => {
     const g = fiscales.find(x => x._id === id);
     return acc + (g?.total ?? 0);
   }, 0);
-
-  function toggleSeleccion(id: string) {
-    setPagoMultipleIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  }
 
   function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
     const pagado = estatus === "pagado";
@@ -724,7 +712,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       <div className="page-content">
         <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)" }}>
           {(["fiscal","nofiscal"] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); limpiarFiltros(); }}
+            <button key={t} onClick={() => { setTab(t); limpiarFiltros(); setPagoMultipleIds([]); }}
               style={{
                 padding: "10px 24px", border: "none", cursor: "pointer",
                 background: "transparent", fontFamily: "var(--font-head)",
@@ -811,12 +799,23 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
                       display: "grid",
-                      gridTemplateColumns: "110px 1fr 90px 1fr 100px 100px 120px 130px",
+                      gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 120px 130px",
                       gap: 0, padding: "12px 20px",
                       borderBottom: "1px solid var(--border)",
-                      background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                      background: pagoMultipleIds.includes(g._id)
+                        ? "rgba(34,197,94,0.05)"
+                        : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem",
                     }}>
+                      {/* Checkbox */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 2 }}>
+                        {g.estatus !== "pagado" && canDelete && (
+                          <input type="checkbox"
+                            checked={pagoMultipleIds.includes(g._id)}
+                            onChange={() => toggleSeleccion(g._id)}
+                            style={{ accentColor: "var(--green)", width: 15, height: 15, cursor: "pointer" }} />
+                        )}
+                      </div>
                       <div>
                         <p style={{ fontWeight: 500, whiteSpace: "nowrap" }}>{fmt(g.fechaEmision)}</p>
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{g.asesor?.nombre ?? "—"}</p>
@@ -965,6 +964,42 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <Paginador total={totalPaginasNF} pag={paginaNF} count={filteredNF.length} set={setPaginaNF} />
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Barra sticky de selección múltiple ── */}
+        {pagoMultipleIds.length > 0 && tab === "fiscal" && !modalPago && (
+          <div style={{
+            position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+            background: "var(--surface)", border: "1.5px solid var(--green)",
+            borderRadius: "var(--radius)", padding: "14px 24px",
+            display: "flex", alignItems: "center", gap: 20,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)", zIndex: 100,
+            minWidth: 420,
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>
+                {pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""} seleccionada{pagoMultipleIds.length !== 1 ? "s" : ""}
+              </p>
+              <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--green)", fontWeight: 700 }}>
+                Total: ${totalSeleccionado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setPagoMultipleIds([])}>
+              ✕ Limpiar
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ background: "var(--green)", color: "#fff" }}
+              onClick={() => {
+                const primerGasto = fiscales.find(g => g._id === pagoMultipleIds[0]);
+                if (primerGasto) {
+                  setModalPago({ id: pagoMultipleIds[0], tipo: "fiscal", gasto: primerGasto });
+                  setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+                }
+              }}>
+              💳 Pagar {pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""}
+            </button>
           </div>
         )}
       </div>
@@ -1328,7 +1363,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button className="modal-close" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>✕</button>
             <h2 className="modal-title">Registrar pago</h2>
 
-            {/* Sección pago múltiple — solo para fiscales con proveedor conocido */}
             {modalPago.tipo === "fiscal" && gastosDelMismoProveedor.length > 1 && (
               <div style={{ marginBottom: 16, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
