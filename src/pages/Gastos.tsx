@@ -104,10 +104,17 @@ export default function Gastos() {
   const [formNF, setFormNF]       = useState<any>(emptyNoFiscal);
   const [savingNF, setSavingNF]   = useState(false);
 
-  const [modalPago, setModalPago]         = useState<{ id: string; tipo: "fiscal" | "nofiscal" } | null>(null);
+  // Modal pago individual
+  const [modalPago, setModalPago]         = useState<{ id: string; tipo: "fiscal" | "nofiscal"; gasto?: GastoFiscal } | null>(null);
   const [formPago, setFormPago]           = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
   const [savingPago, setSavingPago]       = useState(false);
   const [uploadingPago, setUploadingPago] = useState(false);
+
+  // Pago múltiple
+  const [pagoMultipleIds, setPagoMultipleIds] = useState<string[]>([]);
+  // const [modalPagoMultiple, setModalPagoMultiple] = useState(false);
+  // const [formPagoMultiple, setFormPagoMultiple]   = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+  // const [savingPagoMultiple, setSavingPagoMultiple] = useState(false);
 
   const [reemplazandoComp, setReemplazandoComp] = useState(false);
 
@@ -400,9 +407,10 @@ export default function Gastos() {
     setNoFiscales(prev => prev.filter(g => g._id !== id));
   }
 
-  function abrirModalPago(id: string, tipo: "fiscal" | "nofiscal") {
-    setModalPago({ id, tipo });
+  function abrirModalPago(id: string, tipo: "fiscal" | "nofiscal", gasto?: GastoFiscal) {
+    setModalPago({ id, tipo, gasto });
     setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+    setPagoMultipleIds([id]);
   }
 
   async function subirArchivo(file: File): Promise<string> {
@@ -429,6 +437,27 @@ export default function Gastos() {
 
   async function registrarPago() {
     if (!modalPago) return;
+
+    // Si hay múltiples seleccionados, usar endpoint múltiple
+    if (pagoMultipleIds.length > 1) {
+      setSavingPago(true);
+      try {
+        const { data } = await api.post("/gastos/pagar-multiple", {
+          ids:             pagoMultipleIds,
+          fechaPago:       formPago.fechaPago,
+          comprobantePago: formPago.comprobantePago || null,
+          complementoXml:  formPago.complementoXml  || null,
+        });
+        const updatedIds = new Set((data as GastoFiscal[]).map(g => g._id));
+        setFiscales(prev => prev.map(g => updatedIds.has(g._id) ? { ...g, ...(data as GastoFiscal[]).find(d => d._id === g._id) } : g));
+        setModalPago(null);
+        setPagoMultipleIds([]);
+      } catch {}
+      finally { setSavingPago(false); }
+      return;
+    }
+
+    // Pago individual
     setSavingPago(true);
     try {
       const endpoint = modalPago.tipo === "fiscal"
@@ -441,6 +470,7 @@ export default function Gastos() {
         setNoFiscales(prev => prev.map(g => g._id === modalPago.id ? { ...g, ...data } : g));
       }
       setModalPago(null);
+      setPagoMultipleIds([]);
     } catch {}
     finally { setSavingPago(false); }
   }
@@ -574,6 +604,25 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     { label: "Este año",      val: sumaNoFiscal("año") },
     { label: "Total general", val: sumaNoFiscal() },
   ];
+
+  // Facturas del mismo proveedor pendientes (para pago múltiple)
+  const gastosDelMismoProveedor = modalPago?.tipo === "fiscal" && modalPago.gasto
+    ? filteredF.filter(g =>
+        g.estatus !== "pagado" &&
+        g.nombreEmisor === modalPago.gasto!.nombreEmisor
+      )
+    : [];
+
+  const totalSeleccionado = pagoMultipleIds.reduce((acc, id) => {
+    const g = fiscales.find(x => x._id === id);
+    return acc + (g?.total ?? 0);
+  }, 0);
+
+  function toggleSeleccion(id: string) {
+    setPagoMultipleIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
 
   function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
     const pagado = estatus === "pagado";
@@ -812,7 +861,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         {g.estatus !== "pagado" && canDelete && (
                           <button className="btn btn-secondary btn-sm"
                             style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                            onClick={() => abrirModalPago(g._id, "fiscal")} title="Registrar pago">💳</button>
+                            onClick={() => abrirModalPago(g._id, "fiscal", g)} title="Registrar pago">💳</button>
                         )}
                         {canDelete && (
                           <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)} title="Eliminar">🗑️</button>
@@ -1263,7 +1312,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               )}
               {detalleF.estatus !== "pagado" && canDelete && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
-                  onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal"); }}>
+                  onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>
                   💳 Registrar pago
                 </button>
               )}
@@ -1274,10 +1323,49 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
 
       {/* ── Modal pago ── */}
       {modalPago && (
-        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalPago(null); }}>
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <button className="modal-close" onClick={() => setModalPago(null)}>✕</button>
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) { setModalPago(null); setPagoMultipleIds([]); } }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>✕</button>
             <h2 className="modal-title">Registrar pago</h2>
+
+            {/* Sección pago múltiple — solo para fiscales con proveedor conocido */}
+            {modalPago.tipo === "fiscal" && gastosDelMismoProveedor.length > 1 && (
+              <div style={{ marginBottom: 16, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+                  💳 Pago múltiple — {modalPago.gasto?.nombreEmisor}
+                </p>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 10 }}>
+                  Selecciona las facturas que se pagan con este comprobante:
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+                  {gastosDelMismoProveedor.map(g => (
+                    <label key={g._id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.08)" : "var(--surface2)", borderRadius: "var(--radius-sm)", border: `1px solid ${pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.3)" : "var(--border)"}`, cursor: "pointer" }}>
+                      <input type="checkbox" checked={pagoMultipleIds.includes(g._id)}
+                        onChange={() => toggleSeleccion(g._id)}
+                        style={{ accentColor: "var(--green)", width: 16, height: 16 }} />
+                      <div style={{ flex: 1, fontSize: "0.82rem" }}>
+                        <span style={{ fontWeight: 600, color: "var(--accent)" }}>{g.folioFactura ?? "Sin folio"}</span>
+                        <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{fmt(g.fechaEmision)}</span>
+                      </div>
+                      <span style={{ fontWeight: 700, color: "var(--red)", fontSize: "0.85rem" }}>
+                        ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {pagoMultipleIds.length > 0 && (
+                  <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "rgba(34,197,94,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                      {pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""} seleccionada{pagoMultipleIds.length !== 1 ? "s" : ""}
+                    </span>
+                    <span style={{ fontWeight: 700, color: "var(--green)", fontSize: "0.9rem" }}>
+                      Total: ${totalSeleccionado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Fecha de pago *</label>
@@ -1322,10 +1410,15 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModalPago(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={registrarPago} disabled={savingPago || uploadingPago}
+              <button className="btn btn-secondary" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>Cancelar</button>
+              <button className="btn btn-primary" onClick={registrarPago}
+                disabled={savingPago || uploadingPago || pagoMultipleIds.length === 0}
                 style={{ background: "var(--green)", color: "#fff" }}>
-                {savingPago ? "Registrando..." : "✅ Confirmar pago"}
+                {savingPago
+                  ? "Registrando..."
+                  : pagoMultipleIds.length > 1
+                    ? `✅ Pagar ${pagoMultipleIds.length} facturas`
+                    : "✅ Confirmar pago"}
               </button>
             </div>
           </div>
