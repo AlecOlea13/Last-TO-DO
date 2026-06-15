@@ -69,7 +69,7 @@ function urlArchivo(url?: string): string {
 export default function Gastos() {
   const rol       = localStorage.getItem("rol") ?? "";
   const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
-  const canCancel = ["developer", "gerencia"].includes(rol);
+  const canCancel = ["developer", "gerencia", "oficina"].includes(rol);
 
   const [tab, setTab]               = useState<"fiscal" | "nofiscal">("fiscal");
   const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
