@@ -1,3 +1,6 @@
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+
 export type ItemReporte = {
   cantidad: number;
   descripcion: string;
@@ -72,8 +75,7 @@ function htmlServicio(cot: CotizacionReporte): string {
   const equipoModelo = cot.montacargas?.modelo ?? cot.equipoModelo ?? "";
   const equipoSerie  = cot.montacargas?.serie  ?? cot.equipoSerie  ?? "";
 
-  // FIX 3: Marca, Modelo, Serie en negritas
-  const equipoTexto  = [
+  const equipoTexto = [
     equipoMarca  ? `<strong>Marca:</strong> ${equipoMarca}`   : "",
     equipoModelo ? `<strong>Modelo:</strong> ${equipoModelo}` : "",
     equipoSerie  ? `<strong>Serie:</strong> ${equipoSerie}`   : "",
@@ -126,7 +128,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".conditions strong { color: #222; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
     ".conditions li { margin-bottom: 2px; }",
-    // FIX 1: page-break-inside avoid en signature
     ".signature { margin-top: 28px; text-align: center; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
@@ -150,10 +151,9 @@ function htmlServicio(cot: CotizacionReporte): string {
 
     '<div class="client-info">',
     `<strong>${clienteNombre}.</strong><br>`,
-    clienteDirec    ? clienteDirec + "<br>"                                                  : "",
-    clienteTel      ? "Tel. " + clienteTel + "<br>"                                          : "",
-    // FIX 2: At'n en negritas
-    clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>"              : "",
+    clienteDirec    ? clienteDirec + "<br>"                                     : "",
+    clienteTel      ? "Tel. " + clienteTel + "<br>"                             : "",
+    clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
     "</div>",
 
     equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
@@ -229,12 +229,12 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     specRow("Sistema",            m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
     specRow("Capacidad de carga", m?.capacidad),
     specRow("Altura de levante",  m?.alturaLevante),
-    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                  : "",
-    !esElectrico ? specRow("Horquillas",          m?.horquillas)                       : "",
-    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null) : "",
-    esElectrico  ? specRow("Voltaje",             m?.voltaje)                          : "",
-    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                      : "",
-    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)    : "",
+    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                   : "",
+    !esElectrico ? specRow("Horquillas",          m?.horquillas)                        : "",
+    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null)  : "",
+    esElectrico  ? specRow("Voltaje",             m?.voltaje)                           : "",
+    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                       : "",
+    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)     : "",
     specRow("Tipo de llantas",    m?.tipoLlantas),
   ].join("");
 
@@ -308,7 +308,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".conditions strong { color: #222; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
     ".conditions li { margin-bottom: 4px; }",
-    ".signature { margin-top: 28px; font-size: 10pt; }",
+    ".signature { margin-top: 28px; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
@@ -642,9 +642,6 @@ function abrirVentana(html: string) {
 }
 
 export async function descargarPDF(cot: CotizacionReporte) {
-  const { default: jsPDF }       = await import("jspdf");
-  const { default: html2canvas } = await import("html2canvas");
-
   const html = cot.tipo === "venta" || cot.tipo === "renta"
     ? htmlVentaRenta(cot)
     : htmlServicio(cot);
@@ -664,7 +661,6 @@ export async function descargarPDF(cot: CotizacionReporte) {
 
   await new Promise(r => setTimeout(r, 300));
 
-  // Obtener posición del bloque .signature para evitar cortarlo
   const signatureEl = doc.querySelector(".signature") as HTMLElement | null;
   const signatureTop = signatureEl
     ? signatureEl.getBoundingClientRect().top + (iframe.contentWindow?.scrollY ?? 0)
@@ -691,12 +687,11 @@ export async function descargarPDF(cot: CotizacionReporte) {
 
   const scale    = pageW / canvas.width;
   const imgH     = canvas.height * scale;
-  const pageImgH = pageH / scale;  // altura de página en píxeles del canvas
+  const pageImgH = pageH / scale;
 
   if (imgH <= pageH) {
     pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageW, imgH);
   } else {
-    // Calcular puntos de corte inteligentes
     const totalPx = canvas.height;
     const cuts: number[] = [];
     let cursor = 0;
@@ -705,11 +700,9 @@ export async function descargarPDF(cot: CotizacionReporte) {
       let nextCut = cursor + pageImgH;
       if (nextCut >= totalPx) break;
 
-      // Si el corte cae dentro del bloque signature, retroceder antes de él
       if (signatureTop !== null) {
-        const signatureTopPx = signatureTop * 2; // canvas scale=2
+        const signatureTopPx = signatureTop * 2;
         if (nextCut > signatureTopPx && cursor < signatureTopPx) {
-          // El corte partiría el signature — retroceder al inicio del signature
           nextCut = signatureTopPx - 10;
         }
       }
@@ -718,7 +711,6 @@ export async function descargarPDF(cot: CotizacionReporte) {
       cursor = nextCut;
     }
 
-    // Generar páginas usando los puntos de corte
     let srcY = 0;
     let page = 0;
     const allCuts = [...cuts, totalPx];
