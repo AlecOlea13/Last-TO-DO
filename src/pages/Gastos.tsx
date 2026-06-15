@@ -8,6 +8,16 @@ type Concepto = {
   importe: number;
 };
 
+type PagoParcial = {
+  _id: string;
+  monto: number;
+  fechaPago: string;
+  comprobantePago?: string;
+  complementoXml?: string;
+  notas?: string;
+  createdAt: string;
+};
+
 type GastoFiscal = {
   _id: string;
   uuid?: string;
@@ -25,10 +35,11 @@ type GastoFiscal = {
   proveedor?: { _id: string; nombre: string; email?: string };
   notas?: string;
   folioFactura?: string;
-  estatus?: "pendiente" | "pagado" | "cancelada";
+  estatus?: "pendiente" | "pagado" | "parcial" | "cancelada";
   fechaPago?: string;
   comprobantePago?: string;
   complementoXml?: string;
+  pagos?: PagoParcial[];
 };
 
 type GastoNoFiscal = {
@@ -79,7 +90,7 @@ export default function Gastos() {
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
 
-  const [filtroEstatus, setFiltroEstatus] = useState<"pendiente" | "pagado" | "cancelada" | "todos">("pendiente");
+  const [filtroEstatus, setFiltroEstatus] = useState<"pendiente" | "pagado" | "parcial" | "cancelada" | "todos">("pendiente");
   const [filtroAsesor, setFiltroAsesor]   = useState("todos");
   const [fechaDesde, setFechaDesde]       = useState("");
   const [fechaHasta, setFechaHasta]       = useState("");
@@ -105,8 +116,16 @@ export default function Gastos() {
   const [formNF, setFormNF]       = useState<any>(emptyNoFiscal);
   const [savingNF, setSavingNF]   = useState(false);
 
-  const [modalPago, setModalPago]         = useState<{ id: string; tipo: "fiscal" | "nofiscal"; gasto?: GastoFiscal } | null>(null);
-  const [formPago, setFormPago]           = useState({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+  // Modal pago — ahora incluye tipoPago
+  const [modalPago, setModalPago] = useState<{ id: string; tipo: "fiscal" | "nofiscal"; gasto?: GastoFiscal } | null>(null);
+  const [tipoPago, setTipoPago]   = useState<"total" | "parcial">("total");
+  const [formPago, setFormPago]   = useState({
+    fechaPago: new Date().toISOString().split("T")[0],
+    comprobantePago: "",
+    complementoXml: "",
+    monto: 0,
+    notas: "",
+  });
   const [savingPago, setSavingPago]       = useState(false);
   const [uploadingPago, setUploadingPago] = useState(false);
 
@@ -169,6 +188,10 @@ export default function Gastos() {
     return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
   }
 
+  function totalPagadoParcial(g: GastoFiscal) {
+    return (g.pagos ?? []).reduce((acc, p) => acc + p.monto, 0);
+  }
+
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
@@ -179,6 +202,9 @@ export default function Gastos() {
     const [year, month, day] = date.split("T")[0].split("-");
     return `${day}/${month}/${String(year).slice(2)}`;
   }
+  // function fmtHora(date: string) {
+  //   return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  // }
 
   function parseXML(file: File) {
     setParsing(true);
@@ -225,7 +251,6 @@ export default function Gastos() {
         }
         const folioFactura = [getAttr(cfdi, "Serie"), getAttr(cfdi, "Folio")]
           .filter(Boolean).join("") || undefined;
-
         setFormF(prev => ({
           ...prev,
           uuid:           getAttr(timbre, "UUID")    || getAttr(timbre, "uuid"),
@@ -411,7 +436,14 @@ export default function Gastos() {
 
   function abrirModalPago(id: string, tipo: "fiscal" | "nofiscal", gasto?: GastoFiscal) {
     setModalPago({ id, tipo, gasto });
-    setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+    setTipoPago("total");
+    setFormPago({
+      fechaPago: new Date().toISOString().split("T")[0],
+      comprobantePago: "",
+      complementoXml: "",
+      monto: 0,
+      notas: "",
+    });
     setPagoMultipleIds([id]);
   }
 
@@ -440,6 +472,7 @@ export default function Gastos() {
   async function registrarPago() {
     if (!modalPago) return;
 
+    // Pago múltiple
     if (pagoMultipleIds.length > 1) {
       setSavingPago(true);
       try {
@@ -458,12 +491,41 @@ export default function Gastos() {
       return;
     }
 
+    // Pago parcial
+    if (tipoPago === "parcial") {
+      if (!formPago.monto || formPago.monto <= 0) {
+        alert("Ingresa un monto válido para el pago parcial.");
+        return;
+      }
+      setSavingPago(true);
+      try {
+        const { data } = await api.post(`/gastos/${modalPago.id}/pagar-parcial`, {
+          monto:           formPago.monto,
+          fechaPago:       formPago.fechaPago,
+          comprobantePago: formPago.comprobantePago || null,
+          complementoXml:  formPago.complementoXml  || null,
+          notas:           formPago.notas || null,
+        });
+        setFiscales(prev => prev.map(g => g._id === modalPago.id ? { ...g, ...data } : g));
+        setDetalleF(prev => prev?._id === modalPago.id ? { ...prev, ...data } : prev);
+        setModalPago(null);
+        setPagoMultipleIds([]);
+      } catch {}
+      finally { setSavingPago(false); }
+      return;
+    }
+
+    // Pago total individual
     setSavingPago(true);
     try {
       const endpoint = modalPago.tipo === "fiscal"
         ? `/gastos/${modalPago.id}/pagar`
         : `/gastos-no-fiscales/${modalPago.id}/pagar`;
-      const { data } = await api.post(endpoint, formPago);
+      const { data } = await api.post(endpoint, {
+        fechaPago:       formPago.fechaPago,
+        comprobantePago: formPago.comprobantePago || null,
+        complementoXml:  formPago.complementoXml  || null,
+      });
       if (modalPago.tipo === "fiscal") {
         setFiscales(prev => prev.map(g => g._id === modalPago.id ? { ...g, ...data } : g));
       } else {
@@ -496,7 +558,7 @@ export default function Gastos() {
         <td>${g.folioFactura ?? "—"}</td>
         <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${g.conceptos[0]?.descripcion ?? "—"}</td><td>${g.notas ?? "—"}</td>
-        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : g.estatus === "cancelada" ? "🚫" : "⏳"}</td>
+        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : g.estatus === "parcial" ? "🔶" : g.estatus === "cancelada" ? "🚫" : "⏳"}</td>
       </tr>`).join("");
     const rowsNF = nfOrdenados.map(g => {
       acum += g.monto;
@@ -623,17 +685,54 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
     return acc + (g?.total ?? 0);
   }, 0);
 
-  function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
+  function EstatusPago({ g }: { g: GastoFiscal }) {
+    const { estatus, fechaPago, comprobantePago, total, pagos } = g;
     const pagado    = estatus === "pagado";
+    const parcial   = estatus === "parcial";
     const cancelada = estatus === "cancelada";
-    const bg    = cancelada ? "rgba(107,114,128,0.12)" : pagado ? "rgba(34,197,94,0.12)"  : "rgba(239,68,68,0.12)";
-    const color = cancelada ? "var(--text-muted)"       : pagado ? "var(--green)"          : "var(--red)";
-    const border= cancelada ? "rgba(107,114,128,0.25)"  : pagado ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
-    const label = cancelada ? "🚫 Cancelada"            : pagado ? "✅ Pagado"             : "⏳ Pendiente";
+    const pagadoAcum = (pagos ?? []).reduce((acc, p) => acc + p.monto, 0);
+    const pendiente  = total - pagadoAcum;
+
+    const bg    = cancelada ? "rgba(107,114,128,0.12)" : pagado ? "rgba(34,197,94,0.12)"  : parcial ? "rgba(245,158,11,0.12)" : "rgba(239,68,68,0.12)";
+    const color = cancelada ? "var(--text-muted)"       : pagado ? "var(--green)"          : parcial ? "var(--accent)"         : "var(--red)";
+    const border= cancelada ? "rgba(107,114,128,0.25)"  : pagado ? "rgba(34,197,94,0.25)" : parcial ? "rgba(245,158,11,0.25)" : "rgba(239,68,68,0.25)";
+    const label = cancelada ? "🚫 Cancelada"            : pagado ? "✅ Pagado"             : parcial ? "🔶 Parcial"            : "⏳ Pendiente";
+
     return (
       <div>
         <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>
           {label}
+        </span>
+        {pagado && fechaPago && (
+          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
+        )}
+        {parcial && (
+          <p style={{ fontSize: "0.68rem", color: "var(--accent)", marginTop: 2 }}>
+            Pagado: ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })} · Falta: ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+          </p>
+        )}
+        {pagado && comprobantePago && (
+          <a href={urlArchivo(comprobantePago)} download target="_blank" rel="noreferrer"
+            style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>
+            📎 Descargar comprobante
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  function EstatusPagoNF({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
+    const pagado = estatus === "pagado";
+    return (
+      <div>
+        <span style={{
+          padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600,
+          background: pagado ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+          color: pagado ? "var(--green)" : "var(--red)",
+          border: `1px solid ${pagado ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+          whiteSpace: "nowrap" as const,
+        }}>
+          {pagado ? "✅ Pagado" : "⏳ Pendiente"}
         </span>
         {pagado && fechaPago && (
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
@@ -770,6 +869,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
                   value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
                   <option value="pendiente">⏳ Pendientes</option>
+                  <option value="parcial">🔶 Parciales</option>
                   <option value="pagado">✅ Pagadas</option>
                   <option value="cancelada">🚫 Canceladas</option>
                   <option value="todos">Todas</option>
@@ -791,7 +891,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {filteredF.length > 0 && (
               <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
                 Mostrando {filteredF.length} factura{filteredF.length !== 1 ? "s" : ""}
-                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : filtroEstatus === "pagado" ? "pagadas" : "canceladas"}` : ""}
+                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : filtroEstatus === "pagado" ? "pagadas" : filtroEstatus === "parcial" ? "parciales" : "canceladas"}` : ""}
                 {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
                 {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
                 {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
@@ -803,21 +903,23 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : filtroEstatus === "pagado" ? "pagados" : "cancelados"}` : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales</p></div>
             ) : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
                       display: "grid",
-                      gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 120px 130px",
+                      gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 140px 130px",
                       gap: 0, padding: "12px 20px",
                       borderBottom: "1px solid var(--border)",
                       background: g.estatus === "cancelada"
                         ? "rgba(107,114,128,0.04)"
-                        : pagoMultipleIds.includes(g._id)
-                          ? "rgba(34,197,94,0.05)"
-                          : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                        : g.estatus === "parcial"
+                          ? "rgba(245,158,11,0.03)"
+                          : pagoMultipleIds.includes(g._id)
+                            ? "rgba(34,197,94,0.05)"
+                            : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem",
                       opacity: g.estatus === "cancelada" ? 0.65 : 1,
                     }}>
@@ -867,13 +969,11 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                           </span>
                         )}
                         {g.moneda === "MXN" && (
-                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>
-                            MXN
-                          </span>
+                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>MXN</span>
                         )}
                       </div>
                       <div>
-                        <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
+                        <EstatusPago g={g} />
                       </div>
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
@@ -933,10 +1033,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {filteredNF.length > 0 && (
               <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
                 Mostrando {filteredNF.length} gasto{filteredNF.length !== 1 ? "s" : ""}
-                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}
-                {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
-                {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
-                {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
                 <span style={{ marginLeft: 12, fontWeight: 700 }}>
                   Total: ${filteredNF.reduce((acc, g) => acc + g.monto, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                 </span>
@@ -945,7 +1041,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredNF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">💵</span><p>Sin gastos no fiscales</p></div>
             ) : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -973,7 +1069,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                             {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{g.notas}</p>}
                           </div>
                           <div>
-                            <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
+                            <EstatusPagoNF estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
                           </div>
                           <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                             <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
@@ -995,15 +1091,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           </div>
         )}
 
-        {/* ── Barra sticky de selección múltiple ── */}
+        {/* ── Barra sticky selección múltiple ── */}
         {pagoMultipleIds.length > 0 && tab === "fiscal" && !modalPago && (
           <div style={{
             position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
             background: "var(--surface)", border: "1.5px solid var(--green)",
             borderRadius: "var(--radius)", padding: "14px 24px",
             display: "flex", alignItems: "center", gap: 20,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)", zIndex: 100,
-            minWidth: 420,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)", zIndex: 100, minWidth: 420,
           }}>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>
@@ -1013,17 +1108,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 Total: ${totalSeleccionado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
               </p>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setPagoMultipleIds([])}>
-              ✕ Limpiar
-            </button>
-            <button
-              className="btn btn-primary"
-              style={{ background: "var(--green)", color: "#fff" }}
+            <button className="btn btn-secondary btn-sm" onClick={() => setPagoMultipleIds([])}>✕ Limpiar</button>
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
               onClick={() => {
                 const primerGasto = fiscales.find(g => g._id === pagoMultipleIds[0]);
                 if (primerGasto) {
                   setModalPago({ id: pagoMultipleIds[0], tipo: "fiscal", gasto: primerGasto });
-                  setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "" });
+                  setTipoPago("total");
+                  setFormPago({ fechaPago: new Date().toISOString().split("T")[0], comprobantePago: "", complementoXml: "", monto: 0, notas: "" });
                 }
               }}>
               💳 Pagar {pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""}
@@ -1039,66 +1131,31 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button className="modal-close" onClick={() => setModalManual(false)}>✕</button>
             <h2 className="modal-title">Captura manual de factura</h2>
             <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Proveedor *</label>
-                <input className="form-input" value={formManual.nombreEmisor}
-                  onChange={e => setFormManual((p: any) => ({ ...p, nombreEmisor: e.target.value }))}
-                  placeholder="Nombre del proveedor" />
+              <div className="form-group"><label className="form-label">Proveedor *</label>
+                <input className="form-input" value={formManual.nombreEmisor} onChange={e => setFormManual((p: any) => ({ ...p, nombreEmisor: e.target.value }))} placeholder="Nombre del proveedor" /></div>
+              <div className="form-group"><label className="form-label">RFC</label>
+                <input className="form-input" value={formManual.rfcEmisor} onChange={e => setFormManual((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" /></div>
+              <div className="form-group"><label className="form-label">No. Factura</label>
+                <input className="form-input" value={formManual.folioFactura} onChange={e => setFormManual((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" /></div>
+              <div className="form-group"><label className="form-label">Fecha *</label>
+                <input className="form-input" type="date" value={formManual.fechaEmision} onChange={e => setFormManual((p: any) => ({ ...p, fechaEmision: e.target.value }))} /></div>
+              <div className="form-group span-2"><label className="form-label">Monto total con IVA *</label>
+                <input className="form-input" type="number" value={formManual.total} onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))} placeholder="0.00" />
+                {formManual.total > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Subtotal: ${(formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formManual.total - formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
               </div>
-              <div className="form-group">
-                <label className="form-label">RFC</label>
-                <input className="form-input" value={formManual.rfcEmisor}
-                  onChange={e => setFormManual((p: any) => ({ ...p, rfcEmisor: e.target.value }))}
-                  placeholder="Opcional" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">No. Factura</label>
-                <input className="form-input" value={formManual.folioFactura}
-                  onChange={e => setFormManual((p: any) => ({ ...p, folioFactura: e.target.value }))}
-                  placeholder="Ej. FES2246" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Fecha *</label>
-                <input className="form-input" type="date" value={formManual.fechaEmision}
-                  onChange={e => setFormManual((p: any) => ({ ...p, fechaEmision: e.target.value }))} />
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Monto total con IVA *</label>
-                <input className="form-input" type="number" value={formManual.total}
-                  onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))} placeholder="0.00" />
-                {formManual.total > 0 && (
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
-                    Subtotal: ${(formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formManual.total - formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                  </p>
-                )}
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Concepto / Descripción</label>
-                <input className="form-input" value={formManual.descripcion}
-                  onChange={e => setFormManual((p: any) => ({ ...p, descripcion: e.target.value }))}
-                  placeholder="Ej. Renta de montacargas enero" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Quien realizó el gasto</label>
-                <select className="form-select" value={formManual.asesor}
-                  onChange={e => setFormManual((p: any) => ({ ...p, asesor: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
-              </div>
+              <div className="form-group span-2"><label className="form-label">Concepto / Descripción</label>
+                <input className="form-input" value={formManual.descripcion} onChange={e => setFormManual((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Renta de montacargas enero" /></div>
+              <div className="form-group"><label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formManual.asesor} onChange={e => setFormManual((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}</select></div>
               {selectorProveedor(formManual.proveedor, v => setFormManual((p: any) => ({ ...p, proveedor: v })))}
-              <div className="form-group">
-                <label className="form-label">Notas</label>
-                <input className="form-input" value={formManual.notas}
-                  onChange={e => setFormManual((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" />
-              </div>
+              <div className="form-group"><label className="form-label">Notas</label>
+                <input className="form-input" value={formManual.notas} onChange={e => setFormManual((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" /></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalManual(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveManual}
-                disabled={savingManual || !formManual.nombreEmisor || !formManual.total}>
-                {savingManual ? "Guardando..." : "Guardar"}
-              </button>
+              <button className="btn btn-primary" onClick={saveManual} disabled={savingManual || !formManual.nombreEmisor || !formManual.total}>
+                {savingManual ? "Guardando..." : "Guardar"}</button>
             </div>
           </div>
         </div>
@@ -1111,62 +1168,31 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button className="modal-close" onClick={() => setModalEditF(false)}>✕</button>
             <h2 className="modal-title">Editar factura fiscal</h2>
             <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Proveedor *</label>
-                <input className="form-input" value={formEditF.nombreEmisor}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, nombreEmisor: e.target.value }))} />
+              <div className="form-group"><label className="form-label">Proveedor *</label>
+                <input className="form-input" value={formEditF.nombreEmisor} onChange={e => setFormEditF((p: any) => ({ ...p, nombreEmisor: e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">RFC</label>
+                <input className="form-input" value={formEditF.rfcEmisor} onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" /></div>
+              <div className="form-group"><label className="form-label">No. Factura</label>
+                <input className="form-input" value={formEditF.folioFactura} onChange={e => setFormEditF((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" /></div>
+              <div className="form-group"><label className="form-label">Fecha</label>
+                <input className="form-input" type="date" value={formEditF.fechaEmision} onChange={e => setFormEditF((p: any) => ({ ...p, fechaEmision: e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Monto total con IVA *</label>
+                <input className="form-input" type="number" value={formEditF.total} onChange={e => setFormEditF((p: any) => ({ ...p, total: +e.target.value }))} />
+                {formEditF.total > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Subtotal: ${(formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formEditF.total - formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
               </div>
-              <div className="form-group">
-                <label className="form-label">RFC</label>
-                <input className="form-input" value={formEditF.rfcEmisor}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">No. Factura</label>
-                <input className="form-input" value={formEditF.folioFactura}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Fecha</label>
-                <input className="form-input" type="date" value={formEditF.fechaEmision}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, fechaEmision: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Monto total con IVA *</label>
-                <input className="form-input" type="number" value={formEditF.total}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, total: +e.target.value }))} />
-                {formEditF.total > 0 && (
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
-                    Subtotal: ${(formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formEditF.total - formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                  </p>
-                )}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Concepto / Descripción</label>
-                <input className="form-input" value={formEditF.descripcion}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Quien realizó el gasto</label>
-                <select className="form-select" value={formEditF.asesor}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, asesor: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
-              </div>
+              <div className="form-group"><label className="form-label">Concepto / Descripción</label>
+                <input className="form-input" value={formEditF.descripcion} onChange={e => setFormEditF((p: any) => ({ ...p, descripcion: e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formEditF.asesor} onChange={e => setFormEditF((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}</select></div>
               {selectorProveedor(formEditF.proveedor ?? "", v => setFormEditF((p: any) => ({ ...p, proveedor: v })))}
-              <div className="form-group">
-                <label className="form-label">Notas</label>
-                <input className="form-input" value={formEditF.notas}
-                  onChange={e => setFormEditF((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" />
-              </div>
+              <div className="form-group"><label className="form-label">Notas</label>
+                <input className="form-input" value={formEditF.notas} onChange={e => setFormEditF((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Opcional" /></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalEditF(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveEditF}
-                disabled={savingEditF || !formEditF.nombreEmisor || !formEditF.total}>
-                {savingEditF ? "Guardando..." : "Actualizar"}
-              </button>
+              <button className="btn btn-primary" onClick={saveEditF} disabled={savingEditF || !formEditF.nombreEmisor || !formEditF.total}>
+                {savingEditF ? "Guardando..." : "Actualizar"}</button>
             </div>
           </div>
         </div>
@@ -1184,8 +1210,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <span style={{ fontSize: "2.5rem" }}>{parsing ? "⏳" : "📂"}</span>
               <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CFDI 3.3 o 4.0</p>
-              <input type="file" accept=".xml" style={{ display: "none" }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
+              <input type="file" accept=".xml" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
             </label>
             {xmlError && <p style={{ color: "var(--red)", fontSize: "0.85rem" }}>⚠ {xmlError}</p>}
             {formF.nombreEmisor && !parsing && (
@@ -1193,14 +1218,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>✅ Datos extraídos</p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 20px", fontSize: "0.85rem" }}>
                   {[
-                    { label: "Proveedor",   val: formF.nombreEmisor },
-                    { label: "RFC",         val: formF.rfcEmisor },
-                    { label: "Fecha",       val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
+                    { label: "Proveedor", val: formF.nombreEmisor },
+                    { label: "RFC",       val: formF.rfcEmisor },
+                    { label: "Fecha",     val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
                     { label: "No. Factura", val: formF.folioFactura || "—" },
-                    { label: "UUID",        val: (formF.uuid ?? "").slice(0, 20) + "..." },
-                    { label: "Subtotal",    val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "IVA",         val: `$${(formF.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Total",       val: `$${(formF.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "UUID",      val: (formF.uuid ?? "").slice(0, 20) + "..." },
+                    { label: "Subtotal",  val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "IVA",       val: `$${(formF.iva ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "Total",     val: `$${(formF.total ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
                   ].map(item => (
                     <div key={item.label}>
                       <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
@@ -1208,28 +1233,18 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                     </div>
                   ))}
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Quien realizó el gasto</label>
-                  <select className="form-select" value={formF.asesor as any ?? ""}
-                    onChange={e => setFormF(p => ({ ...p, asesor: e.target.value as any }))}>
-                    <option value="">Sin asignar</option>
-                    {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                  </select>
-                </div>
+                <div className="form-group"><label className="form-label">Quien realizó el gasto</label>
+                  <select className="form-select" value={formF.asesor as any ?? ""} onChange={e => setFormF(p => ({ ...p, asesor: e.target.value as any }))}>
+                    <option value="">Sin asignar</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}</select></div>
                 {selectorProveedor(formF.proveedor as any ?? "", v => setFormF(p => ({ ...p, proveedor: v as any })))}
-                <div className="form-group">
-                  <label className="form-label">Notas (opcional)</label>
-                  <input className="form-input" value={formF.notas ?? ""}
-                    onChange={e => setFormF(p => ({ ...p, notas: e.target.value }))}
-                    placeholder="Ej. Factura de combustible enero" />
-                </div>
+                <div className="form-group"><label className="form-label">Notas (opcional)</label>
+                  <input className="form-input" value={formF.notas ?? ""} onChange={e => setFormF(p => ({ ...p, notas: e.target.value }))} placeholder="Ej. Factura de combustible enero" /></div>
               </div>
             )}
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalFiscal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveFiscal} disabled={savingF || !formF.nombreEmisor || parsing}>
-                {savingF ? "Guardando..." : "Guardar gasto"}
-              </button>
+                {savingF ? "Guardando..." : "Guardar gasto"}</button>
             </div>
           </div>
         </div>
@@ -1242,48 +1257,25 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button className="modal-close" onClick={() => setModalNF(false)}>✕</button>
             <h2 className="modal-title">{editingNF ? "Editar gasto" : "Nuevo gasto no fiscal"}</h2>
             <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Fecha *</label>
-                <input className="form-input" type="date" value={formNF.fecha}
-                  onChange={e => setFormNF((p: any) => ({ ...p, fecha: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Quien realizó el gasto</label>
-                <select className="form-select" value={formNF.asesor}
-                  onChange={e => setFormNF((p: any) => ({ ...p, asesor: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Monto *</label>
-                <input className="form-input" type="number" value={formNF.monto}
-                  onChange={e => setFormNF((p: any) => ({ ...p, monto: +e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Entrada</label>
-                <input className="form-input" value={formNF.entrada}
-                  onChange={e => setFormNF((p: any) => ({ ...p, entrada: e.target.value }))} placeholder="Opcional" />
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Descripción *</label>
-                <textarea className="form-textarea" rows={3} value={formNF.descripcion}
-                  onChange={e => setFormNF((p: any) => ({ ...p, descripcion: e.target.value }))}
-                  placeholder="Ej. LALO SERVICIO DE PARCHE LLANTAS" />
-              </div>
+              <div className="form-group"><label className="form-label">Fecha *</label>
+                <input className="form-input" type="date" value={formNF.fecha} onChange={e => setFormNF((p: any) => ({ ...p, fecha: e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Quien realizó el gasto</label>
+                <select className="form-select" value={formNF.asesor} onChange={e => setFormNF((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asignar</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}</select></div>
+              <div className="form-group"><label className="form-label">Monto *</label>
+                <input className="form-input" type="number" value={formNF.monto} onChange={e => setFormNF((p: any) => ({ ...p, monto: +e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Entrada</label>
+                <input className="form-input" value={formNF.entrada} onChange={e => setFormNF((p: any) => ({ ...p, entrada: e.target.value }))} placeholder="Opcional" /></div>
+              <div className="form-group span-2"><label className="form-label">Descripción *</label>
+                <textarea className="form-textarea" rows={3} value={formNF.descripcion} onChange={e => setFormNF((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. LALO SERVICIO DE PARCHE LLANTAS" /></div>
               {selectorProveedor(formNF.proveedor ?? "", v => setFormNF((p: any) => ({ ...p, proveedor: v })))}
-              <div className="form-group span-2">
-                <label className="form-label">Notas</label>
-                <input className="form-input" value={formNF.notas}
-                  onChange={e => setFormNF((p: any) => ({ ...p, notas: e.target.value }))}
-                  placeholder="Ej. CAJA CHICA ABRIL 2026" />
-              </div>
+              <div className="form-group span-2"><label className="form-label">Notas</label>
+                <input className="form-input" value={formNF.notas} onChange={e => setFormNF((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Ej. CAJA CHICA ABRIL 2026" /></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalNF(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveNF} disabled={savingNF}>
-                {savingNF ? "Guardando..." : editingNF ? "Actualizar" : "Guardar"}
-              </button>
+                {savingNF ? "Guardando..." : editingNF ? "Actualizar" : "Guardar"}</button>
             </div>
           </div>
         </div>
@@ -1292,7 +1284,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       {/* ── Modal detalle fiscal ── */}
       {detalleF && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalleF(null); }}>
-          <div className="modal" style={{ maxWidth: 520 }}>
+          <div className="modal" style={{ maxWidth: 540 }}>
             <button className="modal-close" onClick={() => setDetalleF(null)}>✕</button>
             <h2 className="modal-title">{detalleF.nombreEmisor ?? "Factura"}</h2>
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>UUID: {detalleF.uuid ?? "—"}</p>
@@ -1300,13 +1292,13 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               {[
                 { label: "Fecha",        val: fmt(detalleF.fechaEmision) },
                 { label: "No. Factura",  val: detalleF.folioFactura },
-                { label: "Moneda", val: detalleF.moneda ?? "MXN" },
+                { label: "Moneda",       val: detalleF.moneda ?? "MXN" },
                 { label: "RFC Emisor",   val: detalleF.rfcEmisor },
                 { label: "Receptor",     val: detalleF.nombreReceptor },
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
                 { label: "Quien",        val: detalleF.asesor?.nombre },
                 { label: "Proveedor",    val: detalleF.proveedor ? `🏭 ${detalleF.proveedor.nombre}${detalleF.proveedor.email ? ` — ${detalleF.proveedor.email}` : ""}` : null },
-                { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : detalleF.estatus === "cancelada" ? "🚫 Cancelada" : "⏳ Pendiente" },
+                { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : detalleF.estatus === "parcial" ? "🔶 Parcial" : detalleF.estatus === "cancelada" ? "🚫 Cancelada" : "⏳ Pendiente" },
                 { label: "Fecha pago",   val: detalleF.fechaPago ? fmt(detalleF.fechaPago) : null },
                 { label: "Notas",        val: detalleF.notas },
               ].map(item => item.val ? (
@@ -1317,13 +1309,57 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               ) : null)}
             </div>
 
+            {/* Historial de pagos parciales */}
+            {(detalleF.pagos ?? []).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+                  🔶 Historial de pagos parciales
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(detalleF.pagos ?? []).map((p, i) => (
+                    <div key={p._id ?? i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", border: "1px solid rgba(245,158,11,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                      <div>
+                        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--green)" }}>
+                          ${p.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(p.fechaPago)}</p>
+                        {p.notas && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic" }}>{p.notas}</p>}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        {p.comprobantePago && (
+                          <a href={urlArchivo(p.comprobantePago)} download target="_blank" rel="noreferrer"
+                            style={{ fontSize: "0.75rem", color: "var(--blue)" }}>📎 Comprobante</a>
+                        )}
+                        {p.complementoXml && (
+                          <a href={urlArchivo(p.complementoXml)} download target="_blank" rel="noreferrer"
+                            style={{ fontSize: "0.75rem", color: "var(--blue)" }}>🗂️ XML</a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(245,158,11,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(245,158,11,0.2)", display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Total pagado</span>
+                  <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--green)" }}>
+                    ${totalPagadoParcial(detalleF).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {detalleF.estatus === "parcial" && (
+                  <div style={{ marginTop: 4, padding: "8px 12px", background: "rgba(239,68,68,0.06)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(239,68,68,0.2)", display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Pendiente por pagar</span>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--red)" }}>
+                      ${Math.max(0, detalleF.total - totalPagadoParcial(detalleF)).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {detalleF.comprobantePago && (
                   <a href={urlArchivo(detalleF.comprobantePago)} download target="_blank" rel="noreferrer"
-                    style={{ fontSize: "0.82rem", color: "var(--blue)" }}>
-                    📎 Descargar comprobante
-                  </a>
+                    style={{ fontSize: "0.82rem", color: "var(--blue)" }}>📎 Descargar comprobante</a>
                 )}
                 {canDelete && (
                   <label style={{ cursor: "pointer", fontSize: "0.82rem", color: "var(--accent)", display: "flex", alignItems: "center", gap: 4 }}>
@@ -1399,19 +1435,71 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button className="modal-close" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>✕</button>
             <h2 className="modal-title">Registrar pago</h2>
 
-            {modalPago.tipo === "fiscal" && gastosDelMismoProveedor.length > 1 && (
+            {/* Toggle pago total / parcial — solo para fiscal individual */}
+            {modalPago.tipo === "fiscal" && pagoMultipleIds.length === 1 && (
+              <div style={{ display: "flex", gap: 0, marginBottom: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {(["total", "parcial"] as const).map(t => (
+                  <button key={t} onClick={() => setTipoPago(t)}
+                    style={{
+                      flex: 1, padding: "10px", border: "none", cursor: "pointer",
+                      background: tipoPago === t ? (t === "parcial" ? "rgba(245,158,11,0.15)" : "rgba(34,197,94,0.15)") : "var(--surface2)",
+                      color: tipoPago === t ? (t === "parcial" ? "var(--accent)" : "var(--green)") : "var(--text-muted)",
+                      fontWeight: tipoPago === t ? 700 : 400, fontSize: "0.85rem",
+                      borderRight: t === "total" ? "1px solid var(--border)" : "none",
+                    }}>
+                    {t === "total" ? "✅ Pago total" : "🔶 Pago parcial"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Campo monto si es parcial */}
+            {tipoPago === "parcial" && modalPago.tipo === "fiscal" && (() => {
+              const g = fiscales.find(x => x._id === modalPago.id);
+              const pagadoAcum = totalPagadoParcial(g ?? {} as GastoFiscal);
+              const pendiente  = (g?.total ?? 0) - pagadoAcum;
+              return (
+                <div style={{ marginBottom: 12, padding: "12px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: "0.82rem" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Total factura</span>
+                    <span style={{ fontWeight: 600 }}>${(g?.total ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {pagadoAcum > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: "0.82rem" }}>
+                      <span style={{ color: "var(--text-muted)" }}>Ya pagado</span>
+                      <span style={{ color: "var(--green)", fontWeight: 600 }}>${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: "0.82rem" }}>
+                    <span style={{ color: "var(--text-muted)" }}>Pendiente</span>
+                    <span style={{ color: "var(--red)", fontWeight: 700 }}>${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Monto a pagar ahora *</label>
+                    <input className="form-input" type="number" value={formPago.monto || ""}
+                      onChange={e => setFormPago(p => ({ ...p, monto: +e.target.value }))}
+                      placeholder={`Máx. $${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}`} />
+                  </div>
+                  <div className="form-group" style={{ margin: "8px 0 0" }}>
+                    <label className="form-label">Notas del pago (opcional)</label>
+                    <input className="form-input" value={formPago.notas}
+                      onChange={e => setFormPago(p => ({ ...p, notas: e.target.value }))}
+                      placeholder="Ej. Primera transferencia" />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Sección pago múltiple */}
+            {modalPago.tipo === "fiscal" && pagoMultipleIds.length > 1 && gastosDelMismoProveedor.length > 1 && (
               <div style={{ marginBottom: 16, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
                   💳 Pago múltiple — {modalPago.gasto?.nombreEmisor}
                 </p>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 10 }}>
-                  Selecciona las facturas que se pagan con este comprobante:
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
                   {gastosDelMismoProveedor.map(g => (
                     <label key={g._id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.08)" : "var(--surface2)", borderRadius: "var(--radius-sm)", border: `1px solid ${pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.3)" : "var(--border)"}`, cursor: "pointer" }}>
-                      <input type="checkbox" checked={pagoMultipleIds.includes(g._id)}
-                        onChange={() => toggleSeleccion(g._id)}
+                      <input type="checkbox" checked={pagoMultipleIds.includes(g._id)} onChange={() => toggleSeleccion(g._id)}
                         style={{ accentColor: "var(--green)", width: 16, height: 16 }} />
                       <div style={{ flex: 1, fontSize: "0.82rem" }}>
                         <span style={{ fontWeight: 600, color: "var(--accent)" }}>{g.folioFactura ?? "Sin folio"}</span>
@@ -1425,9 +1513,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
                 {pagoMultipleIds.length > 0 && (
                   <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: "rgba(34,197,94,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                    <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                      {pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""} seleccionada{pagoMultipleIds.length !== 1 ? "s" : ""}
-                    </span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{pagoMultipleIds.length} factura{pagoMultipleIds.length !== 1 ? "s" : ""}</span>
                     <span style={{ fontWeight: 700, color: "var(--green)", fontSize: "0.9rem" }}>
                       Total: ${totalSeleccionado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                     </span>
@@ -1454,9 +1540,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </label>
                 {formPago.comprobantePago && (
                   <a href={urlArchivo(formPago.comprobantePago)} download target="_blank" rel="noreferrer"
-                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
-                    📎 Ver archivo seleccionado
-                  </a>
+                    style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>📎 Ver archivo seleccionado</a>
                 )}
               </div>
               {modalPago.tipo === "fiscal" && (
@@ -1472,9 +1556,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   </label>
                   {formPago.complementoXml && (
                     <a href={urlArchivo(formPago.complementoXml)} download target="_blank" rel="noreferrer"
-                      style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>
-                      🗂️ Ver complemento seleccionado
-                    </a>
+                      style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>🗂️ Ver complemento seleccionado</a>
                   )}
                 </div>
               )}
@@ -1483,12 +1565,14 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <button className="btn btn-secondary" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>Cancelar</button>
               <button className="btn btn-primary" onClick={registrarPago}
                 disabled={savingPago || uploadingPago || pagoMultipleIds.length === 0}
-                style={{ background: "var(--green)", color: "#fff" }}>
+                style={{ background: tipoPago === "parcial" ? "var(--accent)" : "var(--green)", color: tipoPago === "parcial" ? "#000" : "#fff" }}>
                 {savingPago
                   ? "Registrando..."
-                  : pagoMultipleIds.length > 1
-                    ? `✅ Pagar ${pagoMultipleIds.length} facturas`
-                    : "✅ Confirmar pago"}
+                  : tipoPago === "parcial"
+                    ? "🔶 Registrar pago parcial"
+                    : pagoMultipleIds.length > 1
+                      ? `✅ Pagar ${pagoMultipleIds.length} facturas`
+                      : "✅ Confirmar pago"}
               </button>
             </div>
           </div>
