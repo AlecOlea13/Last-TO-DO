@@ -861,6 +861,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         <p style={{ fontWeight: 700, color: g.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
                           ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                         </p>
+                        {g.moneda && g.moneda !== "MXN" && (
+                          <span style={{ fontSize: "0.68rem", fontWeight: 700, background: "rgba(59,130,246,0.15)", color: "var(--blue)", padding: "1px 6px", borderRadius: 4, marginTop: 2, display: "inline-block" }}>
+                            {g.moneda}
+                          </span>
+                        )}
+                        {g.moneda === "MXN" && (
+                          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>
+                            MXN
+                          </span>
+                        )}
                       </div>
                       <div>
                         <EstatusPago estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} />
@@ -1290,6 +1300,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               {[
                 { label: "Fecha",        val: fmt(detalleF.fechaEmision) },
                 { label: "No. Factura",  val: detalleF.folioFactura },
+                { label: "Moneda", val: detalleF.moneda ?? "MXN" },
                 { label: "RFC Emisor",   val: detalleF.rfcEmisor },
                 { label: "Receptor",     val: detalleF.nombreReceptor },
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
