@@ -25,7 +25,7 @@ type GastoFiscal = {
   proveedor?: { _id: string; nombre: string; email?: string };
   notas?: string;
   folioFactura?: string;
-  estatus?: "pendiente" | "pagado";
+  estatus?: "pendiente" | "pagado" | "cancelada";
   fechaPago?: string;
   comprobantePago?: string;
   complementoXml?: string;
@@ -69,6 +69,7 @@ function urlArchivo(url?: string): string {
 export default function Gastos() {
   const rol       = localStorage.getItem("rol") ?? "";
   const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
+  const canCancel = ["developer", "gerencia"].includes(rol);
 
   const [tab, setTab]               = useState<"fiscal" | "nofiscal">("fiscal");
   const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
@@ -78,7 +79,7 @@ export default function Gastos() {
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
 
-  const [filtroEstatus, setFiltroEstatus] = useState<"pendiente" | "pagado" | "todos">("pendiente");
+  const [filtroEstatus, setFiltroEstatus] = useState<"pendiente" | "pagado" | "cancelada" | "todos">("pendiente");
   const [filtroAsesor, setFiltroAsesor]   = useState("todos");
   const [fechaDesde, setFechaDesde]       = useState("");
   const [fechaHasta, setFechaHasta]       = useState("");
@@ -356,6 +357,13 @@ export default function Gastos() {
     setFiscales(prev => prev.filter(g => g._id !== id));
   }
 
+  async function cancelarFiscal(g: GastoFiscal) {
+    if (!confirm(`¿Cancelar la factura ${g.folioFactura ?? g._id}? No se puede revertir.`)) return;
+    const { data } = await api.post(`/gastos/${g._id}/cancelar`, {});
+    setFiscales(prev => prev.map(x => x._id === g._id ? { ...x, ...data } : x));
+    setPagoMultipleIds(prev => prev.filter(id => id !== g._id));
+  }
+
   function openNewNF() {
     setEditingNF(null);
     setFormNF({ ...emptyNoFiscal, fecha: new Date().toISOString().split("T")[0] });
@@ -488,7 +496,7 @@ export default function Gastos() {
         <td>${g.folioFactura ?? "—"}</td>
         <td style="text-align:right">$${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${g.conceptos[0]?.descripcion ?? "—"}</td><td>${g.notas ?? "—"}</td>
-        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : "⏳"}</td>
+        <td style="text-align:center">${g.estatus === "pagado" ? "✅" : g.estatus === "cancelada" ? "🚫" : "⏳"}</td>
       </tr>`).join("");
     const rowsNF = nfOrdenados.map(g => {
       acum += g.monto;
@@ -561,8 +569,11 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
       (g.folioFactura ?? "").toLowerCase().includes(search.toLowerCase()) ||
       g.conceptos.some(c => c.descripcion.toLowerCase().includes(search.toLowerCase()));
     const matchAsesor  = filtroAsesor  === "todos" || g.asesor?._id === filtroAsesor;
-    const matchEstatus = filtroEstatus === "todos" ||
-      (filtroEstatus === "pendiente" ? (!g.estatus || g.estatus === "pendiente") : g.estatus === filtroEstatus);
+    const matchEstatus = filtroEstatus === "todos"
+      ? true
+      : filtroEstatus === "pendiente"
+        ? (!g.estatus || g.estatus === "pendiente")
+        : g.estatus === filtroEstatus;
     const fecha = g.fechaEmision ? new Date(g.fechaEmision) : null;
     const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
     const matchHasta = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
@@ -604,7 +615,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
   ];
 
   const gastosDelMismoProveedor = modalPago?.tipo === "fiscal" && modalPago.gasto
-    ? filteredF.filter(g => g.estatus !== "pagado" && g.nombreEmisor === modalPago.gasto!.nombreEmisor)
+    ? filteredF.filter(g => g.estatus !== "pagado" && g.estatus !== "cancelada" && g.nombreEmisor === modalPago.gasto!.nombreEmisor)
     : [];
 
   const totalSeleccionado = pagoMultipleIds.reduce((acc, id) => {
@@ -613,17 +624,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
   }, 0);
 
   function EstatusPago({ estatus, fechaPago, comprobante }: { estatus?: string; fechaPago?: string; comprobante?: string }) {
-    const pagado = estatus === "pagado";
+    const pagado    = estatus === "pagado";
+    const cancelada = estatus === "cancelada";
+    const bg    = cancelada ? "rgba(107,114,128,0.12)" : pagado ? "rgba(34,197,94,0.12)"  : "rgba(239,68,68,0.12)";
+    const color = cancelada ? "var(--text-muted)"       : pagado ? "var(--green)"          : "var(--red)";
+    const border= cancelada ? "rgba(107,114,128,0.25)"  : pagado ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
+    const label = cancelada ? "🚫 Cancelada"            : pagado ? "✅ Pagado"             : "⏳ Pendiente";
     return (
       <div>
-        <span style={{
-          padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600,
-          background: pagado ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-          color: pagado ? "var(--green)" : "var(--red)",
-          border: `1px solid ${pagado ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
-          whiteSpace: "nowrap" as const,
-        }}>
-          {pagado ? "✅ Pagado" : "⏳ Pendiente"}
+        <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>
+          {label}
         </span>
         {pagado && fechaPago && (
           <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
@@ -761,6 +771,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value as any)}>
                   <option value="pendiente">⏳ Pendientes</option>
                   <option value="pagado">✅ Pagadas</option>
+                  <option value="cancelada">🚫 Canceladas</option>
                   <option value="todos">Todas</option>
                 </select>
                 <select className="form-select" style={{ width: "auto", padding: "8px 14px" }}
@@ -780,7 +791,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {filteredF.length > 0 && (
               <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
                 Mostrando {filteredF.length} factura{filteredF.length !== 1 ? "s" : ""}
-                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : "pagadas"}` : ""}
+                {filtroEstatus !== "todos" ? ` · ${filtroEstatus === "pendiente" ? "pendientes" : filtroEstatus === "pagado" ? "pagadas" : "canceladas"}` : ""}
                 {filtroAsesor !== "todos" ? ` · ${asesores.find(a => a._id === filtroAsesor)?.nombre}` : ""}
                 {fechaDesde ? ` · desde ${fmt(fechaDesde)}` : ""}
                 {fechaHasta ? ` · hasta ${fmt(fechaHasta)}` : ""}
@@ -792,7 +803,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             {loading ? (
               <div className="loading-state"><div className="spinner" /></div>
             ) : filteredF.length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : "pagados"}` : ""}</p></div>
+              <div className="empty-state"><span className="empty-icon">🧾</span><p>Sin gastos fiscales{filtroEstatus !== "todos" ? ` ${filtroEstatus === "pendiente" ? "pendientes" : filtroEstatus === "pagado" ? "pagados" : "cancelados"}` : ""}</p></div>
             ) : (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -802,14 +813,16 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 120px 130px",
                       gap: 0, padding: "12px 20px",
                       borderBottom: "1px solid var(--border)",
-                      background: pagoMultipleIds.includes(g._id)
-                        ? "rgba(34,197,94,0.05)"
-                        : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
+                      background: g.estatus === "cancelada"
+                        ? "rgba(107,114,128,0.04)"
+                        : pagoMultipleIds.includes(g._id)
+                          ? "rgba(34,197,94,0.05)"
+                          : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem",
+                      opacity: g.estatus === "cancelada" ? 0.65 : 1,
                     }}>
-                      {/* Checkbox */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 2 }}>
-                        {g.estatus !== "pagado" && canDelete && (
+                        {g.estatus !== "pagado" && g.estatus !== "cancelada" && canDelete && (
                           <input type="checkbox"
                             checked={pagoMultipleIds.includes(g._id)}
                             onChange={() => toggleSeleccion(g._id)}
@@ -845,7 +858,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <p style={{ fontWeight: 700, color: "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
+                        <p style={{ fontWeight: 700, color: g.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
                           ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                         </p>
                       </div>
@@ -854,13 +867,18 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                       </div>
                       <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
-                        {canDelete && (
+                        {canDelete && g.estatus !== "cancelada" && (
                           <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)} title="Editar">✏️</button>
                         )}
-                        {g.estatus !== "pagado" && canDelete && (
+                        {g.estatus !== "pagado" && g.estatus !== "cancelada" && canDelete && (
                           <button className="btn btn-secondary btn-sm"
                             style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
                             onClick={() => abrirModalPago(g._id, "fiscal", g)} title="Registrar pago">💳</button>
+                        )}
+                        {g.estatus !== "pagado" && g.estatus !== "cancelada" && canCancel && (
+                          <button className="btn btn-secondary btn-sm"
+                            style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }}
+                            onClick={() => cancelarFiscal(g)} title="Cancelar factura">🚫</button>
                         )}
                         {canDelete && (
                           <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)} title="Eliminar">🗑️</button>
@@ -1277,7 +1295,7 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 { label: "RFC Receptor", val: detalleF.rfcReceptor },
                 { label: "Quien",        val: detalleF.asesor?.nombre },
                 { label: "Proveedor",    val: detalleF.proveedor ? `🏭 ${detalleF.proveedor.nombre}${detalleF.proveedor.email ? ` — ${detalleF.proveedor.email}` : ""}` : null },
-                { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : "⏳ Pendiente" },
+                { label: "Estatus",      val: detalleF.estatus === "pagado" ? "✅ Pagado" : detalleF.estatus === "cancelada" ? "🚫 Cancelada" : "⏳ Pendiente" },
                 { label: "Fecha pago",   val: detalleF.fechaPago ? fmt(detalleF.fechaPago) : null },
                 { label: "Notas",        val: detalleF.notas },
               ].map(item => item.val ? (
@@ -1336,16 +1354,23 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
               <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}>
                 <span>IVA:</span><span>${detalleF.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--red)" }}>
+              <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: detalleF.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)" }}>
                 <span>Total:</span><span>${detalleF.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
-              {canDelete && (
+              {canDelete && detalleF.estatus !== "cancelada" && (
                 <button className="btn btn-secondary" onClick={() => { setDetalleF(null); openEditF(detalleF); }}>✏️ Editar</button>
               )}
-              {detalleF.estatus !== "pagado" && canDelete && (
+              {detalleF.estatus !== "pagado" && detalleF.estatus !== "cancelada" && canCancel && (
+                <button className="btn btn-secondary"
+                  style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }}
+                  onClick={() => { cancelarFiscal(detalleF); setDetalleF(null); }}>
+                  🚫 Cancelar factura
+                </button>
+              )}
+              {detalleF.estatus !== "pagado" && detalleF.estatus !== "cancelada" && canDelete && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
                   onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>
                   💳 Registrar pago
