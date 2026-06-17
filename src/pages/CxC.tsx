@@ -29,6 +29,16 @@ type CxC = {
   notas?: string;
 };
 
+type PagoRep = { uuid: string; montoPagado: number };
+type ResultadoRep = {
+  uuid: string;
+  encontrada: boolean;
+  yaEstaba?: boolean;
+  folioFactura?: string;
+  nombreReceptor?: string;
+  total?: number;
+};
+
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
@@ -60,6 +70,17 @@ export default function CuentasCobrar() {
   const [modalComent, setModalComent]   = useState<CxC | null>(null);
   const [comentarioEdit, setComentEdit] = useState("");
   const [savingComent, setSavingComent] = useState(false);
+
+  // ── Modal recibo de pago (REP) ──
+  const [modalRep, setModalRep]       = useState(false);
+  const [parsingRep, setParsingRep]   = useState(false);
+  const [repError, setRepError]       = useState("");
+  const [pagosRep, setPagosRep]       = useState<PagoRep[]>([]);
+  const [fechaPagoRep, setFechaPagoRep] = useState(new Date().toISOString().split("T")[0]);
+  const [complementoRepUrl, setComplementoRepUrl] = useState("");
+  const [uploadingRep, setUploadingRep] = useState(false);
+  const [procesandoRep, setProcesandoRep] = useState(false);
+  const [resultadosRep, setResultadosRep] = useState<ResultadoRep[] | null>(null);
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
@@ -148,6 +169,86 @@ export default function CuentasCobrar() {
     };
     reader.onerror = () => { setXmlError("No se pudo leer el archivo"); setParsing(false); };
     reader.readAsText(file, "UTF-8");
+  }
+
+  // ── Parseo del XML del Recibo Electrónico de Pago (REP / Complemento de Pago) ──
+  function parseRepXML(file: File) {
+    setParsingRep(true);
+    setRepError("");
+    setPagosRep([]);
+    setResultadosRep(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "application/xml");
+        const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
+
+        // DoctoRelacionado puede venir con o sin namespace prefijo, según el generador del XML
+        let doctos = Array.from(doc.getElementsByTagName("pago20:DoctoRelacionado"));
+        if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("pago10:DoctoRelacionado"));
+        if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("DoctoRelacionado"));
+
+        if (doctos.length === 0) {
+          throw new Error("No se encontraron documentos relacionados (DoctoRelacionado) en el XML. ¿Es un Recibo Electrónico de Pago (REP)?");
+        }
+
+        const pagos: PagoRep[] = doctos.map(d => ({
+          uuid:        getAttr(d, "IdDocumento"),
+          montoPagado: parseFloat(getAttr(d, "ImpPagado") || "0"),
+        })).filter(p => p.uuid);
+
+        if (pagos.length === 0) {
+          throw new Error("No se pudo extraer el UUID de los documentos relacionados.");
+        }
+
+        setPagosRep(pagos);
+        setParsingRep(false);
+      } catch (err: any) {
+        setRepError(err.message ?? "Error al leer el XML del recibo de pago");
+        setParsingRep(false);
+      }
+    };
+    reader.onerror = () => { setRepError("No se pudo leer el archivo"); setParsingRep(false); };
+    reader.readAsText(file, "UTF-8");
+  }
+
+  async function subirArchivoRep(file: File): Promise<string> {
+    setUploadingRep(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", UPLOAD_PRESET);
+    const res  = await fetch(CLOUDINARY_RAW, { method: "POST", body: fd });
+    const data = await res.json();
+    setUploadingRep(false);
+    return data.secure_url;
+  }
+
+  async function procesarRep() {
+    if (!pagosRep.length) return;
+    setProcesandoRep(true);
+    try {
+      const { data } = await api.post("/cxc/cobrar-por-rep", {
+        pagos: pagosRep,
+        fechaPago: fechaPagoRep,
+        complementoPago: complementoRepUrl || null,
+      });
+      setResultadosRep(data.resultados);
+      await load(); // refresca la tabla con las facturas recién cobradas
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setProcesandoRep(false); }
+  }
+
+  function cerrarModalRep() {
+    setModalRep(false);
+    setPagosRep([]);
+    setResultadosRep(null);
+    setRepError("");
+    setComplementoRepUrl("");
+    setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
   async function saveCxc() {
@@ -324,6 +425,7 @@ export default function CuentasCobrar() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={abrirReporte}>🖨️ Reporte</button>
+          <button className="btn btn-secondary" onClick={() => setModalRep(true)}>📥 Subir recibo de pago</button>
           <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalXml(true); }}>+ Subir XML</button>
         </div>
       </div>
@@ -457,6 +559,116 @@ export default function CuentasCobrar() {
           )}
         </div>
       </div>
+
+      {/* ── Modal subir recibo de pago (REP) ── */}
+      {modalRep && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) cerrarModalRep(); }}>
+          <div className="modal" style={{ maxWidth: 560 }}>
+            <button className="modal-close" onClick={cerrarModalRep}>✕</button>
+            <h2 className="modal-title">Subir recibo de pago (REP)</h2>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 12 }}>
+              Sube el XML del Complemento de Pago del SAT. El sistema buscará automáticamente las facturas relacionadas por su UUID y las marcará como cobradas.
+            </p>
+
+            {!resultadosRep && (
+              <>
+                <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px", cursor: "pointer", background: "var(--surface2)", gap: 8 }}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseRepXML(f); }}>
+                  <span style={{ fontSize: "2.5rem" }}>{parsingRep ? "⏳" : "📂"}</span>
+                  <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsingRep ? "Leyendo XML..." : "Arrastra o selecciona el XML del recibo de pago"}</p>
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Complemento de Pago 1.0 o 2.0</p>
+                  <input type="file" accept=".xml" style={{ display: "none" }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) parseRepXML(f); }} />
+                </label>
+
+                {repError && <p style={{ color: "var(--red)", fontSize: "0.85rem", marginTop: 10 }}>⚠ {repError}</p>}
+
+                {pagosRep.length > 0 && (
+                  <div style={{ marginTop: 14, background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 16, border: "1px solid var(--border)" }}>
+                    <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
+                      ✅ {pagosRep.length} documento{pagosRep.length !== 1 ? "s" : ""} relacionado{pagosRep.length !== 1 ? "s" : ""} encontrado{pagosRep.length !== 1 ? "s" : ""}
+                    </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                      {pagosRep.map((p, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", padding: "6px 10px", background: "var(--surface3)", borderRadius: "var(--radius-sm)" }}>
+                          <span style={{ fontFamily: "monospace", color: "var(--text-muted)" }}>{p.uuid.slice(0, 18)}...</span>
+                          <span style={{ fontWeight: 700, color: "var(--green)" }}>${p.montoPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="form-grid">
+                      <div className="form-group span-2">
+                        <label className="form-label">Fecha de pago</label>
+                        <input className="form-input" type="date" value={fechaPagoRep} onChange={e => setFechaPagoRep(e.target.value)} />
+                      </div>
+                      <div className="form-group span-2">
+                        <label className="form-label">Adjuntar XML del recibo (opcional, queda como respaldo)</label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface3)" }}>
+                          <span style={{ fontSize: "1.3rem" }}>{uploadingRep ? "⏳" : "📎"}</span>
+                          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                            {complementoRepUrl ? "✅ Archivo subido" : uploadingRep ? "Subiendo..." : "Seleccionar el mismo XML u otro respaldo"}
+                          </span>
+                          <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }}
+                            onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivoRep(f); setComplementoRepUrl(url); } }} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {resultadosRep && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
+                  Resultado del procesamiento
+                </p>
+                {resultadosRep.map((r, i) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 14px", borderRadius: "var(--radius-sm)",
+                    background: !r.encontrada ? "rgba(239,68,68,0.08)" : r.yaEstaba ? "rgba(107,114,128,0.08)" : "rgba(34,197,94,0.08)",
+                    border: `1px solid ${!r.encontrada ? "rgba(239,68,68,0.25)" : r.yaEstaba ? "rgba(107,114,128,0.25)" : "rgba(34,197,94,0.25)"}`,
+                  }}>
+                    <div>
+                      {r.encontrada ? (
+                        <>
+                          <p style={{ fontSize: "0.85rem", fontWeight: 600 }}>{r.nombreReceptor ?? "—"} — {r.folioFactura ?? "Sin folio"}</p>
+                          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "monospace" }}>{r.uuid.slice(0, 24)}...</p>
+                        </>
+                      ) : (
+                        <>
+                          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--red)" }}>No se encontró ninguna factura con este UUID</p>
+                          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "monospace" }}>{r.uuid.slice(0, 24)}...</p>
+                        </>
+                      )}
+                    </div>
+                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: !r.encontrada ? "var(--red)" : r.yaEstaba ? "var(--text-muted)" : "var(--green)" }}>
+                      {!r.encontrada ? "⚠ No encontrada" : r.yaEstaba ? "Ya estaba cobrada" : "✅ Marcada como cobrada"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal-footer">
+              {!resultadosRep ? (
+                <>
+                  <button className="btn btn-secondary" onClick={cerrarModalRep}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={procesarRep} disabled={procesandoRep || uploadingRep || pagosRep.length === 0}
+                    style={{ background: "var(--green)", color: "#fff" }}>
+                    {procesandoRep ? "Procesando..." : `✅ Procesar ${pagosRep.length || ""} pago${pagosRep.length !== 1 ? "s" : ""}`}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primary" onClick={cerrarModalRep}>Cerrar</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal subir XML ── */}
       {modalXml && (
