@@ -10,9 +10,12 @@ type Item = {
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
 type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: string; rol: string }; fecha: string };
 
+type ClienteOcasional = { nombre: string; direccion?: string; telefono?: string; contacto?: string };
+
 type Cotizacion = {
   _id: string; folio: string; tipo: "servicio" | "renta" | "venta";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
+  clienteOcasional?: ClienteOcasional;
   montacargas?: {
     _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
     tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
@@ -45,8 +48,11 @@ type TipoServicio = {
   refacciones: { nombre: string; cantidad: number }[];
 };
 
+const emptyClienteOcasional: ClienteOcasional = { nombre: "", direccion: "", telefono: "", contacto: "" };
+
 const emptyForm: any = {
-  folio: "", tipo: "servicio", cliente: "", montacargas: "", asesor: "",
+  folio: "", tipo: "servicio", cliente: "", esOcasional: false, clienteOcasional: { ...emptyClienteOcasional },
+  montacargas: "", asesor: "",
   fecha: new Date().toISOString().split("T")[0], lugar: "Zapopán, Jal",
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "borrador", notas: "",
@@ -105,15 +111,19 @@ export default function Cotizaciones() {
   function openNew() {
     setEditing(null);
     setPeriodoRenta("mensual");
-    setForm({ ...emptyForm, folio: "", items: [{ ...emptyItem, subconceptos: [] }] });
+    setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }] });
     setModal(true);
   }
 
   function openEdit(c: Cotizacion) {
     setEditing(c);
     setPeriodoRenta("mensual");
+    const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
-      folio: c.folio, tipo: c.tipo, cliente: c.cliente?._id ?? "",
+      folio: c.folio, tipo: c.tipo,
+      cliente: c.cliente?._id ?? "",
+      esOcasional,
+      clienteOcasional: c.clienteOcasional ?? { ...emptyClienteOcasional },
       montacargas: c.montacargas?._id ?? "", asesor: c.asesor?._id ?? "",
       fecha: c.fecha.split("T")[0], lugar: c.lugar,
       descripcionServicio: c.descripcionServicio ?? "",
@@ -241,14 +251,31 @@ export default function Cotizaciones() {
   }
 
   async function save() {
-    if (!form.cliente) return;
+    const tieneClienteValido = form.esOcasional
+      ? !!form.clienteOcasional?.nombre?.trim()
+      : !!form.cliente;
+    if (!tieneClienteValido) return;
+
     setSaving(true);
     try {
+      const payload: any = { ...form };
+      delete payload.esOcasional;
+      if (form.esOcasional) {
+        payload.cliente = null;
+        payload.clienteOcasional = {
+          nombre:    form.clienteOcasional.nombre?.trim(),
+          direccion: form.clienteOcasional.direccion?.trim() || undefined,
+          telefono:  form.clienteOcasional.telefono?.trim()  || undefined,
+          contacto:  form.clienteOcasional.contacto?.trim()  || undefined,
+        };
+      } else {
+        payload.clienteOcasional = null;
+      }
+
       if (editing) {
-        const { data } = await api.put(`/cotizaciones/${editing._id}`, form);
+        const { data } = await api.put(`/cotizaciones/${editing._id}`, payload);
         setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
       } else {
-        const payload = { ...form };
         if (!payload.folio) delete payload.folio;
         const { data } = await api.post("/cotizaciones", payload);
         setCotizaciones(prev => [data, ...prev]);
@@ -297,10 +324,14 @@ export default function Cotizaciones() {
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
+  function nombreCliente(c: Cotizacion): string {
+    return c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "—";
+  }
+
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
-      (c.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      nombreCliente(c).toLowerCase().includes(search.toLowerCase()) ||
       (c.asesor?.nombre  ?? "").toLowerCase().includes(search.toLowerCase());
     const matchFiltro = filtro       === "todos" || c.tipo === filtro || c.estatus === filtro;
     const matchAsesor = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
@@ -330,13 +361,56 @@ export default function Cotizaciones() {
             <option value="venta">Venta</option>
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">Cliente *</label>
-          <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
-            <option value="">Selecciona cliente...</option>
-            {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
-          </select>
+
+        {/* ── Cliente: catálogo u ocasional ── */}
+        <div className="form-group span-2" style={{ margin: 0 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 10 }}>
+            <input type="checkbox" checked={!!form.esOcasional}
+              onChange={e => setForm((p: any) => ({ ...p, esOcasional: e.target.checked }))}
+              style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }} />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
+              👤 Cliente ocasional <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(solo para esta cotización, no se guarda en el catálogo)</span>
+            </span>
+          </label>
+
+          {form.esOcasional ? (
+            <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="form-group span-2" style={{ margin: 0 }}>
+                <label className="form-label">Nombre del cliente *</label>
+                <input className="form-input" value={form.clienteOcasional?.nombre ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, clienteOcasional: { ...p.clienteOcasional, nombre: e.target.value } }))}
+                  placeholder="Ej. Juan Pérez" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Teléfono</label>
+                <input className="form-input" value={form.clienteOcasional?.telefono ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, clienteOcasional: { ...p.clienteOcasional, telefono: e.target.value } }))}
+                  placeholder="Opcional" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Contacto</label>
+                <input className="form-input" value={form.clienteOcasional?.contacto ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, clienteOcasional: { ...p.clienteOcasional, contacto: e.target.value } }))}
+                  placeholder="Opcional" />
+              </div>
+              <div className="form-group span-2" style={{ margin: 0 }}>
+                <label className="form-label">Dirección</label>
+                <input className="form-input" value={form.clienteOcasional?.direccion ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, clienteOcasional: { ...p.clienteOcasional, direccion: e.target.value } }))}
+                  placeholder="Opcional" />
+              </div>
+            </div>
+          ) : (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Cliente *</label>
+              <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
+                <option value="">Selecciona cliente...</option>
+                {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
+              </select>
+            </div>
+          )}
         </div>
+
         <div className="form-group">
           <label className="form-label">Asesor</label>
           <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
@@ -623,7 +697,14 @@ export default function Cotizaciones() {
                   <tr key={c._id}>
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{c.folio}</td>
                     <td><span className={`badge ${TIPO_BADGE[c.tipo]}`}>{c.tipo}</span></td>
-                    <td style={{ fontWeight: 600 }}>{c.cliente?.nombre ?? "—"}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {nombreCliente(c)}
+                      {!c.cliente && c.clienteOcasional?.nombre && (
+                        <span style={{ fontSize: "0.65rem", color: "var(--accent)", background: "rgba(245,158,11,0.12)", padding: "1px 6px", borderRadius: 4, marginLeft: 6, fontWeight: 700 }}>
+                          OCASIONAL
+                        </span>
+                      )}
+                    </td>
                     <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{c.asesor?.nombre ?? "—"}</td>
                     <td>{fmt(c.fecha)}</td>
                     <td style={{ fontWeight: 700 }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
@@ -650,8 +731,8 @@ export default function Cotizaciones() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => generarReporte(c)} title="Ver reporte">👁️</button>
-                        <button className="btn btn-primary btn-sm" onClick={() => descargarPDF(c)} title="Descargar PDF">📥 PDF</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Ver reporte">👁️</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Descargar PDF">📥 PDF</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
                         <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
                       </div>
@@ -679,7 +760,7 @@ export default function Cotizaciones() {
               <span className={`badge ${TIPO_BADGE[comentarioModal.tipo]}`}>{comentarioModal.tipo}</span>
               <span className={`badge ${ESTATUS_BADGE[comentarioModal.estatus]}`}>{comentarioModal.estatus}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>{comentarioModal.cliente?.nombre ?? "Sin cliente"}</p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>{nombreCliente(comentarioModal)}</p>
             <div style={{ maxHeight: 300, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {comentarioModal.comentarios.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0" }}>
