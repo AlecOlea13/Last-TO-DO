@@ -11,16 +11,20 @@ export function setAuth(token: string | null) {
 
 setAuth(localStorage.getItem("token"));
 
-// si el token expira o es invalido eliminar el token y redirigir al login
+let sesionExpiradaMostrada = false;
 
 api.interceptors.response.use(
     (r) => r,
     (err) => {
-        // if (err.response?.status === 401) {
-        //     localStorage.removeItem("token");
-        //     setAuth(null);
-        //     window.location.href = "/login";
-        // }
+        if (err.response?.status === 401 && !sesionExpiradaMostrada) {
+            sesionExpiradaMostrada = true;
+            localStorage.removeItem("token");
+            localStorage.removeItem("rol");
+            localStorage.removeItem("nombre");
+            setAuth(null);
+            alert("⏱️ Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
+            window.location.href = "/login";
+        }
         return Promise.reject(err);
     }
 );
