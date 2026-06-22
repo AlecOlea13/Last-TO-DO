@@ -23,7 +23,7 @@ api.interceptors.response.use(
             localStorage.removeItem("nombre");
             setAuth(null);
             alert("⏱️ Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
-            window.location.href = "/login";
+            window.location.href = "/";
         }
         return Promise.reject(err);
     }
