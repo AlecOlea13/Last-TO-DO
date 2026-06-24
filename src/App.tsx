@@ -14,6 +14,7 @@ import Almacen      from "./pages/Almacen";
 import Gastos from "./pages/Gastos";
 import CxC from "./pages/CxC"
 import Proveedores from "./pages/Proveedores";
+import Portales from "./pages/Portales";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 function App() {
@@ -58,6 +59,9 @@ function App() {
             <ProtectedRoute roles={["developer","gerencia","oficina"]}><Proveedores /></ProtectedRoute>
           } />
         </Route>
+        <Route path="portales" element={
+          <ProtectedRoute roles={["developer","gerencia","oficina"]}><Portales /></ProtectedRoute>
+        } />
          
 
         <Route path="/dashboard/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

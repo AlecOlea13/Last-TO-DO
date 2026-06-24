@@ -192,12 +192,13 @@ export default function Dashboard() {
   { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
+  // { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/gastos", icon: "🧾", label: "Gastos", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
   { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
   { to: "/dashboard/cxc", icon: "💰", label: "CxC", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores", roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/portales", icon: "🔑", label: "Portales", roles: ["developer","gerencia","oficina"] },
 ];
 
   const navItems = allNav.filter(item => item.roles.includes(rol));
