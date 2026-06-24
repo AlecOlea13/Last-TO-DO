@@ -58,11 +58,10 @@ function App() {
                 <Route path="proveedores" element={
             <ProtectedRoute roles={["developer","gerencia","oficina"]}><Proveedores /></ProtectedRoute>
           } />
-        </Route>
         <Route path="portales" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Portales /></ProtectedRoute>
         } />
-         
+         </Route>
 
         <Route path="/dashboard/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       </Routes>
