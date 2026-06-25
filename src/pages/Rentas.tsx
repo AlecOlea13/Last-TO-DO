@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
+type Renovacion = {
+  _id: string;
+  fechaFinAnterior?: string;
+  precioMensualAnterior: number;
+  fechaFinNueva: string;
+  precioMensualNuevo: number;
+  fechaRenovacion: string;
+  notas?: string;
+};
+
 type Renta = {
   _id: string;
   cliente?: { _id: string; nombre: string };
@@ -13,6 +23,7 @@ type Renta = {
   flete?: number;
   deposito?: number;
   estatus: "activa" | "vencida" | "terminada";
+  renovaciones?: Renovacion[];
 };
 
 type Cliente     = { _id: string; nombre: string };
@@ -48,6 +59,14 @@ export default function Rentas() {
   const [modal, setModal]           = useState(false);
   const [form, setForm]             = useState<any>(emptyForm);
   const [saving, setSaving]         = useState(false);
+
+  // ── Renovación ──
+  const [modalRenovar, setModalRenovar] = useState<Renta | null>(null);
+  const [formRenovar, setFormRenovar]   = useState({ fechaFinNueva: "", precioMensualNuevo: 0, notas: "" });
+  const [savingRenovar, setSavingRenovar] = useState(false);
+
+  // ── Historial de renovaciones ──
+  const [modalHistorial, setModalHistorial] = useState<Renta | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -108,6 +127,28 @@ export default function Rentas() {
     load();
   }
 
+  function abrirModalRenovar(renta: Renta) {
+    setModalRenovar(renta);
+    setFormRenovar({
+      fechaFinNueva: "",
+      precioMensualNuevo: renta.precioMensual,
+      notas: "",
+    });
+  }
+
+  async function renovar() {
+    if (!modalRenovar || !formRenovar.fechaFinNueva || !formRenovar.precioMensualNuevo) return;
+    setSavingRenovar(true);
+    try {
+      const { data } = await api.post(`/rentas/${modalRenovar._id}/renovar`, formRenovar);
+      setRentas(prev => prev.map(r => r._id === modalRenovar._id ? data : r));
+      setModalRenovar(null);
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingRenovar(false); }
+  }
+
   const filtered = rentas.filter(r => {
     const matchSearch =
       (r.cliente?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -122,6 +163,10 @@ export default function Rentas() {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
     return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+  }
+
+  function fmtHora(date: string) {
+    return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
   function diasRestantes(fechaFin?: string) {
@@ -208,11 +253,33 @@ export default function Rentas() {
                           </span>
                         ) : "—"}
                       </td>
-                      <td><span className={`badge ${ESTATUS_BADGE[r.estatus]}`}>{r.estatus}</span></td>
                       <td>
-                        {r.estatus === "activa" && (
-                          <button className="btn btn-danger btn-sm" onClick={() => cerrar(r)}>Cerrar</button>
+                        <span className={`badge ${ESTATUS_BADGE[r.estatus]}`}>{r.estatus}</span>
+                        {(r.renovaciones?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => setModalHistorial(r)}
+                            title="Ver historial de renovaciones"
+                            style={{
+                              marginLeft: 6, fontSize: "0.68rem", fontWeight: 700,
+                              color: "var(--blue)", background: "rgba(59,130,246,0.1)",
+                              border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer",
+                            }}>
+                            🔄 {r.renovaciones!.length}
+                          </button>
                         )}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {r.estatus !== "terminada" && (
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
+                              onClick={() => abrirModalRenovar(r)}>
+                              🔄 Renovar
+                            </button>
+                          )}
+                          {r.estatus === "activa" && (
+                            <button className="btn btn-danger btn-sm" onClick={() => cerrar(r)}>Cerrar</button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -223,6 +290,7 @@ export default function Rentas() {
         </div>
       </div>
 
+      {/* ── Modal nueva renta ── */}
       {modal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
           <div className="modal">
@@ -341,6 +409,82 @@ export default function Rentas() {
               <button className="btn btn-primary" onClick={save} disabled={saving}>
                 {saving ? "Guardando..." : "Guardar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal renovar renta ── */}
+      {modalRenovar && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalRenovar(null); }}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <button className="modal-close" onClick={() => setModalRenovar(null)}>✕</button>
+            <h2 className="modal-title">🔄 Renovar renta</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 4 }}>
+              {modalRenovar.cliente?.nombre} — {modalRenovar.montacargas?.numeroEconomico}
+            </p>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Fecha fin actual: <strong style={{ color: "var(--text)" }}>{fmt(modalRenovar.fechaFin)}</strong> —{" "}
+              Precio actual: <strong style={{ color: "var(--text)" }}>${modalRenovar.precioMensual.toLocaleString()}</strong>
+            </p>
+
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">Nueva fecha de fin *</label>
+                <input className="form-input" type="date" value={formRenovar.fechaFinNueva}
+                  onChange={e => setFormRenovar(p => ({ ...p, fechaFinNueva: e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Nuevo precio ({modalRenovar.tipoPeriodo ?? "mensual"}) *</label>
+                <input className="form-input" type="number" value={formRenovar.precioMensualNuevo}
+                  onChange={e => setFormRenovar(p => ({ ...p, precioMensualNuevo: +e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Notas (opcional)</label>
+                <textarea className="form-textarea" rows={2} value={formRenovar.notas}
+                  onChange={e => setFormRenovar(p => ({ ...p, notas: e.target.value }))}
+                  placeholder="Ej. Renovación anual acordada por correo" />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalRenovar(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={renovar} disabled={savingRenovar || !formRenovar.fechaFinNueva || !formRenovar.precioMensualNuevo}
+                style={{ background: "var(--blue)", color: "#fff" }}>
+                {savingRenovar ? "Renovando..." : "✅ Confirmar renovación"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal historial de renovaciones ── */}
+      {modalHistorial && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalHistorial(null); }}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <button className="modal-close" onClick={() => setModalHistorial(null)}>✕</button>
+            <h2 className="modal-title">Historial de renovaciones</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              {modalHistorial.cliente?.nombre} — {modalHistorial.montacargas?.numeroEconomico}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {[...(modalHistorial.renovaciones ?? [])].reverse().map(rv => (
+                <div key={rv._id} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", border: "1px solid var(--border)" }}>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 6 }}>
+                    Renovado el {fmtHora(rv.fechaRenovacion)}
+                  </p>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                    <span>Fecha fin: {fmt(rv.fechaFinAnterior)} → <strong>{fmt(rv.fechaFinNueva)}</strong></span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginTop: 2 }}>
+                    <span>Precio: ${rv.precioMensualAnterior.toLocaleString()} → <strong>${rv.precioMensualNuevo.toLocaleString()}</strong></span>
+                  </div>
+                  {rv.notas && <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 6 }}>📝 {rv.notas}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalHistorial(null)}>Cerrar</button>
             </div>
           </div>
         </div>
