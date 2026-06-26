@@ -48,9 +48,13 @@ const PERIODO_LABEL: Record<string, string> = {
 };
 
 export default function Rentas() {
+  const rol         = localStorage.getItem("rol") ?? "";
+  const canEditRenta = ["developer", "gerencia"].includes(rol);
+
   const [rentas, setRentas]         = useState<Renta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
   const [montas, setMontas]         = useState<Montacargas[]>([]);
+  const [todosMontas, setTodosMontas] = useState<Montacargas[]>([]);
   const [asesores, setAsesores]     = useState<Asesor[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
@@ -59,6 +63,11 @@ export default function Rentas() {
   const [modal, setModal]           = useState(false);
   const [form, setForm]             = useState<any>(emptyForm);
   const [saving, setSaving]         = useState(false);
+
+  // ── Editar renta (solo developer/gerencia) ──
+  const [modalEditar, setModalEditar] = useState<Renta | null>(null);
+  const [formEditar, setFormEditar]   = useState<any>(emptyForm);
+  const [savingEditar, setSavingEditar] = useState(false);
 
   // ── Renovación ──
   const [modalRenovar, setModalRenovar] = useState<Renta | null>(null);
@@ -80,6 +89,7 @@ export default function Rentas() {
       ]);
       setRentas(r.data);
       setClientes(c.data.filter((cl: any) => cl.estatus === "activo"));
+      setTodosMontas(m.data);
       setMontas(m.data.filter((mt: any) => mt.estatus === "disponible"));
       setAsesores(a.data);
     } catch {}
@@ -87,8 +97,8 @@ export default function Rentas() {
   }
 
   // ── Cuando cambia montacargas o periodo, auto-llenar precio ───────────────
-  function aplicarPrecioAutomatico(montaId: string, periodo: string) {
-    const m = montas.find(m => m._id === montaId);
+  function aplicarPrecioAutomatico(montaId: string, periodo: string, setter: typeof setForm) {
+    const m = todosMontas.find(m => m._id === montaId);
     if (!m) return;
     const precios: Record<string, number> = {
       semanal: m.costoSemana ?? 0,
@@ -96,17 +106,17 @@ export default function Rentas() {
       anual:   m.costoAnual  ?? 0,
     };
     const precio = precios[periodo] ?? 0;
-    if (precio) setForm((p: any) => ({ ...p, precioMensual: precio }));
+    if (precio) setter((p: any) => ({ ...p, precioMensual: precio }));
   }
 
   function handleMontaChange(montaId: string) {
     setForm((p: any) => ({ ...p, montacargas: montaId }));
-    aplicarPrecioAutomatico(montaId, form.tipoPeriodo);
+    aplicarPrecioAutomatico(montaId, form.tipoPeriodo, setForm);
   }
 
   function handlePeriodoChange(periodo: string) {
     setForm((p: any) => ({ ...p, tipoPeriodo: periodo }));
-    if (form.montacargas) aplicarPrecioAutomatico(form.montacargas, periodo);
+    if (form.montacargas) aplicarPrecioAutomatico(form.montacargas, periodo, setForm);
   }
 
   async function save() {
@@ -125,6 +135,36 @@ export default function Rentas() {
     if (!confirm("¿Cerrar esta renta?")) return;
     await api.post(`/rentas/${renta._id}/cerrar`, { estatusMonta: "disponible" });
     load();
+  }
+
+  function abrirModalEditar(renta: Renta) {
+    setModalEditar(renta);
+    setFormEditar({
+      cliente:       renta.cliente?._id ?? "",
+      montacargas:   renta.montacargas?._id ?? "",
+      asesor:        renta.asesor?._id ?? "",
+      fechaInicio:   renta.fechaInicio ? renta.fechaInicio.split("T")[0] : "",
+      fechaFin:      renta.fechaFin ? renta.fechaFin.split("T")[0] : "",
+      tipoPeriodo:   renta.tipoPeriodo ?? "mensual",
+      precioMensual: renta.precioMensual,
+      flete:         renta.flete ?? 0,
+      deposito:      renta.deposito ?? 0,
+      estatus:       renta.estatus,
+    });
+  }
+
+  async function guardarEdicion() {
+    if (!modalEditar || !formEditar.cliente || !formEditar.montacargas || !formEditar.fechaInicio || !formEditar.precioMensual) return;
+    setSavingEditar(true);
+    try {
+      const { data } = await api.put(`/rentas/${modalEditar._id}`, formEditar);
+      setRentas(prev => prev.map(r => r._id === modalEditar._id ? { ...r, ...data } : r));
+      setModalEditar(null);
+      load();
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingEditar(false); }
   }
 
   function abrirModalRenovar(renta: Renta) {
@@ -176,6 +216,13 @@ export default function Rentas() {
 
   const montaSeleccionada = montas.find(m => m._id === form.montacargas);
   const precioLabel = form.tipoPeriodo === "semanal" ? "Precio semanal" : form.tipoPeriodo === "anual" ? "Precio anual" : "Precio mensual";
+
+  // Para el modal de editar: incluye el montacargas actual de la renta aunque esté "rentado" (no solo disponibles)
+  const montasParaEditar = modalEditar
+    ? todosMontas.filter(m => m.estatus === "disponible" || m._id === modalEditar.montacargas?._id)
+    : [];
+  const montaSeleccionadaEditar = todosMontas.find(m => m._id === formEditar.montacargas);
+  const precioLabelEditar = formEditar.tipoPeriodo === "semanal" ? "Precio semanal" : formEditar.tipoPeriodo === "anual" ? "Precio anual" : "Precio mensual";
 
   return (
     <>
@@ -269,7 +316,12 @@ export default function Rentas() {
                         )}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: 4 }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {canEditRenta && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => abrirModalEditar(r)}>
+                              ✏️
+                            </button>
+                          )}
                           {r.estatus !== "terminada" && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
                               onClick={() => abrirModalRenovar(r)}>
@@ -408,6 +460,149 @@ export default function Rentas() {
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>
                 {saving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal editar renta (solo developer/gerencia) ── */}
+      {modalEditar && canEditRenta && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalEditar(null); }}>
+          <div className="modal">
+            <button className="modal-close" onClick={() => setModalEditar(null)}>✕</button>
+            <h2 className="modal-title">✏️ Editar renta</h2>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Solo gerencia y developer pueden editar una renta directamente.
+            </p>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Cliente *</label>
+                <select className="form-select" value={formEditar.cliente}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, cliente: e.target.value }))}>
+                  <option value="">Selecciona cliente...</option>
+                  {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Montacargas *</label>
+                <select className="form-select" value={formEditar.montacargas}
+                  onChange={e => {
+                    setFormEditar((p: any) => ({ ...p, montacargas: e.target.value }));
+                    aplicarPrecioAutomatico(e.target.value, formEditar.tipoPeriodo, setFormEditar);
+                  }}>
+                  <option value="">Selecciona equipo...</option>
+                  {montasParaEditar.map(m => (
+                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Asesor</label>
+                <select className="form-select" value={formEditar.asesor}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, asesor: e.target.value }))}>
+                  <option value="">Sin asesor</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Tipo de periodo *</label>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {(["semanal", "mensual", "anual"] as const).map(tipo => (
+                    <button key={tipo} type="button"
+                      onClick={() => {
+                        setFormEditar((p: any) => ({ ...p, tipoPeriodo: tipo }));
+                        if (formEditar.montacargas) aplicarPrecioAutomatico(formEditar.montacargas, tipo, setFormEditar);
+                      }}
+                      style={{
+                        flex: 1, padding: "10px", borderRadius: 8, border: "2px solid",
+                        borderColor: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)",
+                        background: formEditar.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)",
+                        color: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)",
+                        fontWeight: formEditar.tipoPeriodo === tipo ? 700 : 400,
+                        cursor: "pointer", transition: "all 0.15s",
+                      }}>
+                      {PERIODO_LABEL[tipo]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {montaSeleccionadaEditar && (
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <div style={{
+                    background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
+                    borderRadius: "var(--radius-sm)", padding: "10px 14px",
+                    display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center",
+                  }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
+                      ⚡ Precios del equipo
+                    </span>
+                    {[
+                      { label: "Semanal", val: montaSeleccionadaEditar.costoSemana, key: "semanal" },
+                      { label: "Mensual", val: montaSeleccionadaEditar.costoMes,    key: "mensual" },
+                      { label: "Anual",   val: montaSeleccionadaEditar.costoAnual,  key: "anual"   },
+                    ].map(p => (
+                      <div key={p.key} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{p.label}</span>
+                        <span style={{
+                          fontWeight: 700, fontSize: "0.9rem",
+                          color: formEditar.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)",
+                        }}>
+                          {p.val ? `$${p.val.toLocaleString()}` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Fecha inicio *</label>
+                <input className="form-input" type="date" value={formEditar.fechaInicio}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha fin</label>
+                <input className="form-input" type="date" value={formEditar.fechaFin}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, fechaFin: e.target.value }))} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">{precioLabelEditar} *</label>
+                <input className="form-input" type="number" value={formEditar.precioMensual}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Flete</label>
+                <input className="form-input" type="number" value={formEditar.flete}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, flete: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Depósito</label>
+                <input className="form-input" type="number" value={formEditar.deposito}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, deposito: +e.target.value }))} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Estatus</label>
+                <select className="form-select" value={formEditar.estatus}
+                  onChange={e => setFormEditar((p: any) => ({ ...p, estatus: e.target.value }))}>
+                  <option value="activa">Activa</option>
+                  <option value="vencida">Vencida</option>
+                  <option value="terminada">Terminada</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalEditar(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarEdicion} disabled={savingEditar}>
+                {savingEditar ? "Guardando..." : "Guardar cambios"}
               </button>
             </div>
           </div>

@@ -109,6 +109,13 @@ export default function Montacargas() {
   const [clienteSel, setClienteSel]     = useState("");
   const [detalleModal, setDetalleModal] = useState<Monta | null>(null);
 
+  // ── Alta rápida ──
+  const [modalRapido, setModalRapido] = useState(false);
+  const [formRapido, setFormRapido]   = useState({
+    numeroEconomico: "", marca: "", modelo: "", tipo: "electrico", estatus: "taller",
+  });
+  const [savingRapido, setSavingRapido] = useState(false);
+
   const isElectrico = form.tipo === "electrico";
   const isGasDiesel = form.tipo === "gas" || form.tipo === "diesel";
 
@@ -190,6 +197,20 @@ export default function Montacargas() {
     setAsignarModal(null); setClienteSel("");
   }
 
+  async function guardarRapido() {
+    if (!formRapido.numeroEconomico.trim()) return;
+    setSavingRapido(true);
+    try {
+      const { data } = await api.post("/montacargas", formRapido);
+      setMontas(prev => [data, ...prev]);
+      setModalRapido(false);
+      setFormRapido({ numeroEconomico: "", marca: "", modelo: "", tipo: "electrico", estatus: "taller" });
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingRapido(false); }
+  }
+
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
@@ -213,7 +234,12 @@ export default function Montacargas() {
           <h1 className="page-title">Montacargas</h1>
           <p className="page-subtitle">{montas.length} equipos en flota</p>
         </div>
-        {canEdit && <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>}
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => setModalRapido(true)}>⚡ Alta rápida</button>
+            <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
+          </div>
+        )}
       </div>
 
       <div className="page-content">
@@ -533,6 +559,63 @@ export default function Montacargas() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setAsignarModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={asignar} disabled={!clienteSel}>Asignar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal alta rápida ── */}
+      {modalRapido && canEdit && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalRapido(false); }}>
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <button className="modal-close" onClick={() => setModalRapido(false)}>✕</button>
+            <h2 className="modal-title">⚡ Alta rápida</h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Captura lo que tengas a la mano. Puedes completar el resto de los datos después editando el equipo.
+            </p>
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">No. Económico *</label>
+                <input className="form-input" value={formRapido.numeroEconomico}
+                  onChange={e => setFormRapido(p => ({ ...p, numeroEconomico: e.target.value }))}
+                  placeholder="#01" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Marca</label>
+                <input className="form-input" value={formRapido.marca}
+                  onChange={e => setFormRapido(p => ({ ...p, marca: e.target.value }))}
+                  placeholder="Crown, Yale..." />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Modelo</label>
+                <input className="form-input" value={formRapido.modelo}
+                  onChange={e => setFormRapido(p => ({ ...p, modelo: e.target.value }))}
+                  placeholder="GLP050..." />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tipo</label>
+                <select className="form-select" value={formRapido.tipo}
+                  onChange={e => setFormRapido(p => ({ ...p, tipo: e.target.value }))}>
+                  <option value="electrico">Eléctrico</option>
+                  <option value="gas">Gas LP</option>
+                  <option value="diesel">Diésel</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Estatus</label>
+                <select className="form-select" value={formRapido.estatus}
+                  onChange={e => setFormRapido(p => ({ ...p, estatus: e.target.value }))}>
+                  <option value="disponible">Disponible</option>
+                  <option value="taller">Taller (no sirve)</option>
+                  <option value="mantenimiento">Mantenimiento</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalRapido(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarRapido} disabled={savingRapido || !formRapido.numeroEconomico.trim()}>
+                {savingRapido ? "Guardando..." : "✅ Guardar"}
+              </button>
             </div>
           </div>
         </div>
