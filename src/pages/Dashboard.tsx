@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
+import MontaScrollbar from "./MontaScrollbar";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const [theme, setTheme] = useState<"dark" | "light">(
     (localStorage.getItem("theme") as "dark" | "light") ?? "dark"
   );
+  const mainRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -285,7 +287,7 @@ export default function Dashboard() {
         </button>
       </aside>
 
-      <div className="dash-main">
+      <div className="dash-main" ref={mainRef}>
         {isDashboard ? (
           <>
             <div className="page-header">
@@ -419,6 +421,8 @@ export default function Dashboard() {
           <Outlet context={{ nombre, rol }} />
         )}
       </div>
+
+      <MontaScrollbar targetRef={mainRef} />
     </div>
   );
 }
