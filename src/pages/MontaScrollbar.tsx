@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
-  const [progress, setProgress] = useState(0); // 0 a 1
+  const [progress, setProgress] = useState(0);
+  const [hasScroll, setHasScroll] = useState(false);
+  const [trackHeight, setTrackHeight] = useState(window.innerHeight);
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
 
@@ -9,18 +11,27 @@ export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObje
     const el = targetRef.current;
     if (!el) return;
 
-    function updateProgress() {
+    function update() {
       const max = el!.scrollHeight - el!.clientHeight;
+      setHasScroll(max > 4);
       const p = max > 0 ? el!.scrollTop / max : 0;
       setProgress(Math.min(1, Math.max(0, p)));
+      setTrackHeight(window.innerHeight);
     }
 
-    updateProgress();
-    el.addEventListener("scroll", updateProgress, { passive: true });
-    window.addEventListener("resize", updateProgress);
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+
+    // Reintenta varias veces al montar, por si el contenido carga async (fetch de datos)
+    const t1 = setTimeout(update, 300);
+    const t2 = setTimeout(update, 1000);
+
     return () => {
-      el.removeEventListener("scroll", updateProgress);
-      window.removeEventListener("resize", updateProgress);
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, [targetRef]);
 
@@ -49,12 +60,8 @@ export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObje
     draggingRef.current = false;
   }
 
-  // No mostrar si no hay scroll posible
-  const el = targetRef.current;
-  const hasScroll = el ? el.scrollHeight > el.clientHeight + 4 : false;
   if (!hasScroll) return null;
 
-  const trackHeight = trackRef.current?.clientHeight ?? window.innerHeight;
   const handleHalf = 14;
   const usable = trackHeight - handleHalf * 2;
   const top = handleHalf + progress * usable;
@@ -67,10 +74,7 @@ export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObje
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
     >
-      <div
-        className="monta-scrollbar-handle"
-        style={{ top }}
-      >
+      <div className="monta-scrollbar-handle" style={{ top }}>
         🏗️
       </div>
     </div>

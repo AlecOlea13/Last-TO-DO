@@ -637,7 +637,6 @@ input[type="file"] { display: none; }
 }
 /* ── SCROLLBAR CUSTOM CON MONTACARGAS ── */
 
-/* Oculta el scrollbar nativo solo en .dash-main, en escritorio */
 @media (min-width: 641px) {
   .dash-main {
     scrollbar-width: none;
