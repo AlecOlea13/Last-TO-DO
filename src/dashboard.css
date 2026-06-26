@@ -23,7 +23,28 @@
   --font-body:  'DM Sans', sans-serif;
 }
 
+/* ── TEMA CLARO ── */
+[data-theme="light"] {
+  --bg:         #f7f7f9;
+  --surface:    #ffffff;
+  --surface2:   #f1f2f5;
+  --surface3:   #e7e9ee;
+  --border:     rgba(15,17,21,0.08);
+  --border2:    rgba(15,17,21,0.14);
+  --text:       #14161c;
+  --text-muted: #6b7186;
+  --accent:     #d97706;
+  --accent-h:   #b45309;
+  --blue:       #2563eb;
+  --green:      #16a34a;
+  --red:        #dc2626;
+  --orange:     #ea580c;
+  --purple:     #9333ea;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { transition: background-color 0.25s ease; }
 
 .dash-root {
   display: flex;
@@ -33,6 +54,14 @@
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.6;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Transición suave en todos los elementos que cambian de color con el tema */
+.sidebar, .sidebar-user, .mobile-topbar, .mobile-menu-btn, .stat-card,
+.table-card, th, .search-input, .btn-secondary, .modal, .modal-close,
+.form-input, .form-select, .form-textarea, .nav-item, .badge {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
 }
 
 /* ── SIDEBAR ── */
@@ -51,7 +80,7 @@
   gap: 6px;
   flex-shrink: 0;
   z-index: 100;
-  transition: transform 0.25s ease;
+  transition: transform 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
 }
 
 .sidebar-brand {
@@ -108,6 +137,33 @@
   text-overflow: ellipsis;
 }
 .sidebar-user-role { font-size: 0.7rem; color: var(--text-muted); }
+
+/* ── TOGGLE DE TEMA ── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.theme-toggle:hover { border-color: var(--border2); color: var(--text); }
+.theme-toggle-icon {
+  font-size: 1rem;
+  display: inline-flex;
+  transition: transform 0.4s ease;
+}
+.theme-toggle:active .theme-toggle-icon { transform: rotate(20deg); }
 
 .nav-section-label {
   font-size: 0.65rem;
@@ -252,7 +308,7 @@
   gap: 8px;
   position: relative;
   overflow: hidden;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: border-color 0.2s, transform 0.2s, background-color 0.25s ease;
 }
 .stat-card:hover { border-color: var(--border2); transform: translateY(-2px); }
 .stat-card-icon { font-size: 1.4rem; line-height: 1; }
@@ -333,6 +389,7 @@
 }
 .btn:active { transform: scale(0.97); }
 .btn-primary   { background: var(--accent); color: #0a0c10; }
+[data-theme="light"] .btn-primary { color: #ffffff; }
 .btn-primary:hover { background: var(--accent-h); }
 .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--border2); }
@@ -397,6 +454,7 @@ tbody tr:hover { background: var(--surface2); }
   z-index: 9999;
   padding: 20px;
 }
+[data-theme="light"] .modal-overlay { background: rgba(15,17,21,0.45); }
 .modal {
   background: var(--surface);
   border: 1px solid var(--border2);
@@ -412,6 +470,7 @@ tbody tr:hover { background: var(--surface2); }
   gap: 20px;
   position: relative;
 }
+[data-theme="light"] .modal { box-shadow: 0 24px 64px rgba(20,22,28,0.18); }
 .modal-title {
   font-family: var(--font-head);
   font-size: 1.3rem;

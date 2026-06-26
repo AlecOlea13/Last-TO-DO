@@ -32,6 +32,9 @@ export default function Dashboard() {
   });
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(
+    (localStorage.getItem("theme") as "dark" | "light") ?? "dark"
+  );
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -43,6 +46,15 @@ export default function Dashboard() {
     loadStats();
   }, []);
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme(prev => prev === "dark" ? "light" : "dark");
+  }
 
   async function loadStats() {
     try {
@@ -258,6 +270,14 @@ export default function Dashboard() {
             {item.label}
           </Link>
         ))}
+
+        <button className="theme-toggle" onClick={toggleTheme}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="theme-toggle-icon">{theme === "dark" ? "🌙" : "☀️"}</span>
+            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+          </span>
+          <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>Cambiar</span>
+        </button>
 
         <div className="sidebar-spacer" />
         <button className="sidebar-logout" onClick={logout}>
