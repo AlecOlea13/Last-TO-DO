@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLDivElement> }) {
+export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
   const [progress, setProgress] = useState(0); // 0 a 1
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
