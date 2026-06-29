@@ -645,6 +645,15 @@ input[type="file"] { display: none; }
     display: none;
   }
 }
+@media (min-width: 641px) {
+  html, body {
+    scrollbar-width: none;
+    overflow: hidden;
+  }
+  html::-webkit-scrollbar, body::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 .monta-scrollbar-track {
   position: fixed;
