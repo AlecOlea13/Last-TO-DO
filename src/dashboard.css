@@ -48,7 +48,8 @@ html { transition: background-color 0.25s ease; }
 
 .dash-root {
   display: flex;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
@@ -645,7 +646,7 @@ input[type="file"] { display: none; }
     display: none;
   }
 }
-@media (min-width: 641px) {
+/* @media (min-width: 641px) {
   html, body {
     scrollbar-width: none;
     overflow: hidden;
@@ -653,7 +654,7 @@ input[type="file"] { display: none; }
   html::-webkit-scrollbar, body::-webkit-scrollbar {
     display: none;
   }
-}
+} */
 
 .monta-scrollbar-track {
   position: fixed;
