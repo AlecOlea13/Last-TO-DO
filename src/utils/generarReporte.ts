@@ -50,14 +50,6 @@ export type OrdenTrabajoReporte = {
   costoRefacciones?: number; costoManoObra?: number; observaciones?: string;
 };
 
-function specRow(label: string, val?: string | null) {
-  if (!val) return "";
-  return `<tr>
-    <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px">${label}</td>
-    <td style="padding:5px 10px;border:1px solid #ddd">${val}</td>
-  </tr>`;
-}
-
 function generarPlantillaCondiciones(
   tipo: string,
   tipoPeriodo?: string,
@@ -110,25 +102,6 @@ function condicionesHtml(cot: CotizacionReporte): string {
     return cot.condiciones.split("\n").filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join("");
   }
   return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo).split("\n").map(l => `<li>${l}</li>`).join("");
-}
-
-async function redimensionarImagen(url: string, maxW: number, maxH: number): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
-      const w = Math.round(img.width  * ratio);
-      const h = Math.round(img.height * ratio);
-      const canvas = document.createElement("canvas");
-      canvas.width  = w;
-      canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.92));
-    };
-    img.onerror = () => resolve(url);
-    img.src = url;
-  });
 }
 
 function htmlServicio(cot: CotizacionReporte): string {
@@ -286,63 +259,48 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
   const clienteContacto = cot.cliente?.contacto  ?? "";
 
   const m = cot.montacargas;
-  const tipoLabel   = cot.tipo === "renta" ? "RENTA" : "VENTA";
-  const esElectrico = m?.tipo === "electrico";
+  const tipoLabel = cot.tipo === "renta" ? "RENTA" : "VENTA";
 
   const equipoMarca  = m?.marca  ?? cot.equipoMarca  ?? "";
   const equipoModelo = m?.modelo ?? cot.equipoModelo ?? "";
   const equipoSerie  = m?.serie  ?? cot.equipoSerie  ?? "";
 
-  const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
-  const fotoRedimensionada = fotoEquipo ? await redimensionarImagen(fotoEquipo, 400, 240) : null;
-
-  const specsRows = [
-    specRow("Marca",              equipoMarca  || null),
-    specRow("Modelo",             equipoModelo || null),
-    specRow("Serie",              equipoSerie  || null),
-    specRow("Sistema",            m?.tipo === "electrico" ? "Eléctrico" : m?.tipo === "gas" ? "Gas LP" : m?.tipo === "diesel" ? "Diésel" : null),
-    specRow("Capacidad de carga", m?.capacidad),
-    specRow("Altura de levante",  m?.alturaLevante),
-    !esElectrico ? specRow("Altura contraído",    m?.alturaColapsada)                   : "",
-    !esElectrico ? specRow("Horquillas",          m?.horquillas)                        : "",
-    !esElectrico ? specRow("Desplazador lateral", m?.desplazadorLateral ? "Sí" : null)  : "",
-    esElectrico  ? specRow("Voltaje",             m?.voltaje)                           : "",
-    esElectrico  ? specRow("Tipo de batería",     m?.tipoBateria)                       : "",
-    esElectrico  ? specRow("Incluye cargador",    m?.incluyeCargador ? "Sí" : null)     : "",
-    specRow("Tipo de llantas",    m?.tipoLlantas),
-  ].join("");
-
-  const segItems = [
-    m?.equipoSeguridad?.alarmaReversa ? "Alarma de reversa" : "",
-    m?.equipoSeguridad?.torretaAmbar  ? "Torreta ámbar"     : "",
-    m?.equipoSeguridad?.luces         ? "Luces"             : "",
-    m?.equipoSeguridad?.extintor      ? "Extintor"          : "",
-  ].filter(Boolean);
-
-  const segHtml = segItems.length > 0
-    ? `<tr>
-        <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px;vertical-align:top">Equipo de seguridad</td>
-        <td style="padding:5px 10px;border:1px solid #ddd">${segItems.join(", ")}</td>
-      </tr>`
+  const sistemaLabel = m?.tipo === "electrico" ? "Eléctrico"
+    : m?.tipo === "gas"    ? "Gas LP"
+    : m?.tipo === "diesel" ? "Diésel"
     : "";
 
-  const itemsFiltrados = cot.items;
+  // Datos del equipo para mostrar en el primer concepto
+  const equipoDatos = [
+    equipoMarca    ? `<strong>Marca:</strong> ${equipoMarca}`     : "",
+    equipoModelo   ? `<strong>Modelo:</strong> ${equipoModelo}`   : "",
+    equipoSerie    ? `<strong>Serie:</strong> ${equipoSerie}`     : "",
+    sistemaLabel   ? `<strong>Sistema:</strong> ${sistemaLabel}`  : "",
+    m?.capacidad   ? `<strong>Capacidad:</strong> ${m.capacidad}` : "",
+  ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
-  const itemsHtml = itemsFiltrados.map(item => {
+  const itemsHtml = cot.items.map((item, idx) => {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
         <span>${s.descripcion}</span>
         <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
       </div>`
     ).join("");
+
+    // Solo en el primer concepto, si hay datos del equipo, los agrega debajo
+    const equipoExtra = idx === 0 && equipoDatos
+      ? `<div style="margin-top:6px;font-size:9pt;color:#555;border-top:1px dotted #ddd;padding-top:4px;">${equipoDatos}</div>`
+      : "";
+
     return `<tr>
-      <td style="padding:6px 8px;border:1px solid #ddd;width:60px;text-align:center;vertical-align:middle">
+      <td style="padding:6px 8px;border:1px solid #ddd;width:80px;text-align:center;vertical-align:middle">
         ${item.imagen
-          ? `<img src="${item.imagen}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
+          ? `<img src="${item.imagen}" style="width:70px;height:70px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
           : `<span style="color:#aaa;font-size:9pt">—</span>`}
       </td>
       <td style="padding:6px 8px;border:1px solid #ddd">
         <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+        ${equipoExtra}
         ${subHtml}
       </td>
       <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
@@ -350,8 +308,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
       <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     </tr>`;
   }).join("");
-
-  const hayEspecsEquipo = specsRows.length > 0 || segHtml.length > 0;
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -365,20 +321,20 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
-    ".saludo { font-size: 10pt; margin: 16px 0; line-height: 1.7; }",
-    ".section-title { font-weight: bold; font-size: 11pt; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
+    ".saludo { font-size: 10pt; margin: 12px 0; line-height: 1.7; }",
+    ".section-title { font-weight: bold; font-size: 11pt; margin: 12px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
     ".totals { margin-top: 12px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
-    ".precio-nota { margin-top: 10px; font-size: 9pt; color: #555; font-style: italic; }",
-    ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
+    ".precio-nota { margin-top: 8px; font-size: 9pt; color: #555; font-style: italic; }",
+    ".conditions { margin-top: 16px; font-size: 9pt; line-height: 1.7; color: #444; }",
     ".conditions strong { color: #222; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
     ".conditions li { margin-bottom: 4px; }",
-    ".signature { margin-top: 28px; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
+    ".signature { margin-top: 24px; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
@@ -410,35 +366,23 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
 
-    fotoRedimensionada
-      ? `<div class="section-title">Fotografía del Equipo</div>
-         <div style="text-align:center;margin:16px 0;">
-           <img src="${fotoRedimensionada}"
-             style="max-height:240px;width:auto;max-width:100%;display:block;margin:0 auto;border-radius:8px;border:1px solid #ddd;object-fit:contain;" />
-           <p style="font-size:9pt;color:#888;margin-top:6px;font-style:italic;">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
-         </div>`
-      : "",
-
-    hayEspecsEquipo ? '<div class="section-title">Datos del Equipo</div>' : "",
-    hayEspecsEquipo ? `<table><tbody>${specsRows}${segHtml}</tbody></table>` : "",
-
-    itemsFiltrados.length > 0 ? '<div class="section-title">Conceptos</div>' : "",
-    itemsFiltrados.length > 0 ? `<table>
+    '<div class="section-title">Conceptos</div>',
+    `<table>
       <thead><tr>
-        <th style="width:60px">FOTO</th>
+        <th style="width:80px">IMAGEN</th>
         <th>DESCRIPCIÓN</th>
         <th style="width:60px;text-align:center">CANT.</th>
         <th style="width:120px;text-align:right">PRECIO U.</th>
         <th style="width:120px;text-align:right">SUBTOTAL</th>
       </tr></thead>
       <tbody>${itemsHtml}</tbody>
-    </table>` : "",
+    </table>`,
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta del equipo.</p>` : "",
+    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta ${cot.tipoPeriodo ?? "mensual"} del equipo.</p>` : "",
     "</div>",
 
     '<div class="conditions">',
