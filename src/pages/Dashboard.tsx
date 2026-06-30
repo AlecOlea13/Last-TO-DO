@@ -289,7 +289,7 @@ export default function Dashboard() {
 
       <div className="dash-main" ref={mainRef}>
         {isDashboard ? (
-          <>
+          <div key="dashboard-home" className="page-transition">
             <div className="page-header">
               <div>
                 <h1 className="page-title">{getSaludo(nombre)}</h1>
@@ -416,9 +416,11 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          </>
+          </div>
         ) : (
-          <Outlet context={{ nombre, rol }} />
+          <div key={location.pathname} className="page-transition">
+            <Outlet context={{ nombre, rol }} />
+          </div>
         )}
       </div>
 
