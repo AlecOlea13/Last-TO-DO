@@ -93,7 +93,6 @@ function generarPlantillaCondiciones(
     lineas.push("Las existencias son salvo previa venta.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
   } else {
-    // servicio
     lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
     lineas.push("El servicio solo incluye lo señalado en esta cotización.");
     lineas.push("De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.");
@@ -262,7 +261,11 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
   const asesorTel    = cot.asesor?.telefono ?? "33 3856 8329";
   const asesorEmail  = cot.asesor?.email    ?? "richard@pipsamontacargas.com";
 
-  const clienteNombre = cot.cliente?.nombre ?? "";
+  const clienteNombre   = cot.cliente?.nombre    ?? "";
+  const clienteDirec    = cot.cliente?.direccion ?? "";
+  const clienteTel      = cot.cliente?.telefono  ?? "";
+  const clienteContacto = cot.cliente?.contacto  ?? "";
+
   const m = cot.montacargas;
   const tipoLabel   = cot.tipo === "renta" ? "RENTA" : "VENTA";
   const esElectrico = m?.tipo === "electrico";
@@ -341,10 +344,12 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
+    ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
     ".saludo { font-size: 10pt; margin: 16px 0; line-height: 1.7; }",
     ".section-title { font-weight: bold; font-size: 11pt; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
     ".foto-equipo { text-align: center; margin: 16px 0; }",
-    ".foto-equipo img { width: 100%; max-width: 680px; max-height: 420px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; display: block; margin: 0 auto; }",
+    // ── FIX 1: foto más pequeña ──
+    ".foto-equipo img { width: 100%; max-width: 500px; max-height: 300px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; display: block; margin: 0 auto; }",
     ".foto-caption { font-size: 9pt; color: #888; margin-top: 6px; font-style: italic; }",
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
@@ -361,7 +366,8 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
-    "@media print { body { padding: 16px; } .foto-equipo img { max-height: 380px; } }",
+    // ── FIX 1: print también reducido ──
+    "@media print { body { padding: 16px; } .foto-equipo img { max-width: 500px; max-height: 280px; } }",
     "</style>", "</head>", "<body>",
 
     `<p class="folio-ref">${cot.folio}</p>`,
@@ -378,8 +384,15 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     "</div>",
     "</div>",
 
+    // ── FIX 2: datos completos del cliente (igual que htmlServicio) ──
+    '<div class="client-info">',
+    `<strong>${clienteNombre}.</strong><br>`,
+    clienteDirec    ? clienteDirec + "<br>"                                     : "",
+    clienteTel      ? "Tel. " + clienteTel + "<br>"                             : "",
+    clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
+    "</div>",
+
     '<div class="saludo">',
-    `<strong># ${clienteNombre}</strong><br><br>`,
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
 
