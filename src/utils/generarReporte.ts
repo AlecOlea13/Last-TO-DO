@@ -13,6 +13,8 @@ export type ItemReporte = {
 export type CotizacionReporte = {
   folio: string;
   tipo: string;
+  tipoPeriodo?: string;
+  condiciones?: string;
   cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
     numeroEconomico?: string; marca: string; modelo: string; capacidad?: string;
@@ -54,6 +56,61 @@ function specRow(label: string, val?: string | null) {
     <td style="padding:5px 10px;border:1px solid #ddd;font-weight:600;width:220px">${label}</td>
     <td style="padding:5px 10px;border:1px solid #ddd">${val}</td>
   </tr>`;
+}
+
+function generarPlantillaCondiciones(
+  tipo: string,
+  tipoPeriodo?: string,
+  vigenciaDias: number = 30,
+  entregaDias: number = 14,
+  incluirCancelacion: boolean = false,
+): string {
+  const lineas: string[] = [];
+
+  if (tipo === "renta") {
+    const plazoLabel: Record<string, string> = {
+      semanal: "1 semana",
+      mensual: "1 mes",
+      anual:   "1 año",
+    };
+    const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
+    lineas.push(`Contrato por ${plazo}.`);
+    if (incluirCancelacion) {
+      lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
+    }
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la firma de contrato.`);
+  } else if (tipo === "venta") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("El equipo se entrega en las condiciones descritas en esta cotización.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días, sujeto a disponibilidad.`);
+  } else if (tipo === "refacciones") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("Las existencias son salvo previa venta.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
+  } else {
+    // servicio
+    lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
+    lineas.push("El servicio solo incluye lo señalado en esta cotización.");
+    lineas.push("De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.");
+    lineas.push(`Vigencia de la cotización, es de ${vigenciaDias} días naturales.`);
+    lineas.push("Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.");
+    lineas.push("En partes eléctricas no hay garantía.");
+    lineas.push("Las existencias son salvo previa venta.");
+  }
+
+  return lineas.join("\n");
+}
+
+function condicionesHtml(cot: CotizacionReporte): string {
+  if (cot.condiciones?.trim()) {
+    return cot.condiciones.split("\n").filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join("");
+  }
+  return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo).split("\n").map(l => `<li>${l}</li>`).join("");
 }
 
 function htmlServicio(cot: CotizacionReporte): string {
@@ -177,13 +234,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     '<div class="conditions">',
     "<strong>Condiciones comerciales:</strong>",
     "<ul>",
-    "<li><strong>Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.</strong></li>",
-    "<li>El servicio solo incluye lo señalado en esta cotización.</li>",
-    "<li>De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.</li>",
-    "<li>Vigencia de la cotización, es de 15 días naturales.</li>",
-    "<li>Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.</li>",
-    "<li>En partes eléctricas no hay garantía.</li>",
-    "<li>Las existencias son salvo previa venta.</li>",
+    condicionesHtml(cot),
     "</ul>",
     "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
     "</div>",
@@ -252,9 +303,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
       </tr>`
     : "";
 
-  const itemsFiltrados = fotoEquipo
-    ? cot.items.filter((_, idx) => idx !== cot.items.findIndex(i => i.imagen))
-    : cot.items;
+  const itemsFiltrados = cot.items;
 
   const itemsHtml = itemsFiltrados.map(item => {
     const subHtml = (item.subconceptos ?? []).map(s =>
@@ -367,14 +416,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     '<div class="conditions">',
     "<strong>TÉRMINOS Y CONDICIONES COMERCIALES:</strong>",
     "<ul>",
-    cot.tipo === "renta" ? "<li>Contrato por 1 año.</li>" : "",
-    cot.tipo === "renta" ? "<li>Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.</li>" : "",
-    "<li>Todos los precios son en pesos mexicanos más IVA.</li>",
-    "<li>Vigencia de la cotización: 30 días a partir de la fecha del documento.</li>",
-    cot.tipo === "renta" ? "<li>La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.</li>" : "",
-    cot.tipo === "renta" ? "<li>Tiempo de entrega: 2 semanas a partir de la firma de contrato.</li>" : "",
-    cot.tipo === "venta" ? "<li>El equipo se entrega en las condiciones descritas en esta cotización.</li>" : "",
-    cot.tipo === "venta" ? "<li>Tiempo de entrega sujeto a disponibilidad.</li>" : "",
+    condicionesHtml(cot),
     "</ul>",
     "</div>",
 

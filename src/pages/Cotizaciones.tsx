@@ -14,6 +14,8 @@ type ClienteOcasional = { nombre: string; direccion?: string; telefono?: string;
 
 type Cotizacion = {
   _id: string; folio: string; tipo: "servicio" | "renta" | "venta" | "refacciones";
+  tipoPeriodo?: "semanal" | "mensual" | "anual";
+  condiciones?: string;
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
   clienteOcasional?: ClienteOcasional;
   montacargas?: {
@@ -55,7 +57,7 @@ const emptyClienteOcasional: ClienteOcasional = { nombre: "", direccion: "", tel
 
 const emptyForm: any = {
   folio: "", tipo: "servicio", cliente: "", esOcasional: false, clienteOcasional: { ...emptyClienteOcasional },
-  montacargas: "", asesor: "",
+  montacargas: "", asesor: "", tipoPeriodo: "mensual", condiciones: "",
   fecha: new Date().toISOString().split("T")[0], lugar: "Zapopán, Jal",
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "borrador", notas: "",
@@ -69,6 +71,53 @@ const ESTATUS_BADGE: Record<string, string> = { borrador: "badge-gray", enviada:
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
+
+function generarPlantillaCondiciones(
+  tipo: string,
+  tipoPeriodo?: string,
+  vigenciaDias: number = 30,
+  entregaDias: number = 14,
+  incluirCancelacion: boolean = false,
+): string {
+  const lineas: string[] = [];
+
+  if (tipo === "renta") {
+    const plazoLabel: Record<string, string> = {
+      semanal: "1 semana",
+      mensual: "1 mes",
+      anual:   "1 año",
+    };
+    const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
+    lineas.push(`Contrato por ${plazo}.`);
+    if (incluirCancelacion) {
+      lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
+    }
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la firma de contrato.`);
+  } else if (tipo === "venta") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("El equipo se entrega en las condiciones descritas en esta cotización.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días, sujeto a disponibilidad.`);
+  } else if (tipo === "refacciones") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("Las existencias son salvo previa venta.");
+    lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
+  } else {
+    lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
+    lineas.push("El servicio solo incluye lo señalado en esta cotización.");
+    lineas.push("De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.");
+    lineas.push(`Vigencia de la cotización, es de ${vigenciaDias} días naturales.`);
+    lineas.push("Por ningún motivo, se cancelarán los pedidos u órdenes de compra presentados.");
+    lineas.push("En partes eléctricas no hay garantía.");
+    lineas.push("Las existencias son salvo previa venta.");
+  }
+
+  return lineas.join("\n");
+}
 
 export default function Cotizaciones() {
   const rol        = localStorage.getItem("rol") ?? "";
@@ -92,7 +141,6 @@ export default function Cotizaciones() {
   const [saving, setSaving]                     = useState(false);
   const [savingComentario, setSavingComentario] = useState(false);
   const [uploadingIdx, setUploadingIdx]         = useState<number | null>(null);
-  const [periodoRenta, setPeriodoRenta]         = useState<"semanal" | "mensual" | "anual">("mensual");
 
   useEffect(() => { load(); }, []);
 
@@ -116,17 +164,17 @@ export default function Cotizaciones() {
 
   function openNew() {
     setEditing(null);
-    setPeriodoRenta("mensual");
     setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }] });
     setModal(true);
   }
 
   function openEdit(c: Cotizacion) {
     setEditing(c);
-    setPeriodoRenta("mensual");
     const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
       folio: c.folio, tipo: c.tipo,
+      tipoPeriodo: c.tipoPeriodo ?? "mensual",
+      condiciones: c.condiciones ?? "",
       cliente: c.cliente?._id ?? "",
       esOcasional,
       clienteOcasional: c.clienteOcasional ?? { ...emptyClienteOcasional },
@@ -365,6 +413,11 @@ export default function Cotizaciones() {
   const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
   const esRefacciones        = form.tipo === "refacciones";
 
+  function generarPlantilla() {
+    const texto = generarPlantillaCondiciones(form.tipo, form.tipoPeriodo);
+    setForm((p: any) => ({ ...p, condiciones: texto }));
+  }
+
   const modalForm = (
     <div className="modal" style={{ maxWidth: 760 }}>
       <button className="modal-close" onClick={() => { setModal(false); setEditing(null); }}>✕</button>
@@ -552,7 +605,7 @@ export default function Cotizaciones() {
             {form.tipo === "renta" && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                 <label className="form-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Periodo:</label>
-                <select className="form-select" value={periodoRenta} onChange={e => setPeriodoRenta(e.target.value as any)} style={{ width: "auto" }}>
+                <select className="form-select" value={form.tipoPeriodo} onChange={e => setForm((p: any) => ({ ...p, tipoPeriodo: e.target.value }))} style={{ width: "auto" }}>
                   <option value="semanal">Semanal</option>
                   <option value="mensual">Mensual</option>
                   <option value="anual">Anual</option>
@@ -561,11 +614,30 @@ export default function Cotizaciones() {
             )}
             <button className="btn btn-secondary btn-sm"
               style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
-              onClick={() => generarConceptoAutomatico(form.montacargas, form.tipo, periodoRenta)}>
+              onClick={() => generarConceptoAutomatico(form.montacargas, form.tipo, form.tipoPeriodo)}>
               ⚡ Llenar primer concepto automáticamente
             </button>
           </div>
         )}
+
+        {/* ── Condiciones comerciales (editable) ── */}
+        <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>
+              📋 Condiciones comerciales (aparecen en el reporte)
+            </p>
+            <button className="btn btn-secondary btn-sm" onClick={generarPlantilla}>
+              ⚡ Generar plantilla
+            </button>
+          </div>
+          <textarea className="form-textarea" rows={6} value={form.condiciones}
+            onChange={e => setForm((p: any) => ({ ...p, condiciones: e.target.value }))}
+            placeholder="Genera una plantilla con el botón de arriba, o escribe las condiciones manualmente — una por línea."
+            style={{ fontSize: "0.85rem" }} />
+          <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 6 }}>
+            Si dejas este campo vacío, el reporte usará automáticamente una plantilla estándar según el tipo y periodo.
+          </p>
+        </div>
       </div>
 
       <div style={{ marginTop: 8 }}>
