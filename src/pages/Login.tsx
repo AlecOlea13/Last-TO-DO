@@ -20,6 +20,7 @@ export default function Login() {
       localStorage.setItem("token", data.token);
       localStorage.setItem("rol", data.user.rol);
       localStorage.setItem("nombre", data.user.nombre);
+      localStorage.setItem("userId", data.user.id);
       setAuth(data.token);
       nav("/dashboard");
     } catch (err: any) {
