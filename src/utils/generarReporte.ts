@@ -294,7 +294,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
   const equipoSerie  = m?.serie  ?? cot.equipoSerie  ?? "";
 
   const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
-  const fotoRedimensionada = fotoEquipo ? await redimensionarImagen(fotoEquipo, 380, 220) : null;
+  const fotoRedimensionada = fotoEquipo ? await redimensionarImagen(fotoEquipo, 400, 240) : null;
 
   const specsRows = [
     specRow("Marca",              equipoMarca  || null),
@@ -412,11 +412,9 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
 
     fotoRedimensionada
       ? `<div class="section-title">Fotografía del Equipo</div>
-         <div style="text-align:center;margin:16px 0;width:100%;overflow:hidden;">
-           <div style="display:inline-block;width:360px;height:220px;overflow:hidden;border-radius:8px;border:1px solid #ddd;">
-             <img src="${fotoRedimensionada}"
-               style="width:360px;height:220px;object-fit:cover;display:block;" />
-           </div>
+         <div style="text-align:center;margin:16px 0;">
+           <img src="${fotoRedimensionada}"
+             style="max-height:240px;width:auto;max-width:100%;display:block;margin:0 auto;border-radius:8px;border:1px solid #ddd;object-fit:contain;" />
            <p style="font-size:9pt;color:#888;margin-top:6px;font-style:italic;">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
          </div>`
       : "",
