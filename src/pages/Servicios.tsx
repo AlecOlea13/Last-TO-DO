@@ -30,6 +30,8 @@ type Servicio = {
   notasCierre?: string;
   fotoHojaFirmada?: string;
   fotoEquipoFinal?: string;
+  horaInicio?: string;
+  horaFin?: string;
 };
 
 type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
@@ -53,8 +55,41 @@ const ORDEN_BADGE: Record<string, string> = {
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
+function Cronometro({ horaInicio }: { horaInicio: string }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const inicio = new Date(horaInicio).getTime();
+    function tick() {
+      setElapsed(Math.floor((Date.now() - inicio) / 1000));
+    }
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [horaInicio]);
+
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  const texto = h > 0
+    ? `${h}h ${String(m).padStart(2, "0")}m`
+    : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      fontFamily: "var(--font-head)", fontWeight: 700, fontSize: "0.78rem",
+      color: "var(--accent)", background: "rgba(245,158,11,0.1)",
+      padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap",
+    }}>
+      ⏱️ {texto}
+    </span>
+  );
+}
+
 export default function Servicios() {
   const rol       = localStorage.getItem("rol") ?? "";
+  const userId    = localStorage.getItem("userId") ?? "";
   const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
 
   const [servicios, setServicios]     = useState<Servicio[]>([]);
@@ -71,6 +106,7 @@ export default function Servicios() {
   const [cerrarForm, setCerrarForm]   = useState<any>(emptyCerrarForm);
   const [saving, setSaving]           = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState<"hoja" | "equipo" | null>(null);
+  const [iniciandoId, setIniciandoId] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -119,6 +155,17 @@ export default function Servicios() {
     finally { setUploadingFoto(null); }
   }
 
+  async function iniciar(s: Servicio) {
+    setIniciandoId(s._id);
+    try {
+      const { data } = await api.post(`/servicios/${s._id}/iniciar`);
+      setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setIniciandoId(null); }
+  }
+
   async function cerrar() {
     if (!cerrarModal) return;
     setSaving(true);
@@ -126,7 +173,9 @@ export default function Servicios() {
       await api.post(`/servicios/${cerrarModal._id}/cerrar`, cerrarForm);
       load();
       setCerrarModal(null);
-    } catch {}
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
     finally { setSaving(false); }
   }
 
@@ -227,7 +276,10 @@ export default function Servicios() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Servicios</h1>
-          <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos</p>
+          <p className="page-subtitle">
+            {servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos
+            {rol === "tecnico" && " — mostrando solo tus servicios asignados"}
+          </p>
         </div>
         {canCreate && (
           <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
@@ -260,60 +312,85 @@ export default function Servicios() {
               <thead>
                 <tr>
                   <th>Folio</th><th>Fecha</th><th>Equipo</th><th>Cliente</th>
-                  <th>Tipo</th><th>Técnico</th><th>Orden refac.</th><th>Estatus</th><th></th>
+                  <th>Tipo</th><th>Técnico</th><th>Orden refac.</th><th>Tiempo</th><th>Estatus</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(s => (
-                  <tr key={s._id}>
-                    <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{s.folio}</td>
-                    <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{fmt(s.fechaReporte)}</td>
-                    <td style={{ fontWeight: 600 }}>
-                      {s.montacargas?.numeroEconomico}
-                      <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.8rem" }}> {s.montacargas?.marca}</span>
-                    </td>
-                    <td>{s.cliente?.nombre ?? "—"}</td>
-                    <td style={{ fontSize: "0.82rem" }}>{s.tipoServicio?.nombre ?? "—"}</td>
-                    <td>{s.tecnicoAsignado?.nombre ?? "—"}</td>
-                    <td>
-                      {s.ordenRefaccion
-                        ? <span className={`badge ${ORDEN_BADGE[s.ordenRefaccion.estatus]}`}>{s.ordenRefaccion.folio}</span>
-                        : "—"}
-                    </td>
-                    <td>
-                      {["tecnico", "almacen"].includes(rol) ? (
-                        <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
-                          {s.estatus}
-                        </span>
-                      ) : (
-                        <select
-                          className="form-select"
-                          style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
-                          value={s.estatus}
-                          onChange={e => cambiarEstatus(s, e.target.value)}
-                        >
-                          <option value="abierto">Abierto</option>
-                          <option value="en_proceso">En proceso</option>
-                          <option value="cerrado">Cerrado</option>
-                        </select>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
-                        <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-                        {s.estatus !== "cerrado" && ["developer", "gerencia", "oficina", "tecnico"].includes(rol) && (
-                          <button
-                            className="btn btn-amber btn-sm"
-                            onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
-                          >
-                            Cerrar
-                          </button>
+                {filtered.map(s => {
+                  const esMiServicio = rol === "tecnico" && String(s.tecnicoAsignado?._id) === String(userId);
+                  const puedeOperar = ["developer", "gerencia"].includes(rol) || esMiServicio;
+                  return (
+                    <tr key={s._id}>
+                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{s.folio}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{fmt(s.fechaReporte)}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {s.montacargas?.numeroEconomico}
+                        <span style={{ color: "var(--text-muted)", fontWeight: 400, fontSize: "0.8rem" }}> {s.montacargas?.marca}</span>
+                      </td>
+                      <td>{s.cliente?.nombre ?? "—"}</td>
+                      <td style={{ fontSize: "0.82rem" }}>{s.tipoServicio?.nombre ?? "—"}</td>
+                      <td>{s.tecnicoAsignado?.nombre ?? "—"}</td>
+                      <td>
+                        {s.ordenRefaccion
+                          ? <span className={`badge ${ORDEN_BADGE[s.ordenRefaccion.estatus]}`}>{s.ordenRefaccion.folio}</span>
+                          : "—"}
+                      </td>
+                      <td>
+                        {s.estatus === "cerrado" && s.horaInicio && s.horaFin ? (
+                          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                            {Math.round((new Date(s.horaFin).getTime() - new Date(s.horaInicio).getTime()) / 60000)} min
+                          </span>
+                        ) : s.horaInicio && s.estatus !== "cerrado" ? (
+                          <Cronometro horaInicio={s.horaInicio} />
+                        ) : (
+                          <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        {["tecnico", "almacen"].includes(rol) ? (
+                          <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
+                            {s.estatus}
+                          </span>
+                        ) : (
+                          <select
+                            className="form-select"
+                            style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
+                            value={s.estatus}
+                            onChange={e => cambiarEstatus(s, e.target.value)}
+                          >
+                            <option value="abierto">Abierto</option>
+                            <option value="en_proceso">En proceso</option>
+                            <option value="cerrado">Cerrado</option>
+                          </select>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
+                          <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
+                          {s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
+                              onClick={() => iniciar(s)}
+                              disabled={iniciandoId === s._id}
+                            >
+                              {iniciandoId === s._id ? "..." : "▶️ Iniciar"}
+                            </button>
+                          )}
+                          {s.estatus !== "cerrado" && puedeOperar && (
+                            <button
+                              className="btn btn-amber btn-sm"
+                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
+                            >
+                              Cerrar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -398,6 +475,11 @@ export default function Servicios() {
             <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 8 }}>
               <strong style={{ color: "var(--text)" }}>{cerrarModal.folio}</strong> — {cerrarModal.montacargas?.numeroEconomico} {cerrarModal.montacargas?.marca}
             </p>
+            {cerrarModal.horaInicio && (
+              <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
+                ⏱️ Iniciado hace <Cronometro horaInicio={cerrarModal.horaInicio} />
+              </p>
+            )}
             {cerrarModal.ordenRefaccion && cerrarModal.ordenRefaccion.estatus !== "surtida" && (
               <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--red)", fontSize: "0.82rem", color: "var(--red)", marginBottom: 12 }}>
                 ⚠️ La orden <strong>{cerrarModal.ordenRefaccion.folio}</strong> aún no está surtida completamente.
