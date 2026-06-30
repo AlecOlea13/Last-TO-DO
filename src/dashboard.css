@@ -702,3 +702,9 @@ input[type="file"] { display: none; }
   opacity: 0.35;
   z-index: -1;
 }
+.monta-scrollbar-handle img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}

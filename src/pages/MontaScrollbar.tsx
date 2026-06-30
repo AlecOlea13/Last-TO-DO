@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+const MONTA_ICON_URL = "https://res.cloudinary.com/dijxgoytw/image/upload/v1782746689/montacargas_jma8wd.png";
+
 export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
   const [progress, setProgress] = useState(0);
   const [hasScroll, setHasScroll] = useState(false);
@@ -23,7 +25,6 @@ export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObje
     el.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
 
-    // Reintenta varias veces al montar, por si el contenido carga async (fetch de datos)
     const t1 = setTimeout(update, 300);
     const t2 = setTimeout(update, 1000);
 
@@ -75,7 +76,7 @@ export default function MontaScrollbar({ targetRef }: { targetRef: React.RefObje
       onPointerUp={onPointerUp}
     >
       <div className="monta-scrollbar-handle" style={{ top }}>
-        🏗️
+        <img src={MONTA_ICON_URL} alt="" draggable={false} />
       </div>
     </div>
   );
