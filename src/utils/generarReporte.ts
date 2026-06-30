@@ -412,10 +412,11 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
 
     fotoRedimensionada
       ? `<div class="section-title">Fotografía del Equipo</div>
-         <div style="text-align:center;margin:16px 0;">
-           <img src="${fotoRedimensionada}"
-             width="480" height="auto"
-             style="display:block;margin:0 auto;border-radius:8px;border:1px solid #ddd;max-width:480px;" />
+         <div style="text-align:center;margin:16px 0;width:100%;overflow:hidden;">
+           <div style="display:inline-block;width:360px;height:220px;overflow:hidden;border-radius:8px;border:1px solid #ddd;">
+             <img src="${fotoRedimensionada}"
+               style="width:360px;height:220px;object-fit:cover;display:block;" />
+           </div>
            <p style="font-size:9pt;color:#888;margin-top:6px;font-style:italic;">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
          </div>`
       : "",
