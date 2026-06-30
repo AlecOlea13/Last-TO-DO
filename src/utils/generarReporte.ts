@@ -112,6 +112,25 @@ function condicionesHtml(cot: CotizacionReporte): string {
   return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo).split("\n").map(l => `<li>${l}</li>`).join("");
 }
 
+async function redimensionarImagen(url: string, maxW: number, maxH: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = Math.round(img.width  * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = () => resolve(url);
+    img.src = url;
+  });
+}
+
 function htmlServicio(cot: CotizacionReporte): string {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -251,7 +270,7 @@ function htmlServicio(cot: CotizacionReporte): string {
   ].join("\n");
 }
 
-function htmlVentaRenta(cot: CotizacionReporte): string {
+async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
@@ -275,6 +294,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
   const equipoSerie  = m?.serie  ?? cot.equipoSerie  ?? "";
 
   const fotoEquipo = cot.items.find(i => i.imagen)?.imagen ?? null;
+  const fotoRedimensionada = fotoEquipo ? await redimensionarImagen(fotoEquipo, 480, 280) : null;
 
   const specsRows = [
     specRow("Marca",              equipoMarca  || null),
@@ -347,10 +367,6 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
     ".saludo { font-size: 10pt; margin: 16px 0; line-height: 1.7; }",
     ".section-title { font-weight: bold; font-size: 11pt; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
-    ".foto-equipo { text-align: center; margin: 16px 0; }",
-    // ── FIX 1: foto más pequeña ──
-    ".foto-equipo img { width: 100%; max-width: 500px; max-height: 300px; object-fit: contain; border-radius: 8px; border: 1px solid #ddd; display: block; margin: 0 auto; }",
-    ".foto-caption { font-size: 9pt; color: #888; margin-top: 6px; font-style: italic; }",
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
@@ -366,8 +382,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
-    // ── FIX 1: print también reducido ──
-    "@media print { body { padding: 16px; } .foto-equipo img { max-width: 500px; max-height: 280px; } }",
+    "@media print { body { padding: 16px; } }",
     "</style>", "</head>", "<body>",
 
     `<p class="folio-ref">${cot.folio}</p>`,
@@ -384,7 +399,6 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     "</div>",
     "</div>",
 
-    // ── FIX 2: datos completos del cliente (igual que htmlServicio) ──
     '<div class="client-info">',
     `<strong>${clienteNombre}.</strong><br>`,
     clienteDirec    ? clienteDirec + "<br>"                                     : "",
@@ -396,11 +410,11 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
 
-    fotoEquipo
+    fotoRedimensionada
       ? `<div class="section-title">Fotografía del Equipo</div>
          <div style="text-align:center;margin:16px 0;">
-           <img src="${fotoEquipo}" alt="${equipoMarca} ${equipoModelo}"
-             style="max-width:480px;width:100%;max-height:280px;object-fit:contain;border-radius:8px;border:1px solid #ddd;display:block;margin:0 auto;" />
+           <img src="${fotoRedimensionada}"
+             style="width:${Math.min(480, 480)}px;height:auto;display:block;margin:0 auto;border-radius:8px;border:1px solid #ddd;" />
            <p style="font-size:9pt;color:#888;margin-top:6px;font-style:italic;">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
          </div>`
       : "",
@@ -424,7 +438,7 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta mensual del equipo.</p>` : "",
+    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta ${cot.tipoPeriodo ?? "mensual"} del equipo.</p>` : "",
     "</div>",
 
     '<div class="conditions">',
@@ -660,13 +674,17 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 </html>`;
 }
 
-export function generarReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
+export async function generarReporte(cot: CotizacionReporte) {
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? await htmlVentaRenta(cot)
+    : htmlServicio(cot);
   abrirVentana(html);
 }
 
-export function imprimirReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta" ? htmlVentaRenta(cot) : htmlServicio(cot);
+export async function imprimirReporte(cot: CotizacionReporte) {
+  const html = cot.tipo === "venta" || cot.tipo === "renta"
+    ? await htmlVentaRenta(cot)
+    : htmlServicio(cot);
   const htmlConPrint = html.replace(
     `window.onload = function() { document.title = '${cot.folio}'; };`,
     `window.onload = function() { document.title = '${cot.folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
@@ -699,7 +717,7 @@ function abrirVentana(html: string) {
 
 export async function descargarPDF(cot: CotizacionReporte) {
   const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? htmlVentaRenta(cot)
+    ? await htmlVentaRenta(cot)
     : htmlServicio(cot);
 
   const iframe = document.createElement("iframe");
