@@ -13,7 +13,7 @@ type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: st
 type ClienteOcasional = { nombre: string; direccion?: string; telefono?: string; contacto?: string };
 
 type Cotizacion = {
-  _id: string; folio: string; tipo: "servicio" | "renta" | "venta";
+  _id: string; folio: string; tipo: "servicio" | "renta" | "venta" | "refacciones";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
   clienteOcasional?: ClienteOcasional;
   montacargas?: {
@@ -47,6 +47,9 @@ type TipoServicio = {
   itemsChecklist: string[]; precioTotal: number;
   refacciones: { nombre: string; cantidad: number }[];
 };
+type RefaccionCatalogo = {
+  _id: string; nombre: string; numeroParte?: string; precio?: number; unidad?: string;
+};
 
 const emptyClienteOcasional: ClienteOcasional = { nombre: "", direccion: "", telefono: "", contacto: "" };
 
@@ -61,7 +64,7 @@ const emptyForm: any = {
 const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "", subconceptos: [] };
 const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
-const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green" };
+const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green", refacciones: "badge-purple" };
 const ESTATUS_BADGE: Record<string, string> = { borrador: "badge-gray", enviada: "badge-blue", aceptada: "badge-green", rechazada: "badge-red" };
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
@@ -76,6 +79,7 @@ export default function Cotizaciones() {
   const [montas, setMontas]                     = useState<Montacargas[]>([]);
   const [asesores, setAsesores]                 = useState<Asesor[]>([]);
   const [tiposServicio, setTiposServicio]       = useState<TipoServicio[]>([]);
+  const [refaccionesCatalogo, setRefaccionesCatalogo] = useState<RefaccionCatalogo[]>([]);
   const [loading, setLoading]                   = useState(true);
   const [search, setSearch]                     = useState("");
   const [filtro, setFiltro]                     = useState("todos");
@@ -94,16 +98,18 @@ export default function Cotizaciones() {
 
   async function load() {
     try {
-      const [co, cl, mo, as, ts] = await Promise.all([
+      const [co, cl, mo, as, ts, rf] = await Promise.all([
         api.get("/cotizaciones"), api.get("/clientes"),
         api.get("/montacargas"), api.get("/asesores"),
         api.get("/tipos-servicio"),
+        api.get("/refacciones").catch(() => ({ data: [] })),
       ]);
       setCotizaciones(co.data);
       setClientes(cl.data.filter((c: any) => c.estatus === "activo"));
       setMontas(mo.data);
       setAsesores(as.data);
       setTiposServicio(ts.data);
+      setRefaccionesCatalogo(rf.data);
     } catch {}
     finally { setLoading(false); }
   }
@@ -163,6 +169,23 @@ export default function Cotizaciones() {
           items[i].total = items[i].cantidad * items[i].precioUnitario;
         }
       }
+      return { ...p, items, ...recalcTotales(items) };
+    });
+  }
+
+  function aplicarRefaccionCatalogo(i: number, refaccionId: string) {
+    if (!refaccionId) return;
+    const r = refaccionesCatalogo.find(rf => rf._id === refaccionId);
+    if (!r) return;
+    setForm((p: any) => {
+      const items = [...p.items];
+      const cantidad = items[i].cantidad || 1;
+      items[i] = {
+        ...items[i],
+        descripcion: r.numeroParte ? `${r.nombre} (${r.numeroParte})` : r.nombre,
+        precioUnitario: r.precio ?? 0,
+        total: cantidad * (r.precio ?? 0),
+      };
       return { ...p, items, ...recalcTotales(items) };
     });
   }
@@ -340,6 +363,7 @@ export default function Cotizaciones() {
 
   const montaSeleccionada    = montas.find(m => m._id === form.montacargas);
   const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
+  const esRefacciones        = form.tipo === "refacciones";
 
   const modalForm = (
     <div className="modal" style={{ maxWidth: 760 }}>
@@ -359,6 +383,7 @@ export default function Cotizaciones() {
             <option value="servicio">Servicio / Mantenimiento</option>
             <option value="renta">Renta</option>
             <option value="venta">Venta</option>
+            <option value="refacciones">Refacciones</option>
           </select>
         </div>
 
@@ -418,39 +443,43 @@ export default function Cotizaciones() {
             {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">Montacargas</label>
-          <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
-            <option value="">Sin equipo</option>
-            {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
-          </select>
-        </div>
+        {!esRefacciones && (
+          <div className="form-group">
+            <label className="form-label">Montacargas</label>
+            <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
+              <option value="">Sin equipo</option>
+              {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
+            </select>
+          </div>
+        )}
 
-        <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
-          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
-            🔧 Datos del equipo (opcionales — aparecen en el reporte)
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Marca</label>
-              <input className="form-input" value={form.equipoMarca ?? ""}
-                onChange={e => setForm((p: any) => ({ ...p, equipoMarca: e.target.value }))}
-                placeholder="Ej. Yale" />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Modelo</label>
-              <input className="form-input" value={form.equipoModelo ?? ""}
-                onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))}
-                placeholder="Ej. YL_456" />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Serie</label>
-              <input className="form-input" value={form.equipoSerie ?? ""}
-                onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))}
-                placeholder="Ej. 1A3234RT45" />
+        {!esRefacciones && (
+          <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
+              🔧 Datos del equipo (opcionales — aparecen en el reporte)
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Marca</label>
+                <input className="form-input" value={form.equipoMarca ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, equipoMarca: e.target.value }))}
+                  placeholder="Ej. Yale" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Modelo</label>
+                <input className="form-input" value={form.equipoModelo ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))}
+                  placeholder="Ej. YL_456" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Serie</label>
+                <input className="form-input" value={form.equipoSerie ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))}
+                  placeholder="Ej. 1A3234RT45" />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="form-group">
           <label className="form-label">Fecha</label>
@@ -470,10 +499,10 @@ export default function Cotizaciones() {
           </select>
         </div>
         <div className="form-group span-2">
-          <label className="form-label">Descripción del servicio</label>
+          <label className="form-label">Descripción {esRefacciones ? "(opcional)" : "del servicio"}</label>
           <textarea className="form-textarea" rows={3} value={form.descripcionServicio}
             onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
-            placeholder="Ej. Mantenimiento correctivo a batería modelo 18-125-15" />
+            placeholder={esRefacciones ? "Ej. Refacciones para mantenimiento de batería" : "Ej. Mantenimiento correctivo a batería modelo 18-125-15"} />
         </div>
 
         {form.tipo === "servicio" && tiposServicio.length > 0 && (
@@ -541,8 +570,10 @@ export default function Cotizaciones() {
 
       <div style={{ marginTop: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Conceptos</p>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar concepto</button>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            {esRefacciones ? "Refacciones" : "Conceptos"}
+          </p>
+          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar {esRefacciones ? "refacción" : "concepto"}</button>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -550,6 +581,20 @@ export default function Cotizaciones() {
             const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
             return (
               <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
+                {esRefacciones && refaccionesCatalogo.length > 0 && (
+                  <div style={{ padding: "8px 8px 0" }}>
+                    <select className="form-select" style={{ fontSize: "0.8rem", padding: "6px 10px" }}
+                      defaultValue=""
+                      onChange={e => { aplicarRefaccionCatalogo(i, e.target.value); e.target.value = ""; }}>
+                      <option value="">🔍 Buscar en catálogo de Almacén (opcional)...</option>
+                      {refaccionesCatalogo.map(r => (
+                        <option key={r._id} value={r._id}>
+                          {r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""}{r.precio ? ` — $${r.precio.toLocaleString()}` : " — sin precio"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
                   <label style={{ cursor: "pointer" }}>
                     {item.imagen ? (
@@ -565,7 +610,7 @@ export default function Cotizaciones() {
                     onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
                   <textarea className="form-textarea" value={item.descripcion}
                     onChange={e => updateItem(i, "descripcion", e.target.value)}
-                    placeholder="Descripción del concepto" rows={2}
+                    placeholder={esRefacciones ? "Nombre de la refacción" : "Descripción del concepto"} rows={2}
                     style={{ resize: "vertical", minHeight: 40 }} />
                   <input className="form-input" type="number" value={item.precioUnitario}
                     onChange={e => updateItem(i, "precioUnitario", +e.target.value)}
@@ -576,37 +621,39 @@ export default function Cotizaciones() {
                   <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
                 </div>
 
-                <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      Subconceptos {tieneSubconceptos ? `(${item.subconceptos?.length})` : ""}
-                    </p>
-                    <button className="btn btn-secondary btn-sm" style={{ fontSize: "0.7rem", padding: "3px 8px" }} onClick={() => addSubconcepto(i)}>
-                      + Agregar subconcepto
-                    </button>
-                  </div>
-                  {tieneSubconceptos && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {item.subconceptos!.map((sub, si) => (
-                        <div key={si} style={{ display: "grid", gridTemplateColumns: "1fr 120px 28px", gap: 6, alignItems: "center" }}>
-                          <input className="form-input" value={sub.descripcion}
-                            onChange={e => updateSubconcepto(i, si, "descripcion", e.target.value)}
-                            placeholder="Descripción del subconcepto"
-                            style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
-                          <input className="form-input" type="number" value={sub.precio}
-                            onChange={e => updateSubconcepto(i, si, "precio", +e.target.value)}
-                            placeholder="Precio"
-                            style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
-                          <button className="btn btn-danger btn-icon" style={{ padding: "4px 8px", fontSize: "0.75rem" }}
-                            onClick={() => removeSubconcepto(i, si)}>✕</button>
-                        </div>
-                      ))}
-                      <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>
-                        Suma subconceptos: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente
+                {!esRefacciones && (
+                  <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Subconceptos {tieneSubconceptos ? `(${item.subconceptos?.length})` : ""}
                       </p>
+                      <button className="btn btn-secondary btn-sm" style={{ fontSize: "0.7rem", padding: "3px 8px" }} onClick={() => addSubconcepto(i)}>
+                        + Agregar subconcepto
+                      </button>
                     </div>
-                  )}
-                </div>
+                    {tieneSubconceptos && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {item.subconceptos!.map((sub, si) => (
+                          <div key={si} style={{ display: "grid", gridTemplateColumns: "1fr 120px 28px", gap: 6, alignItems: "center" }}>
+                            <input className="form-input" value={sub.descripcion}
+                              onChange={e => updateSubconcepto(i, si, "descripcion", e.target.value)}
+                              placeholder="Descripción del subconcepto"
+                              style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                            <input className="form-input" type="number" value={sub.precio}
+                              onChange={e => updateSubconcepto(i, si, "precio", +e.target.value)}
+                              placeholder="Precio"
+                              style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                            <button className="btn btn-danger btn-icon" style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                              onClick={() => removeSubconcepto(i, si)}>✕</button>
+                          </div>
+                        ))}
+                        <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>
+                          Suma subconceptos: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -671,6 +718,7 @@ export default function Cotizaciones() {
                 <option value="servicio">Servicio</option>
                 <option value="renta">Renta</option>
                 <option value="venta">Venta</option>
+                <option value="refacciones">Refacciones</option>
                 <option value="borrador">Borrador</option>
                 <option value="enviada">Enviada</option>
                 <option value="aceptada">Aceptada</option>
