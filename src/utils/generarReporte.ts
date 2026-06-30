@@ -398,9 +398,10 @@ function htmlVentaRenta(cot: CotizacionReporte): string {
 
     fotoEquipo
       ? `<div class="section-title">Fotografía del Equipo</div>
-         <div class="foto-equipo">
-           <img src="${fotoEquipo}" alt="${equipoMarca} ${equipoModelo}" />
-           <p class="foto-caption">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
+         <div style="text-align:center;margin:16px 0;">
+           <img src="${fotoEquipo}" alt="${equipoMarca} ${equipoModelo}"
+             style="max-width:480px;width:100%;max-height:280px;object-fit:contain;border-radius:8px;border:1px solid #ddd;display:block;margin:0 auto;" />
+           <p style="font-size:9pt;color:#888;margin-top:6px;font-style:italic;">${equipoMarca} ${equipoModelo}${m?.capacidad ? " — " + m.capacidad : ""}</p>
          </div>`
       : "",
 
