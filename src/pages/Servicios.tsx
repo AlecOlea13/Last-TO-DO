@@ -125,8 +125,8 @@ function VistaTecnicoMovil({
   onReanudar: (s: Servicio) => void;
   onCerrar: (s: Servicio) => void;
 }) {
-  const activo     = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
-  const pendientes = servicios.filter(s => s.estatus === "abierto");
+  const activo      = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
+  const pendientes  = servicios.filter(s => s.estatus === "abierto");
   const pausaActiva = activo?.pausas?.find(p => !p.horaFin);
 
   function fmt(date?: string) {
@@ -138,7 +138,6 @@ function VistaTecnicoMovil({
   return (
     <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-      {/* ── Servicio activo ── */}
       {activo && (
         <div style={{
           background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)",
@@ -151,7 +150,6 @@ function VistaTecnicoMovil({
             </span>
             <span style={{ fontSize: "0.78rem", fontWeight: 700, fontFamily: "var(--font-head)", color: "var(--text-muted)" }}>{activo.folio}</span>
           </div>
-
           <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>
             #{activo.montacargas?.numeroEconomico} {activo.montacargas?.marca}
           </div>
@@ -171,14 +169,12 @@ function VistaTecnicoMovil({
           {activo.horaInicio && activo.estatus === "en_proceso" && (
             <Cronometro horaInicio={activo.horaInicio} pausas={activo.pausas} grande />
           )}
-
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
             {activo.estatus === "en_proceso" && (
               <>
                 <button
                   style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onPausar(activo)}
-                  disabled={pausandoId === activo._id}
+                  onClick={() => onPausar(activo)} disabled={pausandoId === activo._id}
                 >
                   {pausandoId === activo._id ? "..." : "⏸️ Pausar servicio"}
                 </button>
@@ -194,8 +190,7 @@ function VistaTecnicoMovil({
               <>
                 <button
                   style={{ width: "100%", padding: "16px", borderRadius: 12, border: "1.5px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.15)", color: "var(--green)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onReanudar(activo)}
-                  disabled={reanudandoId === activo._id}
+                  onClick={() => onReanudar(activo)} disabled={reanudandoId === activo._id}
                 >
                   {reanudandoId === activo._id ? "..." : "▶️ Reanudar servicio"}
                 </button>
@@ -211,7 +206,6 @@ function VistaTecnicoMovil({
         </div>
       )}
 
-      {/* ── Pendientes ── */}
       {pendientes.length > 0 && (
         <div>
           <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>
@@ -241,8 +235,7 @@ function VistaTecnicoMovil({
                 {!activo ? (
                   <button
                     style={{ width: "100%", padding: "14px", borderRadius: 10, border: "1.5px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.15)", color: "var(--blue)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}
-                    onClick={() => onIniciarConfirm(s)}
-                    disabled={iniciandoId === s._id}
+                    onClick={() => onIniciarConfirm(s)} disabled={iniciandoId === s._id}
                   >
                     {iniciandoId === s._id ? "Iniciando..." : "▶️ Iniciar este servicio"}
                   </button>
@@ -273,6 +266,7 @@ export default function Servicios() {
   const userId    = localStorage.getItem("userId") ?? "";
   const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
   const esTecnico = rol === "tecnico";
+  const soloVer   = rol === "oficina";
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
   const [montas, setMontas]             = useState<Monta[]>([]);
@@ -299,21 +293,26 @@ export default function Servicios() {
 
   async function load() {
     try {
-      const calls: any[] = [
+      const [s, m, c, t] = await Promise.all([
         api.get("/servicios"),
         api.get("/montacargas"),
         api.get("/clientes"),
         api.get("/tipos-servicio"),
-      ];
-      if (["developer", "gerencia", "oficina"].includes(rol)) calls.push(api.get("/users"));
-      const [s, m, c, t, u] = await Promise.all(calls);
+      ]);
       setServicios(s.data);
       setMontas(m.data);
       setClientes(c.data);
       setTipos(t.data);
-      if (u) setUsuarios(u.data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
     } catch {}
-    finally { setLoading(false); }
+
+    if (["developer", "gerencia", "oficina"].includes(rol)) {
+      try {
+        const { data } = await api.get("/users");
+        setUsuarios(data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
+      } catch {}
+    }
+
+    setLoading(false);
   }
 
   async function save() {
@@ -483,16 +482,14 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista técnico en móvil ──
+  // ── Vista técnico ──
   if (esTecnico) {
     return (
       <>
         <div className="page-header">
           <div>
             <h1 className="page-title">Mis Servicios</h1>
-            <p className="page-subtitle">
-              {servicios.filter(s => s.estatus !== "cerrado").length} pendientes
-            </p>
+            <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} pendientes</p>
           </div>
         </div>
 
@@ -511,7 +508,6 @@ export default function Servicios() {
           />
         )}
 
-        {/* ── Modal confirmar iniciar ── */}
         {confirmarIniciarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmarIniciarModal(null)}>
             <div className="modal" style={{ maxWidth: 360 }}>
@@ -547,7 +543,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* ── Modal pausar (técnico) ── */}
         {pausarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
             <div className="modal" style={{ maxWidth: 440 }}>
@@ -568,8 +563,7 @@ export default function Servicios() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button
                   style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
-                  onClick={pausar}
-                  disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
+                  onClick={pausar} disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
                 >
                   {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
                 </button>
@@ -584,7 +578,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* ── Modal cerrar (técnico) ── */}
         {cerrarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
             <div className="modal" style={{ maxWidth: 520 }}>
@@ -646,15 +639,13 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista normal (desktop / gerencia / developer / oficina) ──
+  // ── Vista normal (gerencia / developer / oficina) ──
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Servicios</h1>
-          <p className="page-subtitle">
-            {servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos
-          </p>
+          <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos</p>
         </div>
         {canCreate && (
           <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
@@ -728,41 +719,51 @@ export default function Servicios() {
                         )}
                       </td>
                       <td>
-                        <select
-                          className="form-select"
-                          style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
-                          value={s.estatus}
-                          onChange={e => cambiarEstatus(s, e.target.value)}
-                        >
-                          <option value="abierto">Abierto</option>
-                          <option value="en_proceso">En proceso</option>
-                          <option value="pausado">Pausado</option>
-                          <option value="cerrado">Cerrado</option>
-                        </select>
+                        {soloVer ? (
+                          <span className={`badge ${
+                            s.estatus === "abierto"    ? "badge-red"   :
+                            s.estatus === "en_proceso" ? "badge-amber" :
+                            s.estatus === "pausado"    ? "badge-gray"  : "badge-gray"
+                          }`}>
+                            {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
+                          </span>
+                        ) : (
+                          <select
+                            className="form-select"
+                            style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
+                            value={s.estatus}
+                            onChange={e => cambiarEstatus(s, e.target.value)}
+                          >
+                            <option value="abierto">Abierto</option>
+                            <option value="en_proceso">En proceso</option>
+                            <option value="pausado">Pausado</option>
+                            <option value="cerrado">Cerrado</option>
+                          </select>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-                          {s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
+                          {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
                               onClick={() => iniciar(s)} disabled={iniciandoId === s._id}>
                               {iniciandoId === s._id ? "..." : "▶️ Iniciar"}
                             </button>
                           )}
-                          {s.estatus === "en_proceso" && puedeOperar && (
+                          {!soloVer && s.estatus === "en_proceso" && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
                               onClick={() => { setPausarModal(s); setRazonPausa(""); }} disabled={pausandoId === s._id}>
                               ⏸️ Pausar
                             </button>
                           )}
-                          {s.estatus === "pausado" && puedeOperar && (
+                          {!soloVer && s.estatus === "pausado" && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
                               onClick={() => reanudar(s)} disabled={reanudandoId === s._id}>
                               {reanudandoId === s._id ? "..." : "▶️ Reanudar"}
                             </button>
                           )}
-                          {s.estatus !== "cerrado" && puedeOperar && (
+                          {!soloVer && s.estatus !== "cerrado" && puedeOperar && (
                             <button className="btn btn-amber btn-sm"
                               onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}>
                               Cerrar
