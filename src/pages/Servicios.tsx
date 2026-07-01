@@ -37,6 +37,7 @@ type Servicio = {
   notasCierre?: string;
   fotoHojaFirmada?: string;
   fotoEquipoFinal?: string;
+  fotoRefacciones?: string;
   horaInicio?: string;
   horaFin?: string;
   pausas?: Pausa[];
@@ -55,7 +56,7 @@ const emptyForm = {
 
 const emptyCerrarForm = {
   horometro: 0, proximoServicio: "", estatusMonta: "disponible",
-  notasCierre: "", fotoHojaFirmada: "", fotoEquipoFinal: "",
+  notasCierre: "", fotoHojaFirmada: "", fotoEquipoFinal: "", fotoRefacciones: "",
 };
 
 const ORDEN_BADGE: Record<string, string> = {
@@ -140,7 +141,6 @@ function VistaTecnicoMovil({
 
   return (
     <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
-
       {activo && (
         <div style={{
           background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)",
@@ -287,7 +287,7 @@ export default function Servicios() {
   const [form, setForm]                 = useState<any>(emptyForm);
   const [cerrarForm, setCerrarForm]     = useState<any>(emptyCerrarForm);
   const [saving, setSaving]             = useState(false);
-  const [uploadingFoto, setUploadingFoto] = useState<"hoja" | "equipo" | null>(null);
+  const [uploadingFoto, setUploadingFoto] = useState<"hoja" | "equipo" | "refacciones" | null>(null);
   const [iniciandoId, setIniciandoId]   = useState<string | null>(null);
   const [pausandoId, setPausandoId]     = useState<string | null>(null);
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
@@ -298,24 +298,17 @@ export default function Servicios() {
   // ── Recordatorio cada 30 min para técnicos ──
   useEffect(() => {
     if (rol !== "tecnico") return;
-
-    // Pedir permiso de notificaciones nativas (por si acaso)
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
-
     function checkRecordatorio() {
       const hayActivo = servicios.some(s => s.estatus === "en_proceso" || s.estatus === "pausado");
       if (!hayActivo) return;
-
       const ultimo = parseInt(localStorage.getItem(STORAGE_KEY_RECORDATORIO) ?? "0");
       const ahora  = Date.now();
-
       if (ahora - ultimo >= TREINTA_MIN) {
         localStorage.setItem(STORAGE_KEY_RECORDATORIO, String(ahora));
         setMostrarRecordatorio(true);
-
-        // También intentar notificación nativa
         if ("Notification" in window && Notification.permission === "granted") {
           try {
             new Notification("⏱️ Control Pipsa", {
@@ -326,18 +319,12 @@ export default function Servicios() {
         }
       }
     }
-
-    // Revisar al volver a la app desde background
     function onVisibilityChange() {
       if (document.visibilityState === "visible") checkRecordatorio();
     }
-
-    // Revisar cada minuto por si está en primer plano
     const intervalo = setInterval(checkRecordatorio, 60 * 1000);
-
     document.addEventListener("visibilitychange", onVisibilityChange);
-    checkRecordatorio(); // revisar al montar
-
+    checkRecordatorio();
     return () => {
       clearInterval(intervalo);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -357,14 +344,12 @@ export default function Servicios() {
       setClientes(c.data);
       setTipos(t.data);
     } catch {}
-
     if (["developer", "gerencia", "oficina"].includes(rol)) {
       try {
         const { data } = await api.get("/users");
         setUsuarios(data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
       } catch {}
     }
-
     setLoading(false);
   }
 
@@ -380,7 +365,7 @@ export default function Servicios() {
     finally { setSaving(false); }
   }
 
-  async function subirFoto(file: File, tipo: "hoja" | "equipo") {
+  async function subirFoto(file: File, tipo: "hoja" | "equipo" | "refacciones") {
     setUploadingFoto(tipo);
     const fd = new FormData();
     fd.append("file", file);
@@ -388,7 +373,7 @@ export default function Servicios() {
     try {
       const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
       const data = await res.json();
-      const key  = tipo === "hoja" ? "fotoHojaFirmada" : "fotoEquipoFinal";
+      const key  = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
       setCerrarForm((p: any) => ({ ...p, [key]: data.secure_url }));
     } catch { alert("Error al subir imagen"); }
     finally { setUploadingFoto(null); }
@@ -473,11 +458,7 @@ export default function Servicios() {
       notasCierre:  s.notasCierre,
       refacciones:  s.ordenRefaccion?.items
         ?.filter(i => i.cantidadSurtida > 0)
-        .map(i => ({
-          cantidad:    i.cantidadSurtida,
-          descripcion: i.refaccion.nombre,
-          precio:      undefined,
-        })) ?? [],
+        .map(i => ({ cantidad: i.cantidadSurtida, descripcion: i.refaccion.nombre, precio: undefined })) ?? [],
       costoRefacciones: s.costoRefacciones,
       costoManoObra:    s.costoManoObra,
       observaciones:    s.notasCierre,
@@ -498,12 +479,10 @@ export default function Servicios() {
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
-    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric"
-    });
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" }) {
+  function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" | "refacciones" }) {
     const ref = useRef<HTMLInputElement>(null);
     const url = cerrarForm[fotoKey];
     return (
@@ -524,11 +503,11 @@ export default function Servicios() {
           ) : uploadingFoto === tipo ? (
             <div className="spinner" style={{ width: 24, height: 24, margin: "auto" }} />
           ) : (
-            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para subir foto</p>
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para tomar o subir foto</p>
           )}
         </div>
         <input
-          ref={ref} type="file" accept="image/*" style={{ display: "none" }}
+          ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo); }}
         />
       </div>
@@ -546,7 +525,6 @@ export default function Servicios() {
           </div>
         </div>
 
-        {/* ── Banner recordatorio ── */}
         {mostrarRecordatorio && (
           <div style={{
             margin: "0 16px 12px",
@@ -556,17 +534,11 @@ export default function Servicios() {
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
           }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)", marginBottom: 2 }}>
-                ⏱️ Recordatorio
-              </div>
-              <div style={{ fontSize: "0.88rem", color: "var(--text)" }}>
-                Recuerda terminar el servicio en la app cuando lo hayas completado.
-              </div>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)", marginBottom: 2 }}>⏱️ Recordatorio</div>
+              <div style={{ fontSize: "0.88rem", color: "var(--text)" }}>Recuerda terminar el servicio en la app cuando lo hayas completado.</div>
             </div>
-            <button
-              onClick={() => setMostrarRecordatorio(false)}
-              style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--text-muted)", padding: "4px 8px", flexShrink: 0 }}
-            >
+            <button onClick={() => setMostrarRecordatorio(false)}
+              style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--text-muted)", padding: "4px 8px", flexShrink: 0 }}>
               ✕
             </button>
           </div>
@@ -606,8 +578,7 @@ export default function Servicios() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
                 <button
                   style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => iniciar(confirmarIniciarModal)}
-                  disabled={iniciandoId === confirmarIniciarModal._id}
+                  onClick={() => iniciar(confirmarIniciarModal)} disabled={iniciandoId === confirmarIniciarModal._id}
                 >
                   {iniciandoId === confirmarIniciarModal._id ? "Iniciando..." : "✅ Sí, iniciar"}
                 </button>
@@ -632,12 +603,10 @@ export default function Servicios() {
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: "1rem" }}>¿Por qué pausas el servicio?</label>
-                <textarea
-                  className="form-textarea" rows={4} value={razonPausa}
+                <textarea className="form-textarea" rows={4} value={razonPausa}
                   onChange={e => setRazonPausa(e.target.value)}
                   placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
-                  style={{ fontSize: "1rem" }} autoFocus
-                />
+                  style={{ fontSize: "1rem" }} autoFocus />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button
@@ -694,7 +663,10 @@ export default function Servicios() {
                   <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
                 </div>
                 <div className="form-group">
-                  <FotoUpload label="📸 Foto del equipo" fotoKey="fotoEquipoFinal" tipo="equipo" />
+                  <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
+                </div>
+                <div className="form-group">
+                  <FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" />
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
@@ -807,12 +779,8 @@ export default function Servicios() {
                             {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
                           </span>
                         ) : (
-                          <select
-                            className="form-select"
-                            style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
-                            value={s.estatus}
-                            onChange={e => cambiarEstatus(s, e.target.value)}
-                          >
+                          <select className="form-select" style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
+                            value={s.estatus} onChange={e => cambiarEstatus(s, e.target.value)}>
                             <option value="abierto">Abierto</option>
                             <option value="en_proceso">En proceso</option>
                             <option value="pausado">Pausado</option>
@@ -1003,6 +971,9 @@ export default function Servicios() {
               </div>
               <div className="form-group">
                 <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
+              </div>
+              <div className="form-group">
+                <FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" />
               </div>
             </div>
             <div className="modal-footer">
