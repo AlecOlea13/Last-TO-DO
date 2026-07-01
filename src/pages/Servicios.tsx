@@ -12,6 +12,13 @@ type OrdenRefaccionItem = {
   confirmado: boolean;
 };
 
+type Pausa = {
+  _id: string;
+  razon: string;
+  horaInicio: string;
+  horaFin?: string;
+};
+
 type Servicio = {
   _id: string;
   folio: string;
@@ -21,7 +28,7 @@ type Servicio = {
   tecnicoAsignado?: { _id: string; nombre: string };
   fechaReporte: string;
   problema?: string;
-  estatus: "abierto" | "en_proceso" | "cerrado";
+  estatus: "abierto" | "en_proceso" | "pausado" | "cerrado";
   costoRefacciones?: number;
   costoManoObra?: number;
   horometro?: number;
@@ -32,6 +39,7 @@ type Servicio = {
   fotoEquipoFinal?: string;
   horaInicio?: string;
   horaFin?: string;
+  pausas?: Pausa[];
 };
 
 type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
@@ -55,18 +63,28 @@ const ORDEN_BADGE: Record<string, string> = {
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
-function Cronometro({ horaInicio }: { horaInicio: string }) {
+function Cronometro({ horaInicio, pausas }: { horaInicio: string; pausas?: Pausa[] }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const inicio = new Date(horaInicio).getTime();
-    function tick() {
-      setElapsed(Math.floor((Date.now() - inicio) / 1000));
+    function calcElapsed() {
+      const inicio = new Date(horaInicio).getTime();
+      const ahora  = Date.now();
+
+      // Restar tiempo de pausas cerradas
+      const tiempoPausado = (pausas ?? []).reduce((acc, p) => {
+        const pInicio = new Date(p.horaInicio).getTime();
+        const pFin    = p.horaFin ? new Date(p.horaFin).getTime() : ahora;
+        return acc + (pFin - pInicio);
+      }, 0);
+
+      return Math.floor((ahora - inicio - tiempoPausado) / 1000);
     }
-    tick();
-    const interval = setInterval(tick, 1000);
+
+    setElapsed(calcElapsed());
+    const interval = setInterval(() => setElapsed(calcElapsed()), 1000);
     return () => clearInterval(interval);
-  }, [horaInicio]);
+  }, [horaInicio, pausas]);
 
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60);
@@ -92,21 +110,25 @@ export default function Servicios() {
   const userId    = localStorage.getItem("userId") ?? "";
   const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
 
-  const [servicios, setServicios]     = useState<Servicio[]>([]);
-  const [montas, setMontas]           = useState<Monta[]>([]);
-  const [clientes, setClientes]       = useState<Cliente[]>([]);
-  const [tipos, setTipos]             = useState<TipoServicio[]>([]);
-  const [usuarios, setUsuarios]       = useState<Usuario[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState("");
-  const [filtro, setFiltro]           = useState("todos");
-  const [modal, setModal]             = useState(false);
-  const [cerrarModal, setCerrarModal] = useState<Servicio | null>(null);
-  const [form, setForm]               = useState<any>(emptyForm);
-  const [cerrarForm, setCerrarForm]   = useState<any>(emptyCerrarForm);
-  const [saving, setSaving]           = useState(false);
+  const [servicios, setServicios]       = useState<Servicio[]>([]);
+  const [montas, setMontas]             = useState<Monta[]>([]);
+  const [clientes, setClientes]         = useState<Cliente[]>([]);
+  const [tipos, setTipos]               = useState<TipoServicio[]>([]);
+  const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState("");
+  const [filtro, setFiltro]             = useState("todos");
+  const [modal, setModal]               = useState(false);
+  const [cerrarModal, setCerrarModal]   = useState<Servicio | null>(null);
+  const [pausarModal, setPausarModal]   = useState<Servicio | null>(null);
+  const [razonPausa, setRazonPausa]     = useState("");
+  const [form, setForm]                 = useState<any>(emptyForm);
+  const [cerrarForm, setCerrarForm]     = useState<any>(emptyCerrarForm);
+  const [saving, setSaving]             = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState<"hoja" | "equipo" | null>(null);
-  const [iniciandoId, setIniciandoId] = useState<string | null>(null);
+  const [iniciandoId, setIniciandoId]   = useState<string | null>(null);
+  const [pausandoId, setPausandoId]     = useState<string | null>(null);
+  const [reanudandoId, setReanudandoId] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -164,6 +186,31 @@ export default function Servicios() {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setIniciandoId(null); }
+  }
+
+  async function pausar() {
+    if (!pausarModal || !razonPausa.trim()) return;
+    setPausandoId(pausarModal._id);
+    try {
+      const { data } = await api.post(`/servicios/${pausarModal._id}/pausar`, { razon: razonPausa.trim() });
+      setServicios(prev => prev.map(sv => sv._id === pausarModal._id ? { ...sv, ...data } : sv));
+      setPausarModal(null);
+      setRazonPausa("");
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setPausandoId(null); }
+  }
+
+  async function reanudar(s: Servicio) {
+    setReanudandoId(s._id);
+    try {
+      const { data } = await api.post(`/servicios/${s._id}/reanudar`);
+      setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setReanudandoId(null); }
   }
 
   async function cerrar() {
@@ -231,13 +278,12 @@ export default function Servicios() {
   });
 
   function fmt(date?: string) {
-  if (!date) return "—";
-  // Parsear sin conversión de zona horaria
-  const [year, month, day] = date.split("T")[0].split("-");
-  return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric"
-  });
-}
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+      day: "2-digit", month: "short", year: "numeric"
+    });
+  }
 
   function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" }) {
     const ref = useRef<HTMLInputElement>(null);
@@ -298,6 +344,7 @@ export default function Servicios() {
                 <option value="todos">Todos</option>
                 <option value="abierto">Abiertos</option>
                 <option value="en_proceso">En proceso</option>
+                <option value="pausado">Pausados</option>
                 <option value="cerrado">Cerrados</option>
               </select>
             </div>
@@ -318,7 +365,8 @@ export default function Servicios() {
               <tbody>
                 {filtered.map(s => {
                   const esMiServicio = rol === "tecnico" && String(s.tecnicoAsignado?._id) === String(userId);
-                  const puedeOperar = ["developer", "gerencia"].includes(rol) || esMiServicio;
+                  const puedeOperar  = ["developer", "gerencia"].includes(rol) || esMiServicio;
+                  const pausaActiva  = s.pausas?.find(p => !p.horaFin);
                   return (
                     <tr key={s._id}>
                       <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{s.folio}</td>
@@ -340,16 +388,28 @@ export default function Servicios() {
                           <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                             {Math.round((new Date(s.horaFin).getTime() - new Date(s.horaInicio).getTime()) / 60000)} min
                           </span>
-                        ) : s.horaInicio && s.estatus !== "cerrado" ? (
-                          <Cronometro horaInicio={s.horaInicio} />
+                        ) : s.horaInicio && s.estatus === "en_proceso" ? (
+                          <Cronometro horaInicio={s.horaInicio} pausas={s.pausas} />
+                        ) : s.estatus === "pausado" ? (
+                          <span style={{
+                            display: "inline-flex", alignItems: "center", gap: 4,
+                            fontSize: "0.78rem", color: "var(--text-muted)",
+                            background: "var(--surface2)", padding: "3px 8px", borderRadius: 6,
+                          }}>
+                            ⏸️ {pausaActiva?.razon ? pausaActiva.razon.slice(0, 20) + (pausaActiva.razon.length > 20 ? "..." : "") : "Pausado"}
+                          </span>
                         ) : (
                           <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
                       </td>
                       <td>
                         {["tecnico", "almacen"].includes(rol) ? (
-                          <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
-                            {s.estatus}
+                          <span className={`badge ${
+                            s.estatus === "abierto"     ? "badge-red"  :
+                            s.estatus === "en_proceso"  ? "badge-amber":
+                            s.estatus === "pausado"     ? "badge-gray" : "badge-gray"
+                          }`}>
+                            {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
                           </span>
                         ) : (
                           <select
@@ -360,6 +420,7 @@ export default function Servicios() {
                           >
                             <option value="abierto">Abierto</option>
                             <option value="en_proceso">En proceso</option>
+                            <option value="pausado">Pausado</option>
                             <option value="cerrado">Cerrado</option>
                           </select>
                         )}
@@ -368,6 +429,8 @@ export default function Servicios() {
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
+
+                          {/* ▶️ Iniciar */}
                           {s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button
                               className="btn btn-secondary btn-sm"
@@ -378,6 +441,32 @@ export default function Servicios() {
                               {iniciandoId === s._id ? "..." : "▶️ Iniciar"}
                             </button>
                           )}
+
+                          {/* ⏸️ Pausar */}
+                          {s.estatus === "en_proceso" && puedeOperar && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
+                              onClick={() => { setPausarModal(s); setRazonPausa(""); }}
+                              disabled={pausandoId === s._id}
+                            >
+                              ⏸️ Pausar
+                            </button>
+                          )}
+
+                          {/* ▶️ Reanudar */}
+                          {s.estatus === "pausado" && puedeOperar && (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                              onClick={() => reanudar(s)}
+                              disabled={reanudandoId === s._id}
+                            >
+                              {reanudandoId === s._id ? "..." : "▶️ Reanudar"}
+                            </button>
+                          )}
+
+                          {/* Cerrar */}
                           {s.estatus !== "cerrado" && puedeOperar && (
                             <button
                               className="btn btn-amber btn-sm"
@@ -466,6 +555,43 @@ export default function Servicios() {
         </div>
       )}
 
+      {/* ── Modal pausar servicio ── */}
+      {pausarModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <button className="modal-close" onClick={() => setPausarModal(null)}>✕</button>
+            <h2 className="modal-title">⏸️ Pausar servicio</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
+              <strong style={{ color: "var(--text)" }}>{pausarModal.folio}</strong> — {pausarModal.montacargas?.numeroEconomico} {pausarModal.montacargas?.marca}
+            </p>
+            <div className="form-group">
+              <label className="form-label">Razón de la pausa *</label>
+              <textarea
+                className="form-textarea"
+                rows={3}
+                value={razonPausa}
+                onChange={e => setRazonPausa(e.target.value)}
+                placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
+                autoFocus
+              />
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+              📧 Se notificará automáticamente a gerencia.
+            </p>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setPausarModal(null)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={pausar}
+                disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
+              >
+                {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal cerrar servicio ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
@@ -477,8 +603,13 @@ export default function Servicios() {
             </p>
             {cerrarModal.horaInicio && (
               <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
-                ⏱️ Iniciado hace <Cronometro horaInicio={cerrarModal.horaInicio} />
+                ⏱️ Tiempo activo: <Cronometro horaInicio={cerrarModal.horaInicio} pausas={cerrarModal.pausas} />
               </p>
+            )}
+            {cerrarModal.pausas && cerrarModal.pausas.length > 0 && (
+              <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 12 }}>
+                ⏸️ {cerrarModal.pausas.length} pausa{cerrarModal.pausas.length > 1 ? "s" : ""} registrada{cerrarModal.pausas.length > 1 ? "s" : ""}
+              </div>
             )}
             {cerrarModal.ordenRefaccion && cerrarModal.ordenRefaccion.estatus !== "surtida" && (
               <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--red)", fontSize: "0.82rem", color: "var(--red)", marginBottom: 12 }}>
