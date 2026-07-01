@@ -63,24 +63,20 @@ const ORDEN_BADGE: Record<string, string> = {
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
-function Cronometro({ horaInicio, pausas }: { horaInicio: string; pausas?: Pausa[] }) {
+function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas?: Pausa[]; grande?: boolean }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     function calcElapsed() {
       const inicio = new Date(horaInicio).getTime();
       const ahora  = Date.now();
-
-      // Restar tiempo de pausas cerradas
       const tiempoPausado = (pausas ?? []).reduce((acc, p) => {
         const pInicio = new Date(p.horaInicio).getTime();
         const pFin    = p.horaFin ? new Date(p.horaFin).getTime() : ahora;
         return acc + (pFin - pInicio);
       }, 0);
-
       return Math.floor((ahora - inicio - tiempoPausado) / 1000);
     }
-
     setElapsed(calcElapsed());
     const interval = setInterval(() => setElapsed(calcElapsed()), 1000);
     return () => clearInterval(interval);
@@ -92,6 +88,17 @@ function Cronometro({ horaInicio, pausas }: { horaInicio: string; pausas?: Pausa
   const texto = h > 0
     ? `${h}h ${String(m).padStart(2, "0")}m`
     : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+
+  if (grande) {
+    return (
+      <div style={{ textAlign: "center", margin: "16px 0" }}>
+        <div style={{ fontSize: "3rem", fontWeight: 900, fontFamily: "var(--font-head)", color: "var(--accent)", letterSpacing: 2 }}>
+          ⏱️ {texto}
+        </div>
+        <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: 4 }}>Tiempo trabajado</div>
+      </div>
+    );
+  }
 
   return (
     <span style={{
@@ -105,10 +112,167 @@ function Cronometro({ horaInicio, pausas }: { horaInicio: string; pausas?: Pausa
   );
 }
 
+function VistaTecnicoMovil({
+  servicios, iniciandoId, pausandoId, reanudandoId,
+  onIniciarConfirm, onPausar, onReanudar, onCerrar,
+}: {
+  servicios: Servicio[];
+  iniciandoId: string | null;
+  pausandoId: string | null;
+  reanudandoId: string | null;
+  onIniciarConfirm: (s: Servicio) => void;
+  onPausar: (s: Servicio) => void;
+  onReanudar: (s: Servicio) => void;
+  onCerrar: (s: Servicio) => void;
+}) {
+  const activo     = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
+  const pendientes = servicios.filter(s => s.estatus === "abierto");
+  const pausaActiva = activo?.pausas?.find(p => !p.horaFin);
+
+  function fmt(date?: string) {
+    if (!date) return "—";
+    const [year, month, day] = date.split("T")[0].split("-");
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+  }
+
+  return (
+    <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Servicio activo ── */}
+      {activo && (
+        <div style={{
+          background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)",
+          border: `2px solid ${activo.estatus === "pausado" ? "var(--border)" : "var(--accent)"}`,
+          borderRadius: 16, padding: 20,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: activo.estatus === "pausado" ? "var(--text-muted)" : "var(--accent)" }}>
+              {activo.estatus === "pausado" ? "⏸️ En pausa" : "🔧 En proceso"}
+            </span>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, fontFamily: "var(--font-head)", color: "var(--text-muted)" }}>{activo.folio}</span>
+          </div>
+
+          <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>
+            #{activo.montacargas?.numeroEconomico} {activo.montacargas?.marca}
+          </div>
+          <div style={{ fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: 4 }}>
+            {activo.cliente?.nombre ?? "Sin cliente"}
+          </div>
+          {activo.problema && (
+            <div style={{ fontSize: "0.85rem", color: "var(--text)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
+              {activo.problema}
+            </div>
+          )}
+          {activo.estatus === "pausado" && pausaActiva && (
+            <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
+              ⏸️ <strong>Motivo de pausa:</strong> {pausaActiva.razon}
+            </div>
+          )}
+          {activo.horaInicio && activo.estatus === "en_proceso" && (
+            <Cronometro horaInicio={activo.horaInicio} pausas={activo.pausas} grande />
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+            {activo.estatus === "en_proceso" && (
+              <>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onPausar(activo)}
+                  disabled={pausandoId === activo._id}
+                >
+                  {pausandoId === activo._id ? "..." : "⏸️ Pausar servicio"}
+                </button>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onCerrar(activo)}
+                >
+                  ✅ Terminar servicio
+                </button>
+              </>
+            )}
+            {activo.estatus === "pausado" && (
+              <>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "1.5px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.15)", color: "var(--green)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onReanudar(activo)}
+                  disabled={reanudandoId === activo._id}
+                >
+                  {reanudandoId === activo._id ? "..." : "▶️ Reanudar servicio"}
+                </button>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onCerrar(activo)}
+                >
+                  ✅ Terminar servicio
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Pendientes ── */}
+      {pendientes.length > 0 && (
+        <div>
+          <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>
+            Servicios pendientes
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {pendientes.map(s => (
+              <div key={s._id} style={{
+                background: "var(--surface)", border: "1.5px solid var(--border)",
+                borderRadius: 14, padding: 16, opacity: activo ? 0.6 : 1,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-head)" }}>{s.folio}</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{fmt(s.fechaReporte)}</span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)", marginBottom: 2 }}>
+                  #{s.montacargas?.numeroEconomico} {s.montacargas?.marca}
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: s.problema ? 8 : 0 }}>
+                  {s.cliente?.nombre ?? "Sin cliente"}
+                </div>
+                {s.problema && (
+                  <div style={{ fontSize: "0.82rem", color: "var(--text)", marginBottom: 12 }}>
+                    {s.problema}
+                  </div>
+                )}
+                {!activo ? (
+                  <button
+                    style={{ width: "100%", padding: "14px", borderRadius: 10, border: "1.5px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.15)", color: "var(--blue)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}
+                    onClick={() => onIniciarConfirm(s)}
+                    disabled={iniciandoId === s._id}
+                  >
+                    {iniciandoId === s._id ? "Iniciando..." : "▶️ Iniciar este servicio"}
+                  </button>
+                ) : (
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: "8px 0" }}>
+                    🔒 Termina el servicio activo primero
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!activo && pendientes.length === 0 && (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
+          <div style={{ fontSize: "3rem", marginBottom: 12 }}>✅</div>
+          <div style={{ fontSize: "1.1rem", fontWeight: 600 }}>Sin servicios pendientes</div>
+          <div style={{ fontSize: "0.85rem", marginTop: 6 }}>Por el momento no tienes trabajo asignado</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Servicios() {
   const rol       = localStorage.getItem("rol") ?? "";
   const userId    = localStorage.getItem("userId") ?? "";
   const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
+  const esTecnico = rol === "tecnico";
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
   const [montas, setMontas]             = useState<Monta[]>([]);
@@ -121,6 +285,7 @@ export default function Servicios() {
   const [modal, setModal]               = useState(false);
   const [cerrarModal, setCerrarModal]   = useState<Servicio | null>(null);
   const [pausarModal, setPausarModal]   = useState<Servicio | null>(null);
+  const [confirmarIniciarModal, setConfirmarIniciarModal] = useState<Servicio | null>(null);
   const [razonPausa, setRazonPausa]     = useState("");
   const [form, setForm]                 = useState<any>(emptyForm);
   const [cerrarForm, setCerrarForm]     = useState<any>(emptyCerrarForm);
@@ -179,6 +344,7 @@ export default function Servicios() {
 
   async function iniciar(s: Servicio) {
     setIniciandoId(s._id);
+    setConfirmarIniciarModal(null);
     try {
       const { data } = await api.post(`/servicios/${s._id}/iniciar`);
       setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
@@ -317,6 +483,170 @@ export default function Servicios() {
     );
   }
 
+  // ── Vista técnico en móvil ──
+  if (esTecnico) {
+    return (
+      <>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Mis Servicios</h1>
+            <p className="page-subtitle">
+              {servicios.filter(s => s.estatus !== "cerrado").length} pendientes
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="loading-state"><div className="spinner" /></div>
+        ) : (
+          <VistaTecnicoMovil
+            servicios={servicios}
+            iniciandoId={iniciandoId}
+            pausandoId={pausandoId}
+            reanudandoId={reanudandoId}
+            onIniciarConfirm={s => setConfirmarIniciarModal(s)}
+            onPausar={s => { setPausarModal(s); setRazonPausa(""); }}
+            onReanudar={reanudar}
+            onCerrar={s => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
+          />
+        )}
+
+        {/* ── Modal confirmar iniciar ── */}
+        {confirmarIniciarModal && (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmarIniciarModal(null)}>
+            <div className="modal" style={{ maxWidth: 360 }}>
+              <h2 className="modal-title" style={{ textAlign: "center", fontSize: "1.3rem" }}>¿Iniciar servicio?</h2>
+              <div style={{ textAlign: "center", padding: "16px 0", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "3rem", marginBottom: 12 }}>🔧</div>
+                <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--text)", marginBottom: 4 }}>
+                  #{confirmarIniciarModal.montacargas?.numeroEconomico} {confirmarIniciarModal.montacargas?.marca}
+                </div>
+                <div style={{ fontSize: "0.9rem" }}>{confirmarIniciarModal.cliente?.nombre}</div>
+                {confirmarIniciarModal.problema && (
+                  <div style={{ fontSize: "0.85rem", marginTop: 8, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>
+                    {confirmarIniciarModal.problema}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => iniciar(confirmarIniciarModal)}
+                  disabled={iniciandoId === confirmarIniciarModal._id}
+                >
+                  {iniciandoId === confirmarIniciarModal._id ? "Iniciando..." : "✅ Sí, iniciar"}
+                </button>
+                <button
+                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setConfirmarIniciarModal(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal pausar (técnico) ── */}
+        {pausarModal && (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
+            <div className="modal" style={{ maxWidth: 440 }}>
+              <button className="modal-close" onClick={() => setPausarModal(null)}>✕</button>
+              <h2 className="modal-title">⏸️ Pausar servicio</h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
+                <strong style={{ color: "var(--text)" }}>{pausarModal.folio}</strong> — {pausarModal.montacargas?.numeroEconomico} {pausarModal.montacargas?.marca}
+              </p>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: "1rem" }}>¿Por qué pausas el servicio?</label>
+                <textarea
+                  className="form-textarea" rows={4} value={razonPausa}
+                  onChange={e => setRazonPausa(e.target.value)}
+                  placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
+                  style={{ fontSize: "1rem" }} autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
+                  onClick={pausar}
+                  disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
+                >
+                  {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
+                </button>
+                <button
+                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setPausarModal(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal cerrar (técnico) ── */}
+        {cerrarModal && (
+          <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
+            <div className="modal" style={{ maxWidth: 520 }}>
+              <button className="modal-close" onClick={() => setCerrarModal(null)}>✕</button>
+              <h2 className="modal-title">✅ Terminar servicio</h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 8 }}>
+                <strong style={{ color: "var(--text)" }}>{cerrarModal.folio}</strong> — {cerrarModal.montacargas?.numeroEconomico} {cerrarModal.montacargas?.marca}
+              </p>
+              {cerrarModal.horaInicio && (
+                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
+                  ⏱️ Tiempo activo: <Cronometro horaInicio={cerrarModal.horaInicio} pausas={cerrarModal.pausas} />
+                </p>
+              )}
+              <div className="form-grid">
+                <div className="form-group">
+                  <label className="form-label">Horómetro al cierre</label>
+                  <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Próximo servicio</label>
+                  <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
+                </div>
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label className="form-label">Estatus del equipo al cerrar</label>
+                  <select className="form-select" value={cerrarForm.estatusMonta} onChange={e => setCerrarForm((p: any) => ({ ...p, estatusMonta: e.target.value }))}>
+                    <option value="disponible">Disponible</option>
+                    <option value="rentado">Rentado</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label className="form-label">Notas / trabajos realizados</label>
+                  <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} style={{ fontSize: "1rem" }} />
+                </div>
+                <div className="form-group">
+                  <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
+                </div>
+                <div className="form-group">
+                  <FotoUpload label="📸 Foto del equipo" fotoKey="fotoEquipoFinal" tipo="equipo" />
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+                <button
+                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={cerrar} disabled={saving}
+                >
+                  {saving ? "Cerrando..." : "✅ Confirmar cierre"}
+                </button>
+                <button
+                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setCerrarModal(null)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ── Vista normal (desktop / gerencia / developer / oficina) ──
   return (
     <>
       <div className="page-header">
@@ -324,7 +654,6 @@ export default function Servicios() {
           <h1 className="page-title">Servicios</h1>
           <p className="page-subtitle">
             {servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos
-            {rol === "tecnico" && " — mostrando solo tus servicios asignados"}
           </p>
         </div>
         {canCreate && (
@@ -391,11 +720,7 @@ export default function Servicios() {
                         ) : s.horaInicio && s.estatus === "en_proceso" ? (
                           <Cronometro horaInicio={s.horaInicio} pausas={s.pausas} />
                         ) : s.estatus === "pausado" ? (
-                          <span style={{
-                            display: "inline-flex", alignItems: "center", gap: 4,
-                            fontSize: "0.78rem", color: "var(--text-muted)",
-                            background: "var(--surface2)", padding: "3px 8px", borderRadius: 6,
-                          }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "var(--text-muted)", background: "var(--surface2)", padding: "3px 8px", borderRadius: 6 }}>
                             ⏸️ {pausaActiva?.razon ? pausaActiva.razon.slice(0, 20) + (pausaActiva.razon.length > 20 ? "..." : "") : "Pausado"}
                           </span>
                         ) : (
@@ -403,75 +728,43 @@ export default function Servicios() {
                         )}
                       </td>
                       <td>
-                        {["tecnico", "almacen"].includes(rol) ? (
-                          <span className={`badge ${
-                            s.estatus === "abierto"     ? "badge-red"  :
-                            s.estatus === "en_proceso"  ? "badge-amber":
-                            s.estatus === "pausado"     ? "badge-gray" : "badge-gray"
-                          }`}>
-                            {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
-                          </span>
-                        ) : (
-                          <select
-                            className="form-select"
-                            style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
-                            value={s.estatus}
-                            onChange={e => cambiarEstatus(s, e.target.value)}
-                          >
-                            <option value="abierto">Abierto</option>
-                            <option value="en_proceso">En proceso</option>
-                            <option value="pausado">Pausado</option>
-                            <option value="cerrado">Cerrado</option>
-                          </select>
-                        )}
+                        <select
+                          className="form-select"
+                          style={{ padding: "4px 10px", fontSize: "0.78rem", width: "auto" }}
+                          value={s.estatus}
+                          onChange={e => cambiarEstatus(s, e.target.value)}
+                        >
+                          <option value="abierto">Abierto</option>
+                          <option value="en_proceso">En proceso</option>
+                          <option value="pausado">Pausado</option>
+                          <option value="cerrado">Cerrado</option>
+                        </select>
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-
-                          {/* ▶️ Iniciar */}
                           {s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
-                              onClick={() => iniciar(s)}
-                              disabled={iniciandoId === s._id}
-                            >
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
+                              onClick={() => iniciar(s)} disabled={iniciandoId === s._id}>
                               {iniciandoId === s._id ? "..." : "▶️ Iniciar"}
                             </button>
                           )}
-
-                          {/* ⏸️ Pausar */}
                           {s.estatus === "en_proceso" && puedeOperar && (
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
-                              onClick={() => { setPausarModal(s); setRazonPausa(""); }}
-                              disabled={pausandoId === s._id}
-                            >
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
+                              onClick={() => { setPausarModal(s); setRazonPausa(""); }} disabled={pausandoId === s._id}>
                               ⏸️ Pausar
                             </button>
                           )}
-
-                          {/* ▶️ Reanudar */}
                           {s.estatus === "pausado" && puedeOperar && (
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                              onClick={() => reanudar(s)}
-                              disabled={reanudandoId === s._id}
-                            >
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                              onClick={() => reanudar(s)} disabled={reanudandoId === s._id}>
                               {reanudandoId === s._id ? "..." : "▶️ Reanudar"}
                             </button>
                           )}
-
-                          {/* Cerrar */}
                           {s.estatus !== "cerrado" && puedeOperar && (
-                            <button
-                              className="btn btn-amber btn-sm"
-                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
-                            >
+                            <button className="btn btn-amber btn-sm"
+                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}>
                               Cerrar
                             </button>
                           )}
@@ -555,7 +848,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal pausar servicio ── */}
+      {/* ── Modal pausar (desktop) ── */}
       {pausarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
           <div className="modal" style={{ maxWidth: 440 }}>
@@ -566,25 +859,14 @@ export default function Servicios() {
             </p>
             <div className="form-group">
               <label className="form-label">Razón de la pausa *</label>
-              <textarea
-                className="form-textarea"
-                rows={3}
-                value={razonPausa}
+              <textarea className="form-textarea" rows={3} value={razonPausa}
                 onChange={e => setRazonPausa(e.target.value)}
                 placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
-                autoFocus
-              />
+                autoFocus />
             </div>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
-              📧 Se notificará automáticamente a gerencia.
-            </p>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setPausarModal(null)}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                onClick={pausar}
-                disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
-              >
+              <button className="btn btn-primary" onClick={pausar} disabled={!razonPausa.trim() || pausandoId === pausarModal._id}>
                 {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
               </button>
             </div>
@@ -592,7 +874,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal cerrar servicio ── */}
+      {/* ── Modal cerrar (desktop) ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -643,9 +925,6 @@ export default function Servicios() {
                 <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
               </div>
             </div>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
-              📧 Se enviará notificación automática a gerencia al cerrar.
-            </p>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={cerrar} disabled={saving}>{saving ? "Cerrando..." : "Cerrar servicio"}</button>
