@@ -63,6 +63,9 @@ const ORDEN_BADGE: Record<string, string> = {
   parcial: "badge-blue",   cancelada: "badge-gray",
 };
 
+const STORAGE_KEY_RECORDATORIO = "pipsa_ultimo_recordatorio";
+const TREINTA_MIN = 30 * 60 * 1000;
+
 function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas?: Pausa[]; grande?: boolean }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -288,6 +291,7 @@ export default function Servicios() {
   const [iniciandoId, setIniciandoId]   = useState<string | null>(null);
   const [pausandoId, setPausandoId]     = useState<string | null>(null);
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
+  const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -295,23 +299,49 @@ export default function Servicios() {
   useEffect(() => {
     if (rol !== "tecnico") return;
 
+    // Pedir permiso de notificaciones nativas (por si acaso)
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
 
-    const intervalo = setInterval(() => {
+    function checkRecordatorio() {
       const hayActivo = servicios.some(s => s.estatus === "en_proceso" || s.estatus === "pausado");
       if (!hayActivo) return;
 
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("⏱️ Control Pipsa", {
-          body: "Recuerda terminar el servicio en la app cuando lo hayas completado.",
-          icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png",
-        });
-      }
-    }, 30 * 60 * 1000);
+      const ultimo = parseInt(localStorage.getItem(STORAGE_KEY_RECORDATORIO) ?? "0");
+      const ahora  = Date.now();
 
-    return () => clearInterval(intervalo);
+      if (ahora - ultimo >= TREINTA_MIN) {
+        localStorage.setItem(STORAGE_KEY_RECORDATORIO, String(ahora));
+        setMostrarRecordatorio(true);
+
+        // También intentar notificación nativa
+        if ("Notification" in window && Notification.permission === "granted") {
+          try {
+            new Notification("⏱️ Control Pipsa", {
+              body: "Recuerda terminar el servicio en la app cuando lo hayas completado.",
+              icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png",
+            });
+          } catch {}
+        }
+      }
+    }
+
+    // Revisar al volver a la app desde background
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") checkRecordatorio();
+    }
+
+    // Revisar cada minuto por si está en primer plano
+    const intervalo = setInterval(checkRecordatorio, 60 * 1000);
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    checkRecordatorio(); // revisar al montar
+
+    return () => {
+      clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [rol, servicios]);
 
   async function load() {
@@ -515,6 +545,32 @@ export default function Servicios() {
             <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} pendientes</p>
           </div>
         </div>
+
+        {/* ── Banner recordatorio ── */}
+        {mostrarRecordatorio && (
+          <div style={{
+            margin: "0 16px 12px",
+            background: "rgba(245,158,11,0.15)",
+            border: "2px solid var(--accent)",
+            borderRadius: 14, padding: "16px 20px",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)", marginBottom: 2 }}>
+                ⏱️ Recordatorio
+              </div>
+              <div style={{ fontSize: "0.88rem", color: "var(--text)" }}>
+                Recuerda terminar el servicio en la app cuando lo hayas completado.
+              </div>
+            </div>
+            <button
+              onClick={() => setMostrarRecordatorio(false)}
+              style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--text-muted)", padding: "4px 8px", flexShrink: 0 }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="loading-state"><div className="spinner" /></div>
