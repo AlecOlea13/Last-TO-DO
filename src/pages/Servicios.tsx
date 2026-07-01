@@ -291,6 +291,29 @@ export default function Servicios() {
 
   useEffect(() => { load(); }, []);
 
+  // ── Recordatorio cada 30 min para técnicos ──
+  useEffect(() => {
+    if (rol !== "tecnico") return;
+
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    const intervalo = setInterval(() => {
+      const hayActivo = servicios.some(s => s.estatus === "en_proceso" || s.estatus === "pausado");
+      if (!hayActivo) return;
+
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("⏱️ Control Pipsa", {
+          body: "Recuerda terminar el servicio en la app cuando lo hayas completado.",
+          icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png",
+        });
+      }
+    }, 30 * 60 * 1000);
+
+    return () => clearInterval(intervalo);
+  }, [rol, servicios]);
+
   async function load() {
     try {
       const [s, m, c, t] = await Promise.all([
