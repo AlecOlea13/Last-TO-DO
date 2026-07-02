@@ -171,7 +171,7 @@ function VistaTecnicoMovil({
               ⏸️ <strong>Motivo de pausa:</strong> {pausaActiva.razon}
             </div>
           )}
-          {activo.ubicacionInicio && (
+          {/* {activo.ubicacionInicio && (
             <a
               href={"https://www.google.com/maps?q=" + activo.ubicacionInicio.lat + "," + activo.ubicacionInicio.lng}
               target="_blank" rel="noreferrer"
@@ -179,7 +179,7 @@ function VistaTecnicoMovil({
             >
               📍 Ver ubicación de inicio →
             </a>
-          )}
+          )} */}
           {activo.horaInicio && activo.estatus === "en_proceso" && (
             <Cronometro horaInicio={activo.horaInicio} pausas={activo.pausas} grande />
           )}
