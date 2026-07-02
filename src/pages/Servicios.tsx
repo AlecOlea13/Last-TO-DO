@@ -41,6 +41,8 @@ type Servicio = {
   horaInicio?: string;
   horaFin?: string;
   pausas?: Pausa[];
+  ubicacionInicio?: { lat: number; lng: number };
+  ubicacionCierre?: { lat: number; lng: number };
 };
 
 type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
@@ -169,6 +171,15 @@ function VistaTecnicoMovil({
               ⏸️ <strong>Motivo de pausa:</strong> {pausaActiva.razon}
             </div>
           )}
+          {activo.ubicacionInicio && (
+            <a
+              href={"https://www.google.com/maps?q=" + activo.ubicacionInicio.lat + "," + activo.ubicacionInicio.lng}
+              target="_blank" rel="noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", color: "var(--green)", marginBottom: 8, textDecoration: "none" }}
+            >
+              📍 Ver ubicación de inicio →
+            </a>
+          )}
           {activo.horaInicio && activo.estatus === "en_proceso" && (
             <Cronometro horaInicio={activo.horaInicio} pausas={activo.pausas} grande />
           )}
@@ -295,7 +306,6 @@ export default function Servicios() {
 
   useEffect(() => { load(); }, []);
 
-  // ── Recordatorio cada 30 min para técnicos ──
   useEffect(() => {
     if (rol !== "tecnico") return;
     if ("Notification" in window && Notification.permission === "default") {
@@ -379,11 +389,24 @@ export default function Servicios() {
     finally { setUploadingFoto(null); }
   }
 
+  async function obtenerUbicacion(): Promise<{ lat: number; lng: number } | null> {
+    if (!("geolocation" in navigator)) return null;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 6000 })
+      );
+      return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    } catch {
+      return null;
+    }
+  }
+
   async function iniciar(s: Servicio) {
     setIniciandoId(s._id);
     setConfirmarIniciarModal(null);
     try {
-      const { data } = await api.post(`/servicios/${s._id}/iniciar`);
+      const ubicacion = await obtenerUbicacion();
+      const { data } = await api.post(`/servicios/${s._id}/iniciar`, ubicacion ? { ubicacion } : {});
       setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
@@ -420,7 +443,11 @@ export default function Servicios() {
     if (!cerrarModal) return;
     setSaving(true);
     try {
-      await api.post(`/servicios/${cerrarModal._id}/cerrar`, cerrarForm);
+      const ubicacion = await obtenerUbicacion();
+      await api.post(`/servicios/${cerrarModal._id}/cerrar`, {
+        ...cerrarForm,
+        ...(ubicacion ? { ubicacion } : {}),
+      });
       load();
       setCerrarModal(null);
     } catch (e: any) {
@@ -479,7 +506,9 @@ export default function Servicios() {
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
-    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
+      day: "2-digit", month: "short", year: "numeric"
+    });
   }
 
   function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" | "refacciones" }) {
@@ -575,10 +604,14 @@ export default function Servicios() {
                   </div>
                 )}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginBottom: 12 }}>
+                📍 Se registrará tu ubicación al iniciar
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <button
                   style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => iniciar(confirmarIniciarModal)} disabled={iniciandoId === confirmarIniciarModal._id}
+                  onClick={() => iniciar(confirmarIniciarModal)}
+                  disabled={iniciandoId === confirmarIniciarModal._id}
                 >
                   {iniciandoId === confirmarIniciarModal._id ? "Iniciando..." : "✅ Sí, iniciar"}
                 </button>
@@ -639,6 +672,9 @@ export default function Servicios() {
                   ⏱️ Tiempo activo: <Cronometro horaInicio={cerrarModal.horaInicio} pausas={cerrarModal.pausas} />
                 </p>
               )}
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>
+                📍 Se registrará tu ubicación al confirmar el cierre
+              </div>
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label">Horómetro al cierre</label>
@@ -792,6 +828,20 @@ export default function Servicios() {
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
+                          {s.ubicacionInicio && (
+                            <a className="btn btn-secondary btn-sm"
+                              href={"https://www.google.com/maps?q=" + s.ubicacionInicio.lat + "," + s.ubicacionInicio.lng}
+                              target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>
+                              📍
+                            </a>
+                          )}
+                          {s.ubicacionCierre && (
+                            <a className="btn btn-secondary btn-sm"
+                              href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng}
+                              target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>
+                              🏁
+                            </a>
+                          )}
                           {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
                               onClick={() => iniciar(s)} disabled={iniciandoId === s._id}>
