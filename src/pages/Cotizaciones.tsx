@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
@@ -9,7 +9,6 @@ type Item = {
 };
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
 type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: string; rol: string }; fecha: string };
-
 type ClienteOcasional = { nombre: string; direccion?: string; telefono?: string; contacto?: string };
 
 type Cotizacion = {
@@ -30,12 +29,10 @@ type Cotizacion = {
   items: Item[]; subtotal: number; iva: number; total: number;
   estatus: "borrador" | "enviada" | "aceptada" | "rechazada";
   notas?: string; comentarios: Comentario[];
-  equipoMarca?:  string;
-  equipoModelo?: string;
-  equipoSerie?:  string;
+  equipoMarca?: string; equipoModelo?: string; equipoSerie?: string;
 };
 
-type Cliente    = { _id: string; nombre: string };
+type Cliente = { _id: string; nombre: string };
 type Montacargas = {
   _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
   tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
@@ -43,20 +40,19 @@ type Montacargas = {
   voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
   equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
   costoSemana?: number; costoMes?: number; costoAnual?: number; precioVenta?: number;
+  clienteActual?: { _id: string; nombre: string } | null;
 };
 type TipoServicio = {
   _id: string; nombre: string; descripcion?: string; intervaloHrs?: number;
   itemsChecklist: string[]; precioTotal: number;
   refacciones: { nombre: string; cantidad: number }[];
 };
-type RefaccionCatalogo = {
-  _id: string; nombre: string; numeroParte?: string; precio?: number; unidad?: string;
-};
+type RefaccionCatalogo = { _id: string; nombre: string; numeroParte?: string; precio?: number; unidad?: string };
 
 const emptyClienteOcasional: ClienteOcasional = { nombre: "", direccion: "", telefono: "", contacto: "" };
-
 const emptyForm: any = {
-  folio: "", tipo: "servicio", cliente: "", esOcasional: false, clienteOcasional: { ...emptyClienteOcasional },
+  folio: "", tipo: "servicio", cliente: "", esOcasional: false,
+  clienteOcasional: { ...emptyClienteOcasional },
   montacargas: "", asesor: "", tipoPeriodo: "mensual", condiciones: "",
   fecha: new Date().toISOString().split("T")[0], lugar: "Zapopán, Jal",
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
@@ -68,30 +64,103 @@ const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
 const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green", refacciones: "badge-purple" };
 const ESTATUS_BADGE: Record<string, string> = { borrador: "badge-gray", enviada: "badge-blue", aceptada: "badge-green", rechazada: "badge-red" };
-
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
+// ── Componente Searchable Dropdown ──────────────────────────────────────────
+function SearchableSelect({
+  value, onChange, options, placeholder, renderLabel,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  options: { _id: string; label: string }[];
+  placeholder: string;
+  renderLabel?: (opt: { _id: string; label: string }) => string;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef<HTMLDivElement>(null);
+
+  const selected = options.find(o => o._id === value);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(query.toLowerCase())
+  );
+
+  function select(id: string) {
+    onChange(id);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          className="form-input"
+          value={open ? query : (selected ? (renderLabel ? renderLabel(selected) : selected.label) : "")}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => { setOpen(true); setQuery(""); }}
+          placeholder={placeholder}
+          style={{ paddingRight: 32 }}
+        />
+        {value && (
+          <button
+            onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
+            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem", lineHeight: 1 }}
+          >✕</button>
+        )}
+      </div>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 999,
+          background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)",
+          maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+        }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+          ) : (
+            filtered.map(o => (
+              <div
+                key={o._id}
+                onClick={() => select(o._id)}
+                style={{
+                  padding: "10px 14px", cursor: "pointer", fontSize: "0.88rem",
+                  background: o._id === value ? "rgba(245,158,11,0.1)" : "transparent",
+                  color: o._id === value ? "var(--accent)" : "var(--text)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = o._id === value ? "rgba(245,158,11,0.1)" : "transparent")}
+              >
+                {renderLabel ? renderLabel(o) : o.label}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function generarPlantillaCondiciones(
-  tipo: string,
-  tipoPeriodo?: string,
-  vigenciaDias: number = 30,
-  entregaDias: number = 14,
-  incluirCancelacion: boolean = false,
+  tipo: string, tipoPeriodo?: string,
+  vigenciaDias: number = 30, entregaDias: number = 14, incluirCancelacion: boolean = false,
 ): string {
   const lineas: string[] = [];
-
   if (tipo === "renta") {
-    const plazoLabel: Record<string, string> = {
-      semanal: "1 semana",
-      mensual: "1 mes",
-      anual:   "1 año",
-    };
+    const plazoLabel: Record<string, string> = { semanal: "1 semana", mensual: "1 mes", anual: "1 año" };
     const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
     lineas.push(`Contrato por ${plazo}.`);
-    if (incluirCancelacion) {
-      lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
-    }
+    if (incluirCancelacion) lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
     lineas.push("Todos los precios son en pesos mexicanos más IVA.");
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
@@ -115,7 +184,6 @@ function generarPlantillaCondiciones(
     lineas.push("En partes eléctricas no hay garantía.");
     lineas.push("Las existencias son salvo previa venta.");
   }
-
   return lineas.join("\n");
 }
 
@@ -123,24 +191,25 @@ export default function Cotizaciones() {
   const rol        = localStorage.getItem("rol") ?? "";
   const canComment = ["developer", "gerencia", "oficina"].includes(rol);
 
-  const [cotizaciones, setCotizaciones]         = useState<Cotizacion[]>([]);
-  const [clientes, setClientes]                 = useState<Cliente[]>([]);
-  const [montas, setMontas]                     = useState<Montacargas[]>([]);
-  const [asesores, setAsesores]                 = useState<Asesor[]>([]);
-  const [tiposServicio, setTiposServicio]       = useState<TipoServicio[]>([]);
+  const [cotizaciones, setCotizaciones]               = useState<Cotizacion[]>([]);
+  const [clientes, setClientes]                       = useState<Cliente[]>([]);
+  const [montas, setMontas]                           = useState<Montacargas[]>([]);
+  const [asesores, setAsesores]                       = useState<Asesor[]>([]);
+  const [tiposServicio, setTiposServicio]             = useState<TipoServicio[]>([]);
   const [refaccionesCatalogo, setRefaccionesCatalogo] = useState<RefaccionCatalogo[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [search, setSearch]                     = useState("");
-  const [filtro, setFiltro]                     = useState("todos");
-  const [filtroAsesor, setFiltroAsesor]         = useState("todos");
-  const [modal, setModal]                       = useState(false);
-  const [editing, setEditing]                   = useState<Cotizacion | null>(null);
-  const [comentarioModal, setComentarioModal]   = useState<Cotizacion | null>(null);
-  const [nuevoComentario, setNuevoComentario]   = useState("");
-  const [form, setForm]                         = useState<any>(emptyForm);
-  const [saving, setSaving]                     = useState(false);
-  const [savingComentario, setSavingComentario] = useState(false);
-  const [uploadingIdx, setUploadingIdx]         = useState<number | null>(null);
+  const [loading, setLoading]                         = useState(true);
+  const [search, setSearch]                           = useState("");
+  const [filtro, setFiltro]                           = useState("todos");
+  const [filtroAsesor, setFiltroAsesor]               = useState("todos");
+  const [modal, setModal]                             = useState(false);
+  const [editing, setEditing]                         = useState<Cotizacion | null>(null);
+  const [comentarioModal, setComentarioModal]         = useState<Cotizacion | null>(null);
+  const [nuevoComentario, setNuevoComentario]         = useState("");
+  const [form, setForm]                               = useState<any>(emptyForm);
+  const [saving, setSaving]                           = useState(false);
+  const [savingComentario, setSavingComentario]       = useState(false);
+  const [uploadingIdx, setUploadingIdx]               = useState<number | null>(null);
+  const [verTodosMontas, setVerTodosMontas]           = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -164,12 +233,14 @@ export default function Cotizaciones() {
 
   function openNew() {
     setEditing(null);
+    setVerTodosMontas(false);
     setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }] });
     setModal(true);
   }
 
   function openEdit(c: Cotizacion) {
     setEditing(c);
+    setVerTodosMontas(false);
     const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
       folio: c.folio, tipo: c.tipo,
@@ -184,9 +255,7 @@ export default function Cotizaciones() {
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
       subtotal: c.subtotal, iva: c.iva, total: c.total,
       estatus: c.estatus, notas: c.notas ?? "",
-      equipoMarca:  c.equipoMarca  ?? "",
-      equipoModelo: c.equipoModelo ?? "",
-      equipoSerie:  c.equipoSerie  ?? "",
+      equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
     });
     setModal(true);
   }
@@ -326,7 +395,6 @@ export default function Cotizaciones() {
       ? !!form.clienteOcasional?.nombre?.trim()
       : !!form.cliente;
     if (!tieneClienteValido) return;
-
     setSaving(true);
     try {
       const payload: any = { ...form };
@@ -342,7 +410,6 @@ export default function Cotizaciones() {
       } else {
         payload.clienteOcasional = null;
       }
-
       if (editing) {
         const { data } = await api.put(`/cotizaciones/${editing._id}`, payload);
         setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
@@ -394,16 +461,31 @@ export default function Cotizaciones() {
   function fmtHora(date: string) {
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   }
-
   function nombreCliente(c: Cotizacion): string {
     return c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "—";
   }
+
+  // ── Opciones para searchable dropdowns ──
+  const clienteOpts = clientes.map(c => ({ _id: c._id, label: c.nombre }));
+  const asesorOpts  = asesores.map(a => ({ _id: a._id, label: a.nombre }));
+
+  // Montacargas filtrados por cliente seleccionado
+  const montasDelCliente = form.cliente
+    ? montas.filter(m => m.clienteActual?._id === form.cliente)
+    : [];
+  const montasDisponibles = verTodosMontas || !form.cliente || montasDelCliente.length === 0
+    ? montas
+    : montasDelCliente;
+  const montaOpts = montasDisponibles.map(m => ({
+    _id: m._id,
+    label: `${m.numeroEconomico} — ${m.marca} ${m.modelo}`,
+  }));
 
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
       nombreCliente(c).toLowerCase().includes(search.toLowerCase()) ||
-      (c.asesor?.nombre  ?? "").toLowerCase().includes(search.toLowerCase());
+      (c.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase());
     const matchFiltro = filtro       === "todos" || c.tipo === filtro || c.estatus === filtro;
     const matchAsesor = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
@@ -440,14 +522,14 @@ export default function Cotizaciones() {
           </select>
         </div>
 
-        {/* ── Cliente: catálogo u ocasional ── */}
+        {/* ── Cliente ── */}
         <div className="form-group span-2" style={{ margin: 0 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 10 }}>
             <input type="checkbox" checked={!!form.esOcasional}
               onChange={e => setForm((p: any) => ({ ...p, esOcasional: e.target.checked }))}
               style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }} />
             <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
-              👤 Cliente ocasional <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(solo para esta cotización, no se guarda en el catálogo)</span>
+              👤 Cliente ocasional <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(no se guarda en el catálogo)</span>
             </span>
           </label>
 
@@ -481,28 +563,58 @@ export default function Cotizaciones() {
           ) : (
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Cliente *</label>
-              <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
-                <option value="">Selecciona cliente...</option>
-                {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
-              </select>
+              <SearchableSelect
+                value={form.cliente}
+                onChange={id => setForm((p: any) => ({ ...p, cliente: id, montacargas: "" }))}
+                options={clienteOpts}
+                placeholder="Escribe para buscar cliente..."
+              />
             </div>
           )}
         </div>
 
+        {/* ── Asesor ── */}
         <div className="form-group">
           <label className="form-label">Asesor</label>
-          <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
-            <option value="">Sin asesor</option>
-            {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-          </select>
+          <SearchableSelect
+            value={form.asesor}
+            onChange={id => setForm((p: any) => ({ ...p, asesor: id }))}
+            options={asesorOpts}
+            placeholder="Escribe para buscar asesor..."
+          />
         </div>
+
+        {/* ── Montacargas con filtro por cliente ── */}
         {!esRefacciones && (
           <div className="form-group">
-            <label className="form-label">Montacargas</label>
-            <select className="form-select" value={form.montacargas} onChange={e => setForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
-              <option value="">Sin equipo</option>
-              {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
-            </select>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <label className="form-label" style={{ margin: 0 }}>Montacargas</label>
+              {form.cliente && montasDelCliente.length > 0 && (
+                <button
+                  onClick={() => { setVerTodosMontas(v => !v); setForm((p: any) => ({ ...p, montacargas: "" })); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", color: "var(--accent)", fontWeight: 600, padding: 0 }}
+                >
+                  {verTodosMontas ? `🔍 Solo de ${clientes.find(c => c._id === form.cliente)?.nombre ?? "cliente"}` : "🌐 Ver todos"}
+                </button>
+              )}
+            </div>
+            {form.cliente && montasDelCliente.length > 0 && !verTodosMontas && (
+              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 6 }}>
+                Mostrando {montasDelCliente.length} equipo{montasDelCliente.length !== 1 ? "s" : ""} de este cliente
+              </p>
+            )}
+            {form.cliente && montasDelCliente.length === 0 && (
+              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 6 }}>
+                Este cliente no tiene equipos asignados — mostrando todos
+              </p>
+            )}
+            <SearchableSelect
+              value={form.montacargas}
+              onChange={id => setForm((p: any) => ({ ...p, montacargas: id }))}
+              options={montaOpts}
+              placeholder="Escribe para buscar equipo..."
+              renderLabel={opt => opt.label}
+            />
           </div>
         )}
 
@@ -515,20 +627,17 @@ export default function Cotizaciones() {
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Marca</label>
                 <input className="form-input" value={form.equipoMarca ?? ""}
-                  onChange={e => setForm((p: any) => ({ ...p, equipoMarca: e.target.value }))}
-                  placeholder="Ej. Yale" />
+                  onChange={e => setForm((p: any) => ({ ...p, equipoMarca: e.target.value }))} placeholder="Ej. Yale" />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Modelo</label>
                 <input className="form-input" value={form.equipoModelo ?? ""}
-                  onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))}
-                  placeholder="Ej. YL_456" />
+                  onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))} placeholder="Ej. YL_456" />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Serie</label>
                 <input className="form-input" value={form.equipoSerie ?? ""}
-                  onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))}
-                  placeholder="Ej. 1A3234RT45" />
+                  onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))} placeholder="Ej. 1A3234RT45" />
               </div>
             </div>
           </div>
@@ -555,20 +664,16 @@ export default function Cotizaciones() {
           <label className="form-label">Descripción {esRefacciones ? "(opcional)" : "del servicio"}</label>
           <textarea className="form-textarea" rows={3} value={form.descripcionServicio}
             onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
-            placeholder={esRefacciones ? "Ej. Refacciones para mantenimiento de batería" : "Ej. Mantenimiento correctivo a batería modelo 18-125-15"} />
+            placeholder={esRefacciones ? "Ej. Refacciones para mantenimiento" : "Ej. Mantenimiento correctivo a batería"} />
         </div>
 
         {form.tipo === "servicio" && tiposServicio.length > 0 && (
-          <div className="form-group span-2" style={{
-            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
-            borderRadius: "var(--radius-sm)", padding: 12,
-          }}>
+          <div className="form-group span-2" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
               ⚙️ Autocompletar desde tipo de servicio
             </p>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <select className="form-select" defaultValue=""
-                onChange={e => { if (e.target.value) aplicarTipoServicio(e.target.value); }}>
+              <select className="form-select" defaultValue="" onChange={e => { if (e.target.value) aplicarTipoServicio(e.target.value); }}>
                 <option value="">Selecciona un tipo de servicio...</option>
                 {tiposServicio.map(t => (
                   <option key={t._id} value={t._id}>
@@ -576,18 +681,13 @@ export default function Cotizaciones() {
                   </option>
                 ))}
               </select>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                Llena el primer concepto
-              </p>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Llena el primer concepto</p>
             </div>
           </div>
         )}
 
         {mostrarAutocompletar && (
-          <div className="form-group span-2" style={{
-            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
-            borderRadius: "var(--radius-sm)", padding: 12,
-          }}>
+          <div className="form-group span-2" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
               ⚡ Autocompletar primer concepto
             </p>
@@ -612,30 +712,26 @@ export default function Cotizaciones() {
                 </select>
               </div>
             )}
-            <button className="btn btn-secondary btn-sm"
-              style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
+            <button className="btn btn-secondary btn-sm" style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
               onClick={() => generarConceptoAutomatico(form.montacargas, form.tipo, form.tipoPeriodo)}>
               ⚡ Llenar primer concepto automáticamente
             </button>
           </div>
         )}
 
-        {/* ── Condiciones comerciales (editable) ── */}
         <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>
-              📋 Condiciones comerciales (aparecen en el reporte)
+              📋 Condiciones comerciales
             </p>
-            <button className="btn btn-secondary btn-sm" onClick={generarPlantilla}>
-              ⚡ Generar plantilla
-            </button>
+            <button className="btn btn-secondary btn-sm" onClick={generarPlantilla}>⚡ Generar plantilla</button>
           </div>
           <textarea className="form-textarea" rows={6} value={form.condiciones}
             onChange={e => setForm((p: any) => ({ ...p, condiciones: e.target.value }))}
             placeholder="Genera una plantilla con el botón de arriba, o escribe las condiciones manualmente — una por línea."
             style={{ fontSize: "0.85rem" }} />
           <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 6 }}>
-            Si dejas este campo vacío, el reporte usará automáticamente una plantilla estándar según el tipo y periodo.
+            Si dejas este campo vacío, el reporte usará una plantilla estándar según tipo y periodo.
           </p>
         </div>
       </div>
@@ -720,7 +816,7 @@ export default function Cotizaciones() {
                           </div>
                         ))}
                         <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>
-                          Suma subconceptos: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente
+                          Suma: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente
                         </p>
                       </div>
                     )}
