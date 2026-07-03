@@ -67,7 +67,6 @@ const ESTATUS_BADGE: Record<string, string> = { borrador: "badge-gray", enviada:
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
-// ── Componente Searchable Dropdown ──────────────────────────────────────────
 function SearchableSelect({
   value, onChange, options, placeholder, renderLabel,
 }: {
@@ -80,7 +79,6 @@ function SearchableSelect({
   const [query, setQuery] = useState("");
   const [open, setOpen]   = useState(false);
   const ref               = useRef<HTMLDivElement>(null);
-
   const selected = options.find(o => o._id === value);
 
   useEffect(() => {
@@ -91,9 +89,7 @@ function SearchableSelect({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const filtered = options.filter(o =>
-    o.label.toLowerCase().includes(query.toLowerCase())
-  );
+  const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
 
   function select(id: string) {
     onChange(id);
@@ -190,6 +186,7 @@ function generarPlantillaCondiciones(
 export default function Cotizaciones() {
   const rol        = localStorage.getItem("rol") ?? "";
   const canComment = ["developer", "gerencia", "oficina"].includes(rol);
+  const canDelete  = ["developer", "gerencia"].includes(rol);
 
   const [cotizaciones, setCotizaciones]               = useState<Cotizacion[]>([]);
   const [clientes, setClientes]                       = useState<Cliente[]>([]);
@@ -258,6 +255,36 @@ export default function Cotizaciones() {
       equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
     });
     setModal(true);
+  }
+
+  async function clonar(c: Cotizacion) {
+    setSaving(true);
+    try {
+      const payload = {
+        tipo:                c.tipo,
+        tipoPeriodo:         c.tipoPeriodo,
+        condiciones:         c.condiciones,
+        cliente:             c.cliente?._id ?? null,
+        clienteOcasional:    c.clienteOcasional ?? null,
+        montacargas:         c.montacargas?._id ?? null,
+        asesor:              c.asesor?._id ?? null,
+        fecha:               new Date().toISOString().split("T")[0],
+        lugar:               c.lugar,
+        descripcionServicio: c.descripcionServicio ?? "",
+        items:               c.items,
+        subtotal:            c.subtotal,
+        iva:                 c.iva,
+        total:               c.total,
+        estatus:             "borrador",
+        notas:               c.notas ?? "",
+        equipoMarca:         c.equipoMarca ?? "",
+        equipoModelo:        c.equipoModelo ?? "",
+        equipoSerie:         c.equipoSerie ?? "",
+      };
+      const { data } = await api.post("/cotizaciones", payload);
+      setCotizaciones(prev => [data, ...prev]);
+    } catch {}
+    finally { setSaving(false); }
   }
 
   function recalcTotales(items: Item[]) {
@@ -465,11 +492,9 @@ export default function Cotizaciones() {
     return c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "—";
   }
 
-  // ── Opciones para searchable dropdowns ──
   const clienteOpts = clientes.map(c => ({ _id: c._id, label: c.nombre }));
   const asesorOpts  = asesores.map(a => ({ _id: a._id, label: a.nombre }));
 
-  // Montacargas filtrados por cliente seleccionado
   const montasDelCliente = form.cliente
     ? montas.filter(m => m.clienteActual?._id === form.cliente)
     : [];
@@ -522,7 +547,6 @@ export default function Cotizaciones() {
           </select>
         </div>
 
-        {/* ── Cliente ── */}
         <div className="form-group span-2" style={{ margin: 0 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 10 }}>
             <input type="checkbox" checked={!!form.esOcasional}
@@ -573,7 +597,6 @@ export default function Cotizaciones() {
           )}
         </div>
 
-        {/* ── Asesor ── */}
         <div className="form-group">
           <label className="form-label">Asesor</label>
           <SearchableSelect
@@ -584,7 +607,6 @@ export default function Cotizaciones() {
           />
         </div>
 
-        {/* ── Montacargas con filtro por cliente ── */}
         {!esRefacciones && (
           <div className="form-group">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -950,7 +972,10 @@ export default function Cotizaciones() {
                         <button className="btn btn-secondary btn-sm" onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Ver reporte">👁️</button>
                         <button className="btn btn-primary btn-sm" onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Descargar PDF">📥 PDF</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => clonar(c)} title="Clonar cotización" disabled={saving}>📋</button>
+                        {canDelete && (
+                          <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
+                        )}
                       </div>
                     </td>
                   </tr>
