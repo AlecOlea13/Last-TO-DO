@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api";
+import { BrowserMultiFormatReader, NotFoundException } from "@zxing/library";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
@@ -29,10 +30,7 @@ type Orden = {
   fotosEvidencia?: string[];
 };
 
-type TipoServicioItem = {
-  nombre: string;
-  cantidad: number;
-};
+type TipoServicioItem = { nombre: string; cantidad: number };
 
 type TipoServicio = {
   _id: string; nombre: string; descripcion?: string;
@@ -62,6 +60,89 @@ const CONDICION_BADGE: Record<string, string> = {
   corroida: "badge-gray", otro: "badge-blue",
 };
 
+// ── Componente escáner ──
+function EscanerModal({
+  onScanned, onClose,
+}: {
+  onScanned: (codigo: string) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [escaneando, setEscaneando] = useState(true);
+  const yaEscaneado = useRef(false);
+
+  const detener = useCallback(() => {
+    readerRef.current?.reset();
+  }, []);
+
+  useEffect(() => {
+    const reader = new BrowserMultiFormatReader();
+    readerRef.current = reader;
+
+    reader.decodeFromConstraints(
+      { video: { facingMode: "environment" } },
+      videoRef.current!,
+      (result, err) => {
+        if (result && !yaEscaneado.current) {
+          yaEscaneado.current = true;
+          setEscaneando(false);
+          detener();
+          onScanned(result.getText());
+        }
+        if (err && !(err instanceof NotFoundException)) {
+          setError("No se pudo acceder a la cámara");
+        }
+      }
+    ).catch(() => setError("No se pudo acceder a la cámara"));
+
+    return () => { detener(); };
+  }, [detener, onScanned]);
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) { detener(); onClose(); } }}>
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <button className="modal-close" onClick={() => { detener(); onClose(); }}>✕</button>
+        <h2 className="modal-title">📷 Escanear código de barras</h2>
+        {error ? (
+          <div style={{ textAlign: "center", padding: "24px 0", color: "var(--red)" }}>
+            <div style={{ fontSize: "2rem", marginBottom: 8 }}>⚠️</div>
+            <p>{error}</p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Verifica que el navegador tenga permiso de cámara</p>
+          </div>
+        ) : (
+          <>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
+              Apunta la cámara al código de barras de la caja
+            </p>
+            <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
+              <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              {escaneando && (
+                <div style={{
+                  position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+                  width: "70%", height: 2, background: "var(--accent)",
+                  boxShadow: "0 0 8px var(--accent)",
+                  animation: "scanLine 1.5s ease-in-out infinite alternate",
+                }} />
+              )}
+            </div>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginTop: 10 }}>
+              Detecta códigos QR, Code128, EAN, UPC y más
+            </p>
+          </>
+        )}
+        <style>{`
+          @keyframes scanLine {
+            from { top: 30%; }
+            to   { top: 70%; }
+          }
+        `}</style>
+      </div>
+    </div>
+  );
+}
+
 export default function Almacen() {
   const rol         = localStorage.getItem("rol") ?? "";
   const canEdit     = ["developer", "gerencia"].includes(rol);
@@ -83,6 +164,8 @@ export default function Almacen() {
   const [editing, setEditing]         = useState<Refaccion | null>(null);
   const [form, setForm]               = useState<any>(emptyRefaccion);
   const [stockForm, setStockForm]     = useState({ tipo: "entrada", cantidad: 1 });
+
+  const [escanerModal, setEscanerModal] = useState(false);
 
   const [surtirModal, setSurtirModal] = useState<Orden | null>(null);
   const [surtirItems, setSurtirItems] = useState<any[]>([]);
@@ -118,6 +201,25 @@ export default function Almacen() {
     } catch {}
     finally { setLoading(false); }
   }
+
+  // ── Lógica del escáner ──
+  const handleScanned = useCallback((codigo: string) => {
+    setEscanerModal(false);
+    // Buscar por numeroParte en el catálogo local
+    const encontrada = refacciones.find(r =>
+      r.numeroParte && r.numeroParte.trim().toLowerCase() === codigo.trim().toLowerCase()
+    );
+    if (encontrada) {
+      // Existe → abrir ajuste de stock directo
+      setStockModal(encontrada);
+      setStockForm({ tipo: "entrada", cantidad: 1 });
+    } else {
+      // No existe → abrir modal nueva refacción con numeroParte prellenado
+      setEditing(null);
+      setForm({ ...emptyRefaccion, numeroParte: codigo });
+      setModal(true);
+    }
+  }, [refacciones]);
 
   function openNew() { setEditing(null); setForm(emptyRefaccion); setModal(true); }
   function openEdit(r: Refaccion) {
@@ -282,7 +384,7 @@ export default function Almacen() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  const filteredRef    = refacciones.filter(r =>
+  const filteredRef = refacciones.filter(r =>
     r.nombre.toLowerCase().includes(search.toLowerCase()) ||
     (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -311,9 +413,16 @@ export default function Almacen() {
           <h1 className="page-title">Almacén</h1>
           <p className="page-subtitle">{refacciones.length} refacciones en inventario</p>
         </div>
-        {canAddRefac && tab === "inventario" && <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>}
-        {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
-        {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
+        <div style={{ display: "flex", gap: 8 }}>
+          {canAddRefac && tab === "inventario" && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setEscanerModal(true)}>📷 Escanear</button>
+              <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>
+            </>
+          )}
+          {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
+          {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
+        </div>
       </div>
 
       <div className="page-content">
@@ -486,6 +595,11 @@ export default function Almacen() {
         </div>
       </div>
 
+      {/* ── Modal escáner ── */}
+      {escanerModal && (
+        <EscanerModal onScanned={handleScanned} onClose={() => setEscanerModal(false)} />
+      )}
+
       {/* ── Modal refacción ── */}
       {modal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
@@ -495,7 +609,7 @@ export default function Almacen() {
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Nombre *</label>
-                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" />
+                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" autoFocus />
               </div>
               <div className="form-group">
                 <label className="form-label">No. de parte</label>
@@ -560,6 +674,11 @@ export default function Almacen() {
             <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
               <strong style={{ color: "var(--text)" }}>{stockModal.nombre}</strong> — Stock actual: <strong style={{ color: "var(--accent)" }}>{stockModal.stock} {stockModal.unidad}s</strong>
             </p>
+            {stockModal.numeroParte && (
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 16 }}>
+                No. parte: <strong style={{ color: "var(--text)" }}>{stockModal.numeroParte}</strong>
+              </p>
+            )}
             <div className="form-grid cols-1">
               <div className="form-group">
                 <label className="form-label">Tipo de movimiento</label>
