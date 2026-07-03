@@ -4,8 +4,12 @@ import { api } from "../api";
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
+const CATEGORIAS = ["Motor", "Transmisión", "Hidráulico", "Eléctrico", "Frenos", "Filtros", "Aceites", "Llantas", "Carrocería", "General"];
+const MARCAS_COMPATIBLES = ["CAT", "Yale", "Crown", "Toyota", "Hyster", "Mitsubishi", "Nissan", "Komatsu", "Universal"];
+
 type Refaccion = {
   _id: string; nombre: string; numeroParte?: string; categoria?: string;
+  proveedor?: string; marcaCompatible?: string;
   unidad: string; stock: number; stockMinimo: number; precio: number; activo: boolean;
 };
 
@@ -43,7 +47,10 @@ type RefaccionUsada = {
   registradoPor?: { nombre: string }; createdAt: string;
 };
 
-const emptyRefaccion = { nombre: "", numeroParte: "", categoria: "", unidad: "pieza", stock: 0, stockMinimo: 1, precio: 0 };
+const emptyRefaccion = {
+  nombre: "", numeroParte: "", categoria: "", proveedor: "", marcaCompatible: "",
+  unidad: "pieza", stock: 0, stockMinimo: 1, precio: 0,
+};
 const emptyTipo = { nombre: "", descripcion: "", intervaloHrs: "", itemsChecklist: [] as string[], precioTotal: 0, refacciones: [] as { nombre: string; cantidad: number }[] };
 const emptyUsada = { descripcion: "", numeroParte: "", condicion: "desgastada", servicio: "", notas: "", fotos: [] as string[] };
 
@@ -115,7 +122,11 @@ export default function Almacen() {
   function openNew() { setEditing(null); setForm(emptyRefaccion); setModal(true); }
   function openEdit(r: Refaccion) {
     setEditing(r);
-    setForm({ nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "", unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio });
+    setForm({
+      nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "",
+      proveedor: r.proveedor ?? "", marcaCompatible: r.marcaCompatible ?? "",
+      unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio,
+    });
     setModal(true);
   }
   async function saveRefaccion() {
@@ -271,7 +282,13 @@ export default function Almacen() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  const filteredRef    = refacciones.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase()) || (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) || (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredRef    = refacciones.filter(r =>
+    r.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (r.proveedor ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (r.marcaCompatible ?? "").toLowerCase().includes(search.toLowerCase())
+  );
   const filteredOrd    = ordenes.filter(o => o.folio.toLowerCase().includes(search.toLowerCase()) || (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredTipos  = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
@@ -343,13 +360,15 @@ export default function Almacen() {
               <div className="empty-state"><span className="empty-icon">📦</span><p>Sin refacciones registradas</p></div>
             ) : (
               <table>
-                <thead><tr><th>Nombre</th><th>No. Parte</th><th>Categoría</th><th>Unidad</th><th>Stock</th><th>Mín.</th><th>Precio</th><th></th></tr></thead>
+                <thead><tr><th>Nombre</th><th>No. Parte</th><th>Categoría</th><th>Proveedor</th><th>Marca compat.</th><th>Unidad</th><th>Stock</th><th>Mín.</th><th>Precio</th><th></th></tr></thead>
                 <tbody>
                   {filteredRef.map(r => (
                     <tr key={r._id}>
                       <td style={{ fontWeight: 600 }}>{r.nombre}</td>
                       <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{r.numeroParte || "—"}</td>
                       <td>{r.categoria || "—"}</td>
+                      <td style={{ fontSize: "0.82rem" }}>{r.proveedor || "—"}</td>
+                      <td style={{ fontSize: "0.82rem" }}>{r.marcaCompatible || "—"}</td>
                       <td>{r.unidad}</td>
                       <td><span style={{ fontWeight: 700, color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)" }}>{r.stock}</span></td>
                       <td style={{ color: "var(--text-muted)" }}>{r.stockMinimo}</td>
@@ -470,22 +489,59 @@ export default function Almacen() {
       {/* ── Modal refacción ── */}
       {modal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth: 520 }}>
+          <div className="modal" style={{ maxWidth: 560 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar refacción" : "Nueva refacción"}</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Nombre *</label><input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" /></div>
-              <div className="form-group"><label className="form-label">No. de parte</label><input className="form-input" value={form.numeroParte} onChange={e => setForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" /></div>
-              <div className="form-group"><label className="form-label">Categoría</label><input className="form-input" value={form.categoria} onChange={e => setForm((p: any) => ({ ...p, categoria: e.target.value }))} placeholder="Ej. Filtros, Aceites..." /></div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Nombre *</label>
+                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">No. de parte</label>
+                <input className="form-input" value={form.numeroParte} onChange={e => setForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Categoría</label>
+                <select className="form-select" value={form.categoria} onChange={e => setForm((p: any) => ({ ...p, categoria: e.target.value }))}>
+                  <option value="">Sin categoría</option>
+                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Proveedor</label>
+                <input className="form-input" value={form.proveedor} onChange={e => setForm((p: any) => ({ ...p, proveedor: e.target.value }))} placeholder="Ej. TVH, CAT, proveedor local..." />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Marca compatible</label>
+                <select className="form-select" value={form.marcaCompatible} onChange={e => setForm((p: any) => ({ ...p, marcaCompatible: e.target.value }))}>
+                  <option value="">Universal / sin marca</option>
+                  {MARCAS_COMPATIBLES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
               <div className="form-group">
                 <label className="form-label">Unidad</label>
                 <select className="form-select" value={form.unidad} onChange={e => setForm((p: any) => ({ ...p, unidad: e.target.value }))}>
-                  <option value="pieza">Pieza</option><option value="litro">Litro</option><option value="juego">Juego</option><option value="par">Par</option><option value="metro">Metro</option><option value="kg">Kg</option>
+                  <option value="pieza">Pieza</option>
+                  <option value="litro">Litro</option>
+                  <option value="juego">Juego</option>
+                  <option value="par">Par</option>
+                  <option value="metro">Metro</option>
+                  <option value="kg">Kg</option>
                 </select>
               </div>
-              <div className="form-group"><label className="form-label">Stock inicial</label><input className="form-input" type="number" value={form.stock} onChange={e => setForm((p: any) => ({ ...p, stock: +e.target.value }))} /></div>
-              <div className="form-group"><label className="form-label">Stock mínimo</label><input className="form-input" type="number" value={form.stockMinimo} onChange={e => setForm((p: any) => ({ ...p, stockMinimo: +e.target.value }))} /></div>
-              <div className="form-group"><label className="form-label">Precio unitario ($)</label><input className="form-input" type="number" value={form.precio} onChange={e => setForm((p: any) => ({ ...p, precio: +e.target.value }))} /></div>
+              <div className="form-group">
+                <label className="form-label">Stock inicial</label>
+                <input className="form-input" type="number" value={form.stock} onChange={e => setForm((p: any) => ({ ...p, stock: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Stock mínimo</label>
+                <input className="form-input" type="number" value={form.stockMinimo} onChange={e => setForm((p: any) => ({ ...p, stockMinimo: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Precio unitario ($)</label>
+                <input className="form-input" type="number" value={form.precio} onChange={e => setForm((p: any) => ({ ...p, precio: +e.target.value }))} />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
@@ -508,10 +564,14 @@ export default function Almacen() {
               <div className="form-group">
                 <label className="form-label">Tipo de movimiento</label>
                 <select className="form-select" value={stockForm.tipo} onChange={e => setStockForm(p => ({ ...p, tipo: e.target.value }))}>
-                  <option value="entrada">📥 Entrada</option><option value="salida">📤 Salida</option>
+                  <option value="entrada">📥 Entrada</option>
+                  <option value="salida">📤 Salida</option>
                 </select>
               </div>
-              <div className="form-group"><label className="form-label">Cantidad</label><input className="form-input" type="number" min={1} value={stockForm.cantidad} onChange={e => setStockForm(p => ({ ...p, cantidad: +e.target.value }))} /></div>
+              <div className="form-group">
+                <label className="form-label">Cantidad</label>
+                <input className="form-input" type="number" min={1} value={stockForm.cantidad} onChange={e => setStockForm(p => ({ ...p, cantidad: +e.target.value }))} />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setStockModal(null)}>Cancelar</button>
