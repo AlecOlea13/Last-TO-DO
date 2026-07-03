@@ -257,35 +257,34 @@ export default function Cotizaciones() {
     setModal(true);
   }
 
-  async function clonar(c: Cotizacion) {
-    setSaving(true);
-    try {
-      const payload = {
-        tipo:                c.tipo,
-        tipoPeriodo:         c.tipoPeriodo,
-        condiciones:         c.condiciones,
-        cliente:             c.cliente?._id ?? null,
-        clienteOcasional:    c.clienteOcasional ?? null,
-        montacargas:         c.montacargas?._id ?? null,
-        asesor:              c.asesor?._id ?? null,
-        fecha:               new Date().toISOString().split("T")[0],
-        lugar:               c.lugar,
-        descripcionServicio: c.descripcionServicio ?? "",
-        items:               c.items,
-        subtotal:            c.subtotal,
-        iva:                 c.iva,
-        total:               c.total,
-        estatus:             "borrador",
-        notas:               c.notas ?? "",
-        equipoMarca:         c.equipoMarca ?? "",
-        equipoModelo:        c.equipoModelo ?? "",
-        equipoSerie:         c.equipoSerie ?? "",
-      };
-      const { data } = await api.post("/cotizaciones", payload);
-      setCotizaciones(prev => [data, ...prev]);
-    } catch {}
-    finally { setSaving(false); }
-  }
+  function clonar(c: Cotizacion) {
+  setEditing(null);
+  setVerTodosMontas(false);
+  setForm({
+    folio:               "",
+    tipo:                c.tipo,
+    tipoPeriodo:         c.tipoPeriodo ?? "mensual",
+    condiciones:         c.condiciones ?? "",
+    cliente:             c.cliente?._id ?? "",
+    esOcasional:         !c.cliente && !!c.clienteOcasional?.nombre,
+    clienteOcasional:    c.clienteOcasional ?? { ...emptyClienteOcasional },
+    montacargas:         c.montacargas?._id ?? "",
+    asesor:              c.asesor?._id ?? "",
+    fecha:               new Date().toISOString().split("T")[0],
+    lugar:               c.lugar,
+    descripcionServicio: c.descripcionServicio ?? "",
+    items:               c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
+    subtotal:            c.subtotal,
+    iva:                 c.iva,
+    total:               c.total,
+    estatus:             "borrador",
+    notas:               c.notas ?? "",
+    equipoMarca:         c.equipoMarca ?? "",
+    equipoModelo:        c.equipoModelo ?? "",
+    equipoSerie:         c.equipoSerie ?? "",
+  });
+  setModal(true);
+}
 
   function recalcTotales(items: Item[]) {
     const subtotal = items.reduce((acc, it) => acc + it.total, 0);
