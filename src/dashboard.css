@@ -117,8 +117,10 @@ html { transition: background-color 0.25s ease; }
 .sidebar {
   width: var(--sidebar-w);
   min-width: var(--sidebar-w);
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: rgba(10, 12, 20, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255,180,0,0.12);
   display: flex;
   flex-direction: column;
   padding: 24px 16px;
@@ -137,7 +139,7 @@ html { transition: background-color 0.25s ease; }
   align-items: center;
   gap: 10px;
   padding: 8px 10px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,180,0,0.15);
   margin-bottom: 8px;
 }
 .brand-icon { font-size: 1.8rem; line-height: 1; }
@@ -160,8 +162,8 @@ html { transition: background-color 0.25s ease; }
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,180,0,0.1);
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 8px;
