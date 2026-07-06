@@ -213,9 +213,15 @@ export default function Dashboard() {
   { to: "/dashboard/cxc", icon: "💰", label: "CxC", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores", roles: ["developer","gerencia","oficina"] },
   { to: "/dashboard/portales", icon: "🔑", label: "Portales", roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/flota", icon: "🚗", label: "Flota", roles: ["developer", "gerencia", "oficina"], permiso: "flota" },
 ];
 
-  const navItems = allNav.filter(item => item.roles.includes(rol));
+  const permisos = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
+  const navItems = allNav.filter(item => {
+    if (!item.roles.includes(rol)) return false;
+    if (item.permiso && !permisos.includes(item.permiso) && !["developer", "gerencia"].includes(rol)) return false;
+    return true;
+  });
   const isDashboard = location.pathname === "/dashboard";
 
   const ALERTA_STYLE: Record<string, { border: string; bg: string; color: string }> = {

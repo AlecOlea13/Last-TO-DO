@@ -7,6 +7,7 @@ type Usuario = {
   nombre: string;
   rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen";
   activo: boolean;
+  permisos: string[];
   createdAt: string;
 };
 
@@ -19,7 +20,7 @@ const ROL_BADGE: Record<string, string> = {
 };
 
 const emptyForm = {
-  username: "", nombre: "", password: "", rol: "oficina", activo: true,
+  username: "", nombre: "", password: "", rol: "oficina", activo: true, permisos: [] as string[],
 };
 
 export default function Usuarios() {
@@ -50,9 +51,21 @@ export default function Usuarios() {
 
   function openEdit(u: Usuario) {
     setEditing(u);
-    setForm({ username: u.username, nombre: u.nombre, password: "", rol: u.rol, activo: u.activo });
+    setForm({
+      username: u.username, nombre: u.nombre, password: "",
+      rol: u.rol, activo: u.activo, permisos: u.permisos ?? [],
+    });
     setError("");
     setModal(true);
+  }
+
+  function togglePermiso(permiso: string) {
+    setForm((p: any) => {
+      const permisos = p.permisos.includes(permiso)
+        ? p.permisos.filter((x: string) => x !== permiso)
+        : [...p.permisos, permiso];
+      return { ...p, permisos };
+    });
   }
 
   async function save() {
@@ -91,6 +104,14 @@ export default function Usuarios() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
+  // Permisos especiales disponibles — aquí agregas más en el futuro
+  const PERMISOS_DISPONIBLES = [
+    { key: "flota", label: "🚗 Flota", desc: "Acceso al módulo de camionetas y flota vehicular" },
+  ];
+
+  // Solo mostrar permisos para roles que no los tienen por defecto
+  const mostrarPermisos = form.rol === "oficina" || form.rol === "tecnico" || form.rol === "almacen";
+
   return (
     <>
       <div className="page-header">
@@ -118,6 +139,7 @@ export default function Usuarios() {
                   <th>Usuario</th>
                   <th>Nombre</th>
                   <th>Rol</th>
+                  <th>Permisos extra</th>
                   <th>Estatus</th>
                   <th>Creado</th>
                   <th></th>
@@ -129,6 +151,19 @@ export default function Usuarios() {
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>@{u.username}</td>
                     <td style={{ fontWeight: 600 }}>{u.nombre}</td>
                     <td><span className={`badge ${ROL_BADGE[u.rol]}`}>{u.rol}</span></td>
+                    <td>
+                      {(u.permisos ?? []).length > 0 ? (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {u.permisos.map(p => (
+                            <span key={p} style={{ fontSize: "0.72rem", background: "rgba(79,124,255,0.12)", color: "var(--blue)", border: "1px solid rgba(79,124,255,0.25)", borderRadius: 4, padding: "1px 8px", fontWeight: 600 }}>
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>
+                      )}
+                    </td>
                     <td>
                       <span className={`badge ${u.activo ? "badge-green" : "badge-gray"}`}>
                         {u.activo ? "Activo" : "Inactivo"}
@@ -192,6 +227,28 @@ export default function Usuarios() {
                     <option value="true">Activo</option>
                     <option value="false">Inactivo</option>
                   </select>
+                </div>
+              )}
+
+              {mostrarPermisos && (
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label className="form-label">Permisos especiales</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                    {PERMISOS_DISPONIBLES.map(p => (
+                      <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 14px", background: form.permisos.includes(p.key) ? "rgba(79,124,255,0.08)" : "var(--surface2)", border: `1px solid ${form.permisos.includes(p.key) ? "rgba(79,124,255,0.3)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", transition: "all 0.15s" }}>
+                        <input
+                          type="checkbox"
+                          checked={form.permisos.includes(p.key)}
+                          onChange={() => togglePermiso(p.key)}
+                          style={{ width: 16, height: 16, accentColor: "var(--blue)", cursor: "pointer", flexShrink: 0 }}
+                        />
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: "0.88rem", color: "var(--text)" }}>{p.label}</p>
+                          <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>{p.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

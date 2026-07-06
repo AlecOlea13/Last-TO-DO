@@ -21,6 +21,7 @@ export default function Login() {
       localStorage.setItem("rol", data.user.rol);
       localStorage.setItem("nombre", data.user.nombre);
       localStorage.setItem("userId", data.user.id);
+      localStorage.setItem("permisos", JSON.stringify(data.user.permisos ?? []));
       setAuth(data.token);
       nav("/dashboard");
     } catch (err: any) {
