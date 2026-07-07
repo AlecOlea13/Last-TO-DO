@@ -157,7 +157,7 @@ export default function Clientes() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
+        <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 600 }}>
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar cliente" : "Nuevo cliente"}</h2>
