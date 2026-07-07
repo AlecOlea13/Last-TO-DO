@@ -31,7 +31,6 @@ type Orden = {
 };
 
 type TipoServicioItem = { nombre: string; cantidad: number };
-
 type TipoServicio = {
   _id: string; nombre: string; descripcion?: string;
   intervaloHrs?: number; refacciones: TipoServicioItem[];
@@ -43,6 +42,18 @@ type RefaccionUsada = {
   fotos: string[]; notas?: string;
   servicio?: { _id: string; folio: string; problema: string };
   registradoPor?: { nombre: string }; createdAt: string;
+};
+
+type Usuario = { _id: string; nombre: string; rol: string };
+
+type ValeItem = { refaccion: string; nombre: string; numeroParte?: string; unidad: string; cantidad: number };
+type Vale = {
+  _id: string; folio: string;
+  tecnico: { _id: string; nombre: string; rol: string };
+  registradoPor?: { nombre: string };
+  items: ValeItem[];
+  notas?: string;
+  createdAt: string;
 };
 
 const emptyRefaccion = {
@@ -60,27 +71,18 @@ const CONDICION_BADGE: Record<string, string> = {
   corroida: "badge-gray", otro: "badge-blue",
 };
 
-// ── Componente escáner ──
-function EscanerModal({
-  onScanned, onClose,
-}: {
-  onScanned: (codigo: string) => void;
-  onClose: () => void;
-}) {
+function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [escaneando, setEscaneando] = useState(true);
   const yaEscaneado = useRef(false);
 
-  const detener = useCallback(() => {
-    readerRef.current?.reset();
-  }, []);
+  const detener = useCallback(() => { readerRef.current?.reset(); }, []);
 
   useEffect(() => {
     const reader = new BrowserMultiFormatReader();
     readerRef.current = reader;
-
     reader.decodeFromConstraints(
       { video: { facingMode: "environment" } },
       videoRef.current!,
@@ -91,12 +93,9 @@ function EscanerModal({
           detener();
           onScanned(result.getText());
         }
-        if (err && !(err instanceof NotFoundException)) {
-          setError("No se pudo acceder a la cámara");
-        }
+        if (err && !(err instanceof NotFoundException)) setError("No se pudo acceder a la cámara");
       }
     ).catch(() => setError("No se pudo acceder a la cámara"));
-
     return () => { detener(); };
   }, [detener, onScanned]);
 
@@ -113,34 +112,70 @@ function EscanerModal({
           </div>
         ) : (
           <>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
-              Apunta la cámara al código de barras de la caja
-            </p>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>Apunta la cámara al código de barras de la caja</p>
             <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
               <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               {escaneando && (
-                <div style={{
-                  position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-                  width: "70%", height: 2, background: "var(--accent)",
-                  boxShadow: "0 0 8px var(--accent)",
-                  animation: "scanLine 1.5s ease-in-out infinite alternate",
-                }} />
+                <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "70%", height: 2, background: "var(--accent)", boxShadow: "0 0 8px var(--accent)", animation: "scanLine 1.5s ease-in-out infinite alternate" }} />
               )}
             </div>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginTop: 10 }}>
-              Detecta códigos QR, Code128, EAN, UPC y más
-            </p>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginTop: 10 }}>Detecta códigos QR, Code128, EAN, UPC y más</p>
           </>
         )}
-        <style>{`
-          @keyframes scanLine {
-            from { top: 30%; }
-            to   { top: 70%; }
-          }
-        `}</style>
+        <style>{`@keyframes scanLine { from { top: 30%; } to { top: 70%; } }`}</style>
       </div>
     </div>
   );
+}
+
+function imprimirVale(vale: Vale) {
+  const fecha = new Date(vale.createdAt).toLocaleString("es-MX", {
+    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+  const html = `
+    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Vale ${vale.folio}</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #111; }
+      h1 { font-size: 1.4rem; margin-bottom: 4px; }
+      .folio { font-size: 1.8rem; font-weight: 900; color: #f59e0b; margin-bottom: 16px; }
+      .meta { display: flex; gap: 32px; margin-bottom: 24px; padding: 12px 16px; background: #f7f7f9; border-radius: 8px; }
+      .meta div { display: flex; flex-direction: column; gap: 2px; }
+      .meta label { font-size: 0.7rem; text-transform: uppercase; color: #888; letter-spacing: 0.06em; }
+      .meta span { font-weight: 700; font-size: 0.95rem; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+      th { padding: 8px 12px; text-align: left; font-size: 0.75rem; text-transform: uppercase; background: #f0f0f0; border-bottom: 2px solid #ddd; }
+      td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+      .firma { margin-top: 48px; display: flex; justify-content: space-between; }
+      .firma div { text-align: center; width: 200px; }
+      .firma .linea { border-top: 1px solid #333; padding-top: 8px; font-size: 0.82rem; color: #555; }
+      .notas { padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; font-size: 0.85rem; margin-bottom: 16px; }
+      @media print { body { margin: 20px; } }
+    </style></head><body>
+    <h1>Vale de Salida de Material</h1>
+    <div class="folio">${vale.folio}</div>
+    <div class="meta">
+      <div><label>Técnico</label><span>${vale.tecnico.nombre}</span></div>
+      <div><label>Fecha y hora</label><span>${fecha}</span></div>
+      <div><label>Registrado por</label><span>${vale.registradoPor?.nombre ?? "—"}</span></div>
+    </div>
+    ${vale.notas ? `<div class="notas">📝 ${vale.notas}</div>` : ""}
+    <table>
+      <thead><tr><th>Refacción</th><th>No. Parte</th><th>Cantidad</th><th>Unidad</th></tr></thead>
+      <tbody>
+        ${vale.items.map(i => `<tr><td>${i.nombre}</td><td>${i.numeroParte ?? "—"}</td><td>${i.cantidad}</td><td>${i.unidad}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    <div class="firma">
+      <div><div class="linea">Entregó</div></div>
+      <div><div class="linea">Recibió: ${vale.tecnico.nombre}</div></div>
+    </div>
+    <script>window.onload = () => { window.print(); }</script>
+    </body></html>
+  `;
+  const w = window.open("", "_blank");
+  w?.document.write(html);
+  w?.document.close();
 }
 
 export default function Almacen() {
@@ -150,27 +185,35 @@ export default function Almacen() {
   const canSurtir   = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
   const canUsadas   = ["developer", "gerencia", "almacen", "tecnico"].includes(rol);
 
-  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas">("inventario");
-  const [refacciones, setRefacciones]   = useState<Refaccion[]>([]);
-  const [ordenes, setOrdenes]           = useState<Orden[]>([]);
-  const [tipos, setTipos]               = useState<TipoServicio[]>([]);
-  const [usadas, setUsadas]             = useState<RefaccionUsada[]>([]);
-  const [servicios, setServicios]       = useState<{ _id: string; folio: string; problema?: string }[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [search, setSearch]             = useState("");
+  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales">("inventario");
+  const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
+  const [ordenes, setOrdenes]         = useState<Orden[]>([]);
+  const [tipos, setTipos]             = useState<TipoServicio[]>([]);
+  const [usadas, setUsadas]           = useState<RefaccionUsada[]>([]);
+  const [servicios, setServicios]     = useState<{ _id: string; folio: string; problema?: string }[]>([]);
+  const [tecnicos, setTecnicos]       = useState<Usuario[]>([]);
+  const [vales, setVales]             = useState<Vale[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState("");
 
-  const [modal, setModal]             = useState(false);
-  const [stockModal, setStockModal]   = useState<Refaccion | null>(null);
-  const [editing, setEditing]         = useState<Refaccion | null>(null);
-  const [form, setForm]               = useState<any>(emptyRefaccion);
-  const [stockForm, setStockForm]     = useState({ tipo: "entrada", cantidad: 1 });
+  const [modal, setModal]           = useState(false);
+  const [stockModal, setStockModal] = useState<Refaccion | null>(null);
+  const [editing, setEditing]       = useState<Refaccion | null>(null);
+  const [form, setForm]             = useState<any>(emptyRefaccion);
+  const [stockForm, setStockForm]   = useState<{ tipo: string; cantidad: number; tecnicoId: string; notas: string }>({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" });
 
   const [escanerModal, setEscanerModal] = useState(false);
 
-  const [surtirModal, setSurtirModal] = useState<Orden | null>(null);
-  const [surtirItems, setSurtirItems] = useState<any[]>([]);
-  const [surtirNotas, setSurtirNotas] = useState("");
-  const [fotosEvidencia, setFotosEvidencia] = useState<string[]>([]);
+  // Vale de salida manual (múltiples items)
+  const [valeModal, setValeModal]     = useState(false);
+  const [valeItems, setValeItems]     = useState<{ refaccionId: string; nombre: string; cantidad: number; unidad: string }[]>([]);
+  const [valeTecnico, setValeTecnico] = useState("");
+  const [valeNotas, setValeNotas]     = useState("");
+
+  const [surtirModal, setSurtirModal]   = useState<Orden | null>(null);
+  const [surtirItems, setSurtirItems]   = useState<any[]>([]);
+  const [surtirNotas, setSurtirNotas]   = useState("");
+  const [fotosEvidencia, setFotosEvidencia]     = useState<string[]>([]);
   const [uploadingEvidencia, setUploadingEvidencia] = useState(false);
 
   const [tipoModal, setTipoModal]     = useState(false);
@@ -178,8 +221,8 @@ export default function Almacen() {
   const [tipoForm, setTipoForm]       = useState<any>(emptyTipo);
   const [nuevoCheckItem, setNuevoCheckItem] = useState("");
 
-  const [usadaModal, setUsadaModal]   = useState(false);
-  const [usadaForm, setUsadaForm]     = useState<any>(emptyUsada);
+  const [usadaModal, setUsadaModal] = useState(false);
+  const [usadaForm, setUsadaForm]   = useState<any>(emptyUsada);
   const [uploadingUsada, setUploadingUsada] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -191,30 +234,30 @@ export default function Almacen() {
 
   async function load() {
     try {
-      const [r, o, t, u, s] = await Promise.all([
+      const [r, o, t, u, s, us, v] = await Promise.all([
         api.get("/refacciones"), api.get("/ordenes-refaccion"),
-        api.get("/tipos-servicio"), api.get("/refacciones-usadas"), api.get("/servicios"),
+        api.get("/tipos-servicio"), api.get("/refacciones-usadas"),
+        api.get("/servicios"), api.get("/users"),
+        api.get("/vales-salida"),
       ]);
       setRefacciones(r.data); setOrdenes(o.data); setTipos(t.data);
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
+      setTecnicos(us.data.filter((u: any) => ["tecnico", "almacen", "developer", "gerencia", "oficina"].includes(u.rol)));
+      setVales(v.data);
     } catch {}
     finally { setLoading(false); }
   }
 
-  // ── Lógica del escáner ──
   const handleScanned = useCallback((codigo: string) => {
     setEscanerModal(false);
-    // Buscar por numeroParte en el catálogo local
     const encontrada = refacciones.find(r =>
       r.numeroParte && r.numeroParte.trim().toLowerCase() === codigo.trim().toLowerCase()
     );
     if (encontrada) {
-      // Existe → abrir ajuste de stock directo
       setStockModal(encontrada);
-      setStockForm({ tipo: "entrada", cantidad: 1 });
+      setStockForm({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" });
     } else {
-      // No existe → abrir modal nueva refacción con numeroParte prellenado
       setEditing(null);
       setForm({ ...emptyRefaccion, numeroParte: codigo });
       setModal(true);
@@ -231,6 +274,7 @@ export default function Almacen() {
     });
     setModal(true);
   }
+
   async function saveRefaccion() {
     if (!form.nombre.trim()) return;
     setSaving(true);
@@ -246,16 +290,71 @@ export default function Almacen() {
     } catch {}
     finally { setSaving(false); }
   }
+
   async function ajustarStock() {
     if (!stockModal) return;
+    // Si es salida, crear vale
+    if (stockForm.tipo === "salida") {
+      if (!stockForm.tecnicoId) { alert("Selecciona el técnico que solicita el material"); return; }
+      setSaving(true);
+      try {
+        const { data } = await api.post("/vales-salida", {
+          tecnicoId: stockForm.tecnicoId,
+          notas: stockForm.notas || undefined,
+          items: [{ refaccionId: stockModal._id, nombre: stockModal.nombre, cantidad: stockForm.cantidad }],
+        });
+        setVales(prev => [data, ...prev]);
+        setRefacciones(prev => prev.map(r => r._id === stockModal._id ? { ...r, stock: Math.max(0, r.stock - stockForm.cantidad) } : r));
+        setStockModal(null);
+      } catch {}
+      finally { setSaving(false); }
+    } else {
+      // Entrada normal
+      setSaving(true);
+      try {
+        const { data } = await api.post(`/refacciones/${stockModal._id}/stock`, { tipo: stockForm.tipo, cantidad: stockForm.cantidad });
+        setRefacciones(prev => prev.map(r => r._id === data._id ? data : r));
+        setStockModal(null);
+      } catch {}
+      finally { setSaving(false); }
+    }
+  }
+
+  // Vale manual con múltiples items
+  function openValeManual() {
+    setValeItems([]);
+    setValeTecnico("");
+    setValeNotas("");
+    setValeModal(true);
+  }
+  function addValeItem(r: Refaccion) {
+    setValeItems(prev => {
+      const existe = prev.find(i => i.refaccionId === r._id);
+      if (existe) return prev.map(i => i.refaccionId === r._id ? { ...i, cantidad: i.cantidad + 1 } : i);
+      return [...prev, { refaccionId: r._id, nombre: r.nombre, cantidad: 1, unidad: r.unidad }];
+    });
+  }
+  async function guardarValeManual() {
+    if (!valeTecnico || !valeItems.length) return;
     setSaving(true);
     try {
-      const { data } = await api.post(`/refacciones/${stockModal._id}/stock`, stockForm);
-      setRefacciones(prev => prev.map(r => r._id === data._id ? data : r));
-      setStockModal(null);
+      const { data } = await api.post("/vales-salida", {
+        tecnicoId: valeTecnico,
+        notas: valeNotas || undefined,
+        items: valeItems,
+      });
+      setVales(prev => [data, ...prev]);
+      // Actualizar stock local
+      setRefacciones(prev => prev.map(r => {
+        const item = valeItems.find(i => i.refaccionId === r._id);
+        if (!item) return r;
+        return { ...r, stock: Math.max(0, r.stock - item.cantidad) };
+      }));
+      setValeModal(false);
     } catch {}
     finally { setSaving(false); }
   }
+
   async function removeRefaccion(r: Refaccion) {
     if (!confirm(`¿Eliminar ${r.nombre}?`)) return;
     await api.delete(`/refacciones/${r._id}`);
@@ -289,76 +388,37 @@ export default function Almacen() {
     finally { setSaving(false); }
   }
 
-  function openNewTipo() {
-    setEditingTipo(null);
-    setTipoForm({ ...emptyTipo, itemsChecklist: [], refacciones: [] });
-    setNuevoCheckItem("");
-    setTipoModal(true);
-  }
+  function openNewTipo() { setEditingTipo(null); setTipoForm({ ...emptyTipo, itemsChecklist: [], refacciones: [] }); setNuevoCheckItem(""); setTipoModal(true); }
   function openEditTipo(t: TipoServicio) {
     setEditingTipo(t);
-    setTipoForm({
-      nombre: t.nombre, descripcion: t.descripcion ?? "",
-      intervaloHrs: t.intervaloHrs ?? "",
-      itemsChecklist: [...(t.itemsChecklist ?? [])],
-      precioTotal: t.precioTotal ?? 0,
-      refacciones: t.refacciones.map(r => ({ nombre: r.nombre ?? "", cantidad: r.cantidad })),
-    });
-    setNuevoCheckItem("");
-    setTipoModal(true);
+    setTipoForm({ nombre: t.nombre, descripcion: t.descripcion ?? "", intervaloHrs: t.intervaloHrs ?? "", itemsChecklist: [...(t.itemsChecklist ?? [])], precioTotal: t.precioTotal ?? 0, refacciones: t.refacciones.map(r => ({ nombre: r.nombre ?? "", cantidad: r.cantidad })) });
+    setNuevoCheckItem(""); setTipoModal(true);
   }
-  function addCheckItem() {
-    if (!nuevoCheckItem.trim()) return;
-    setTipoForm((p: any) => ({ ...p, itemsChecklist: [...p.itemsChecklist, nuevoCheckItem.trim()] }));
-    setNuevoCheckItem("");
-  }
-  function removeCheckItem(i: number) {
-    setTipoForm((p: any) => ({ ...p, itemsChecklist: p.itemsChecklist.filter((_: any, idx: number) => idx !== i) }));
-  }
+  function addCheckItem() { if (!nuevoCheckItem.trim()) return; setTipoForm((p: any) => ({ ...p, itemsChecklist: [...p.itemsChecklist, nuevoCheckItem.trim()] })); setNuevoCheckItem(""); }
+  function removeCheckItem(i: number) { setTipoForm((p: any) => ({ ...p, itemsChecklist: p.itemsChecklist.filter((_: any, idx: number) => idx !== i) })); }
   function addRefaccionTipo() { setTipoForm((p: any) => ({ ...p, refacciones: [...p.refacciones, { nombre: "", cantidad: 1 }] })); }
   function removeRefaccionTipo(i: number) { setTipoForm((p: any) => ({ ...p, refacciones: p.refacciones.filter((_: any, idx: number) => idx !== i) })); }
-  function updateRefaccionTipo(i: number, field: string, val: any) {
-    setTipoForm((p: any) => { const refs = [...p.refacciones]; refs[i] = { ...refs[i], [field]: val }; return { ...p, refacciones: refs }; });
-  }
+  function updateRefaccionTipo(i: number, field: string, val: any) { setTipoForm((p: any) => { const refs = [...p.refacciones]; refs[i] = { ...refs[i], [field]: val }; return { ...p, refacciones: refs }; }); }
   async function saveTipo() {
     if (!tipoForm.nombre.trim()) return;
     setSaving(true);
     try {
-      const payload = {
-        nombre: tipoForm.nombre,
-        descripcion: tipoForm.descripcion || null,
-        intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null,
-        itemsChecklist: tipoForm.itemsChecklist,
-        precioTotal: +tipoForm.precioTotal || 0,
-        refacciones: tipoForm.refacciones.filter((r: any) => r.nombre?.trim()),
-      };
-      if (editingTipo) {
-        const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload);
-        setTipos(prev => prev.map(t => t._id === editingTipo._id ? data : t));
-      } else {
-        const { data } = await api.post("/tipos-servicio", payload);
-        setTipos(prev => [data, ...prev]);
-      }
+      const payload = { nombre: tipoForm.nombre, descripcion: tipoForm.descripcion || null, intervaloHrs: tipoForm.intervaloHrs ? +tipoForm.intervaloHrs : null, itemsChecklist: tipoForm.itemsChecklist, precioTotal: +tipoForm.precioTotal || 0, refacciones: tipoForm.refacciones.filter((r: any) => r.nombre?.trim()) };
+      if (editingTipo) { const { data } = await api.put(`/tipos-servicio/${editingTipo._id}`, payload); setTipos(prev => prev.map(t => t._id === editingTipo._id ? data : t)); }
+      else { const { data } = await api.post("/tipos-servicio", payload); setTipos(prev => [data, ...prev]); }
       setTipoModal(false);
     } catch {}
     finally { setSaving(false); }
   }
-  async function removeTipo(t: TipoServicio) {
-    if (!confirm(`¿Eliminar tipo "${t.nombre}"?`)) return;
-    await api.delete(`/tipos-servicio/${t._id}`);
-    setTipos(prev => prev.filter(x => x._id !== t._id));
-  }
+  async function removeTipo(t: TipoServicio) { if (!confirm(`¿Eliminar tipo "${t.nombre}"?`)) return; await api.delete(`/tipos-servicio/${t._id}`); setTipos(prev => prev.filter(x => x._id !== t._id)); }
 
   function openNuevaUsada() { setUsadaForm(emptyUsada); setUsadaModal(true); }
   async function subirFotoUsada(file: File) {
     setUploadingUsada(true);
     const fd = new FormData();
     fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
-    try {
-      const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-      const data = await res.json();
-      setUsadaForm((p: any) => ({ ...p, fotos: [...p.fotos, data.secure_url] }));
-    } catch { alert("Error al subir imagen"); }
+    try { const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd }); const data = await res.json(); setUsadaForm((p: any) => ({ ...p, fotos: [...p.fotos, data.secure_url] })); }
+    catch { alert("Error al subir imagen"); }
     finally { setUploadingUsada(false); }
   }
   async function saveUsada() {
@@ -368,32 +428,26 @@ export default function Almacen() {
       const payload = { ...usadaForm };
       if (!payload.servicio) delete payload.servicio;
       const { data } = await api.post("/refacciones-usadas", payload);
-      setUsadas(prev => [data, ...prev]);
-      setUsadaModal(false);
+      setUsadas(prev => [data, ...prev]); setUsadaModal(false);
     } catch {}
     finally { setSaving(false); }
   }
-  async function removeUsada(id: string) {
-    if (!confirm("¿Eliminar este registro?")) return;
-    await api.delete(`/refacciones-usadas/${id}`);
-    setUsadas(prev => prev.filter(x => x._id !== id));
-  }
+  async function removeUsada(id: string) { if (!confirm("¿Eliminar este registro?")) return; await api.delete(`/refacciones-usadas/${id}`); setUsadas(prev => prev.filter(x => x._id !== id)); }
 
   function fmt(date?: string) {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
+  function fmtHora(date?: string) {
+    if (!date) return "—";
+    return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
 
-  const filteredRef = refacciones.filter(r =>
-    r.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (r.proveedor ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (r.marcaCompatible ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRef    = refacciones.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase()) || (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) || (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()) || (r.proveedor ?? "").toLowerCase().includes(search.toLowerCase()) || (r.marcaCompatible ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredOrd    = ordenes.filter(o => o.folio.toLowerCase().includes(search.toLowerCase()) || (o.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (o.montacargas?.numeroEconomico ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredTipos  = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
+  const filteredVales  = vales.filter(v => v.folio.toLowerCase().includes(search.toLowerCase()) || v.tecnico.nombre.toLowerCase().includes(search.toLowerCase()));
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
@@ -417,6 +471,7 @@ export default function Almacen() {
           {canAddRefac && tab === "inventario" && (
             <>
               <button className="btn btn-secondary" onClick={() => setEscanerModal(true)}>📷 Escanear</button>
+              <button className="btn btn-secondary" onClick={openValeManual}>📤 Vale de salida</button>
               <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>
             </>
           )}
@@ -452,12 +507,13 @@ export default function Almacen() {
           <button onClick={() => { setTab("ordenes"); setSearch(""); }} style={tabStyle("ordenes")}>📋 Órdenes</button>
           {canUsadas && <button onClick={() => { setTab("usadas"); setSearch(""); }} style={tabStyle("usadas")}>🔩 Refacciones usadas</button>}
           {canSurtir && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
+          {canAddRefac && <button onClick={() => { setTab("vales"); setSearch(""); }} style={tabStyle("vales")}>📤 Vales de salida</button>}
         </div>
 
         <div className="table-card">
           <div className="table-card-header">
             <p className="table-card-title">
-              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : tab === "usadas" ? "Refacciones usadas / reemplazadas" : "Tipos de servicio"}
+              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : tab === "usadas" ? "Refacciones usadas / reemplazadas" : tab === "vales" ? "Vales de salida de material" : "Tipos de servicio"}
             </p>
             <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
@@ -485,7 +541,7 @@ export default function Almacen() {
                       <td>
                         <div style={{ display: "flex", gap: 4 }}>
                           {canEdit && (<><button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button></>)}
-                          {canAddRefac && (<button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1 }); }} title="Ajustar stock">±</button>)}
+                          {canAddRefac && (<button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" }); }} title="Ajustar stock">±</button>)}
                         </div>
                       </td>
                     </tr>
@@ -509,6 +565,37 @@ export default function Almacen() {
                       <td>{fmt(o.createdAt)}</td>
                       <td><span className={`badge ${ESTATUS_BADGE[o.estatus]}`}>{o.estatus}</span></td>
                       <td>{(o.estatus === "pendiente" || o.estatus === "parcial") && canSurtir && (<button className="btn btn-primary btn-sm" onClick={() => openSurtir(o)}>Surtir</button>)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : tab === "vales" ? (
+            filteredVales.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">📤</span><p>Sin vales de salida registrados</p></div>
+            ) : (
+              <table>
+                <thead><tr><th>Folio</th><th>Técnico</th><th>Material</th><th>Fecha y hora</th><th>Registrado por</th><th>Notas</th><th></th></tr></thead>
+                <tbody>
+                  {filteredVales.map(v => (
+                    <tr key={v._id}>
+                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>{v.folio}</td>
+                      <td style={{ fontWeight: 600 }}>{v.tecnico.nombre}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {v.items.map((item, i) => (
+                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                              {item.cantidad}× {item.nombre}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ fontSize: "0.82rem" }}>{fmtHora(v.createdAt)}</td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.registradoPor?.nombre ?? "—"}</td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.notas || "—"}</td>
+                      <td>
+                        <button className="btn btn-secondary btn-sm" onClick={() => imprimirVale(v)} title="Imprimir vale">🖨️</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -557,35 +644,14 @@ export default function Almacen() {
                     <tr key={t._id}>
                       <td style={{ fontWeight: 600 }}>{t.nombre}</td>
                       <td>{t.intervaloHrs ? `${t.intervaloHrs} hrs` : "—"}</td>
-                      <td style={{ fontWeight: 700, color: "var(--accent)" }}>
-                        {t.precioTotal ? `$${t.precioTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "—"}
-                      </td>
-                      <td>
-                        {(t.itemsChecklist?.length ?? 0) === 0
-                          ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>
-                          : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{t.itemsChecklist.length} item{t.itemsChecklist.length !== 1 ? "s" : ""}</span>
-                        }
-                      </td>
+                      <td style={{ fontWeight: 700, color: "var(--accent)" }}>{t.precioTotal ? `$${t.precioTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "—"}</td>
+                      <td>{(t.itemsChecklist?.length ?? 0) === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span> : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{t.itemsChecklist.length} item{t.itemsChecklist.length !== 1 ? "s" : ""}</span>}</td>
                       <td>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {t.refacciones.length === 0
-                            ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>
-                            : t.refacciones.map((r, i) => (
-                              <span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>
-                                {r.cantidad}× {r.nombre}
-                              </span>
-                            ))
-                          }
+                          {t.refacciones.length === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span> : t.refacciones.map((r, i) => (<span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>{r.cantidad}× {r.nombre}</span>))}
                         </div>
                       </td>
-                      <td>
-                        {canSurtir && (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button>
-                          </div>
-                        )}
-                      </td>
+                      <td>{canSurtir && (<div style={{ display: "flex", gap: 4 }}><button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button></div>)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -596,9 +662,7 @@ export default function Almacen() {
       </div>
 
       {/* ── Modal escáner ── */}
-      {escanerModal && (
-        <EscanerModal onScanned={handleScanned} onClose={() => setEscanerModal(false)} />
-      )}
+      {escanerModal && <EscanerModal onScanned={handleScanned} onClose={() => setEscanerModal(false)} />}
 
       {/* ── Modal refacción ── */}
       {modal && canAddRefac && (
@@ -607,55 +671,15 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">{editing ? "Editar refacción" : "Nueva refacción"}</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Nombre *</label>
-                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" autoFocus />
-              </div>
-              <div className="form-group">
-                <label className="form-label">No. de parte</label>
-                <input className="form-input" value={form.numeroParte} onChange={e => setForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Categoría</label>
-                <select className="form-select" value={form.categoria} onChange={e => setForm((p: any) => ({ ...p, categoria: e.target.value }))}>
-                  <option value="">Sin categoría</option>
-                  {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Proveedor</label>
-                <input className="form-input" value={form.proveedor} onChange={e => setForm((p: any) => ({ ...p, proveedor: e.target.value }))} placeholder="Ej. TVH, CAT, proveedor local..." />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Marca compatible</label>
-                <select className="form-select" value={form.marcaCompatible} onChange={e => setForm((p: any) => ({ ...p, marcaCompatible: e.target.value }))}>
-                  <option value="">Universal / sin marca</option>
-                  {MARCAS_COMPATIBLES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Unidad</label>
-                <select className="form-select" value={form.unidad} onChange={e => setForm((p: any) => ({ ...p, unidad: e.target.value }))}>
-                  <option value="pieza">Pieza</option>
-                  <option value="litro">Litro</option>
-                  <option value="juego">Juego</option>
-                  <option value="par">Par</option>
-                  <option value="metro">Metro</option>
-                  <option value="kg">Kg</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Stock inicial</label>
-                <input className="form-input" type="number" value={form.stock} onChange={e => setForm((p: any) => ({ ...p, stock: +e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Stock mínimo</label>
-                <input className="form-input" type="number" value={form.stockMinimo} onChange={e => setForm((p: any) => ({ ...p, stockMinimo: +e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Precio unitario ($)</label>
-                <input className="form-input" type="number" value={form.precio} onChange={e => setForm((p: any) => ({ ...p, precio: +e.target.value }))} />
-              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Nombre *</label><input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Filtro de aceite" autoFocus /></div>
+              <div className="form-group"><label className="form-label">No. de parte</label><input className="form-input" value={form.numeroParte} onChange={e => setForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" /></div>
+              <div className="form-group"><label className="form-label">Categoría</label><select className="form-select" value={form.categoria} onChange={e => setForm((p: any) => ({ ...p, categoria: e.target.value }))}><option value="">Sin categoría</option>{CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+              <div className="form-group"><label className="form-label">Proveedor</label><input className="form-input" value={form.proveedor} onChange={e => setForm((p: any) => ({ ...p, proveedor: e.target.value }))} placeholder="Ej. TVH, CAT..." /></div>
+              <div className="form-group"><label className="form-label">Marca compatible</label><select className="form-select" value={form.marcaCompatible} onChange={e => setForm((p: any) => ({ ...p, marcaCompatible: e.target.value }))}><option value="">Universal / sin marca</option>{MARCAS_COMPATIBLES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+              <div className="form-group"><label className="form-label">Unidad</label><select className="form-select" value={form.unidad} onChange={e => setForm((p: any) => ({ ...p, unidad: e.target.value }))}><option value="pieza">Pieza</option><option value="litro">Litro</option><option value="juego">Juego</option><option value="par">Par</option><option value="metro">Metro</option><option value="kg">Kg</option></select></div>
+              <div className="form-group"><label className="form-label">Stock inicial</label><input className="form-input" type="number" value={form.stock} onChange={e => setForm((p: any) => ({ ...p, stock: +e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Stock mínimo</label><input className="form-input" type="number" value={form.stockMinimo} onChange={e => setForm((p: any) => ({ ...p, stockMinimo: +e.target.value }))} /></div>
+              <div className="form-group"><label className="form-label">Precio unitario ($)</label><input className="form-input" type="number" value={form.precio} onChange={e => setForm((p: any) => ({ ...p, precio: +e.target.value }))} /></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
@@ -668,21 +692,17 @@ export default function Almacen() {
       {/* ── Modal ajustar stock ── */}
       {stockModal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setStockModal(null)}>
-          <div className="modal" style={{ maxWidth: 380 }}>
+          <div className="modal" style={{ maxWidth: 420 }}>
             <button className="modal-close" onClick={() => setStockModal(null)}>✕</button>
             <h2 className="modal-title">Ajustar stock</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 4 }}>
               <strong style={{ color: "var(--text)" }}>{stockModal.nombre}</strong> — Stock actual: <strong style={{ color: "var(--accent)" }}>{stockModal.stock} {stockModal.unidad}s</strong>
             </p>
-            {stockModal.numeroParte && (
-              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 16 }}>
-                No. parte: <strong style={{ color: "var(--text)" }}>{stockModal.numeroParte}</strong>
-              </p>
-            )}
+            {stockModal.numeroParte && <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 16 }}>No. parte: <strong style={{ color: "var(--text)" }}>{stockModal.numeroParte}</strong></p>}
             <div className="form-grid cols-1">
               <div className="form-group">
                 <label className="form-label">Tipo de movimiento</label>
-                <select className="form-select" value={stockForm.tipo} onChange={e => setStockForm(p => ({ ...p, tipo: e.target.value }))}>
+                <select className="form-select" value={stockForm.tipo} onChange={e => setStockForm(p => ({ ...p, tipo: e.target.value, tecnicoId: "" }))}>
                   <option value="entrada">📥 Entrada</option>
                   <option value="salida">📤 Salida</option>
                 </select>
@@ -691,10 +711,83 @@ export default function Almacen() {
                 <label className="form-label">Cantidad</label>
                 <input className="form-input" type="number" min={1} value={stockForm.cantidad} onChange={e => setStockForm(p => ({ ...p, cantidad: +e.target.value }))} />
               </div>
+              {stockForm.tipo === "salida" && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Técnico que solicita *</label>
+                    <select className="form-select" value={stockForm.tecnicoId} onChange={e => setStockForm(p => ({ ...p, tecnicoId: e.target.value }))}>
+                      <option value="">Selecciona técnico...</option>
+                      {tecnicos.map(t => <option key={t._id} value={t._id}>{t.nombre}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notas (opcional)</label>
+                    <input className="form-input" value={stockForm.notas} onChange={e => setStockForm(p => ({ ...p, notas: e.target.value }))} placeholder="Ej. Para servicio SRV-008..." />
+                  </div>
+                  <div style={{ padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem", color: "var(--blue)" }}>
+                    📋 Se generará un vale de salida automáticamente
+                  </div>
+                </>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setStockModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={ajustarStock} disabled={saving}>{saving ? "Guardando..." : "Confirmar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal vale de salida manual (múltiples items) ── */}
+      {valeModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setValeModal(false)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <button className="modal-close" onClick={() => setValeModal(false)}>✕</button>
+            <h2 className="modal-title">📤 Nuevo vale de salida</h2>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Técnico que solicita *</label>
+                <select className="form-select" value={valeTecnico} onChange={e => setValeTecnico(e.target.value)}>
+                  <option value="">Selecciona técnico...</option>
+                  {tecnicos.map(t => <option key={t._id} value={t._id}>{t.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Notas (opcional)</label>
+                <input className="form-input" value={valeNotas} onChange={e => setValeNotas(e.target.value)} placeholder="Ej. Para servicio SRV-008, montacargas #45..." />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Material a entregar</p>
+              <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
+                <select className="form-select" onChange={e => { const r = refacciones.find(r => r._id === e.target.value); if (r) { addValeItem(r); e.target.value = ""; } }} defaultValue="">
+                  <option value="">+ Agregar refacción al vale...</option>
+                  {refacciones.filter(r => r.stock > 0).map(r => <option key={r._id} value={r._id}>{r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""} — Stock: {r.stock}</option>)}
+                </select>
+              </div>
+              {valeItems.length === 0 ? (
+                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Sin items — agrega refacciones del selector de arriba</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {valeItems.map((item, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 32px", gap: 8, alignItems: "center", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{item.nombre}</span>
+                      <input type="number" min={1} value={item.cantidad}
+                        onChange={e => setValeItems(prev => prev.map((x, idx) => idx === i ? { ...x, cantidad: +e.target.value } : x))}
+                        style={{ padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", textAlign: "center", width: "100%" }} />
+                      <button onClick={() => setValeItems(prev => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem" }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setValeModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarValeManual} disabled={saving || !valeTecnico || !valeItems.length}>
+                {saving ? "Guardando..." : "✅ Generar vale"}
+              </button>
             </div>
           </div>
         </div>
@@ -706,29 +799,18 @@ export default function Almacen() {
           <div className="modal" style={{ maxWidth: 620 }}>
             <button className="modal-close" onClick={() => setSurtirModal(null)}>✕</button>
             <h2 className="modal-title">Surtir orden {surtirModal.folio}</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
-              Servicio: <strong style={{ color: "var(--text)" }}>{surtirModal.servicio?.folio}</strong> — {surtirModal.montacargas?.numeroEconomico} {surtirModal.montacargas?.marca}
-            </p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>Servicio: <strong style={{ color: "var(--text)" }}>{surtirModal.servicio?.folio}</strong> — {surtirModal.montacargas?.numeroEconomico} {surtirModal.montacargas?.marca}</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {surtirModal.items.map((item, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "center", padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
                   <div>
                     <p style={{ margin: 0, fontWeight: 600, fontSize: "0.88rem" }}>{item.refaccion.nombre}</p>
-                    <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                      {item.refaccion.numeroParte ? `#${item.refaccion.numeroParte} · ` : ""}
-                      Stock: <strong style={{ color: item.refaccion.stock >= item.cantidadSolicitada ? "var(--green)" : "var(--red)" }}>{item.refaccion.stock}</strong>
-                    </p>
+                    <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>{item.refaccion.numeroParte ? `#${item.refaccion.numeroParte} · ` : ""}Stock: <strong style={{ color: item.refaccion.stock >= item.cantidadSolicitada ? "var(--green)" : "var(--red)" }}>{item.refaccion.stock}</strong></p>
                   </div>
-                  <div style={{ textAlign: "center" }}>
-                    <p style={{ margin: 0, fontSize: "0.7rem", color: "var(--text-muted)" }}>Solicitado</p>
-                    <p style={{ margin: 0, fontWeight: 700 }}>{item.cantidadSolicitada} {item.refaccion.unidad}</p>
-                  </div>
+                  <div style={{ textAlign: "center" }}><p style={{ margin: 0, fontSize: "0.7rem", color: "var(--text-muted)" }}>Solicitado</p><p style={{ margin: 0, fontWeight: 700 }}>{item.cantidadSolicitada} {item.refaccion.unidad}</p></div>
                   <div style={{ textAlign: "center" }}>
                     <p style={{ margin: 0, fontSize: "0.7rem", color: "var(--text-muted)" }}>A surtir</p>
-                    <input type="number" min={0} max={item.cantidadSolicitada}
-                      value={surtirItems[i]?.cantidadSurtida ?? item.cantidadSolicitada}
-                      onChange={e => setSurtirItems(prev => prev.map((x, idx) => idx === i ? { ...x, cantidadSurtida: +e.target.value } : x))}
-                      style={{ width: 70, padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", textAlign: "center" }} />
+                    <input type="number" min={0} max={item.cantidadSolicitada} value={surtirItems[i]?.cantidadSurtida ?? item.cantidadSolicitada} onChange={e => setSurtirItems(prev => prev.map((x, idx) => idx === i ? { ...x, cantidadSurtida: +e.target.value } : x))} style={{ width: 70, padding: "4px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", textAlign: "center" }} />
                   </div>
                 </div>
               ))}
@@ -740,9 +822,7 @@ export default function Almacen() {
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <label className="form-label" style={{ margin: 0 }}>📷 Fotos de evidencia (opcional)</label>
-                <button className="btn btn-secondary btn-sm" onClick={() => evidenciaRef.current?.click()} disabled={uploadingEvidencia}>
-                  {uploadingEvidencia ? "Subiendo..." : "+ Foto"}
-                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => evidenciaRef.current?.click()} disabled={uploadingEvidencia}>{uploadingEvidencia ? "Subiendo..." : "+ Foto"}</button>
                 <input ref={evidenciaRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirEvidencia(f); e.target.value = ""; }} />
               </div>
               {fotosEvidencia.length > 0 && (
@@ -771,42 +851,16 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setUsadaModal(false)}>✕</button>
             <h2 className="modal-title">Registrar refacción usada</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Descripción *</label>
-                <input className="form-input" value={usadaForm.descripcion} onChange={e => setUsadaForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Filtro de aceite desgastado" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">No. de parte</label>
-                <input className="form-input" value={usadaForm.numeroParte} onChange={e => setUsadaForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Condición</label>
-                <select className="form-select" value={usadaForm.condicion} onChange={e => setUsadaForm((p: any) => ({ ...p, condicion: e.target.value }))}>
-                  <option value="desgastada">Desgastada</option>
-                  <option value="rota">Rota</option>
-                  <option value="quemada">Quemada</option>
-                  <option value="corroida">Corroída</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Servicio relacionado (opcional)</label>
-                <select className="form-select" value={usadaForm.servicio} onChange={e => setUsadaForm((p: any) => ({ ...p, servicio: e.target.value }))}>
-                  <option value="">Sin servicio / descripción libre</option>
-                  {servicios.map(s => <option key={s._id} value={s._id}>{s.folio}{s.problema ? ` — ${s.problema.slice(0, 40)}` : ""}</option>)}
-                </select>
-              </div>
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Notas adicionales</label>
-                <textarea className="form-textarea" rows={2} value={usadaForm.notas} onChange={e => setUsadaForm((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Observaciones, detalles del daño..." />
-              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Descripción *</label><input className="form-input" value={usadaForm.descripcion} onChange={e => setUsadaForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Filtro de aceite desgastado" /></div>
+              <div className="form-group"><label className="form-label">No. de parte</label><input className="form-input" value={usadaForm.numeroParte} onChange={e => setUsadaForm((p: any) => ({ ...p, numeroParte: e.target.value }))} placeholder="Ej. HY-4521" /></div>
+              <div className="form-group"><label className="form-label">Condición</label><select className="form-select" value={usadaForm.condicion} onChange={e => setUsadaForm((p: any) => ({ ...p, condicion: e.target.value }))}><option value="desgastada">Desgastada</option><option value="rota">Rota</option><option value="quemada">Quemada</option><option value="corroida">Corroída</option><option value="otro">Otro</option></select></div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Servicio relacionado (opcional)</label><select className="form-select" value={usadaForm.servicio} onChange={e => setUsadaForm((p: any) => ({ ...p, servicio: e.target.value }))}><option value="">Sin servicio / descripción libre</option>{servicios.map(s => <option key={s._id} value={s._id}>{s.folio}{s.problema ? ` — ${s.problema.slice(0, 40)}` : ""}</option>)}</select></div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Notas adicionales</label><textarea className="form-textarea" rows={2} value={usadaForm.notas} onChange={e => setUsadaForm((p: any) => ({ ...p, notas: e.target.value }))} placeholder="Observaciones, detalles del daño..." /></div>
             </div>
             <div style={{ marginTop: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <label className="form-label" style={{ margin: 0 }}>📷 Fotos de la refacción usada</label>
-                <button className="btn btn-secondary btn-sm" onClick={() => usadaFotoRef.current?.click()} disabled={uploadingUsada}>
-                  {uploadingUsada ? "Subiendo..." : "+ Agregar foto"}
-                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => usadaFotoRef.current?.click()} disabled={uploadingUsada}>{uploadingUsada ? "Subiendo..." : "+ Agregar foto"}</button>
                 <input ref={usadaFotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoUsada(f); e.target.value = ""; }} />
               </div>
               {usadaForm.fotos.length === 0 ? (
@@ -842,47 +896,17 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setTipoModal(false)}>✕</button>
             <h2 className="modal-title">{editingTipo ? "Editar tipo de servicio" : "Nuevo tipo de servicio"}</h2>
             <div className="form-grid">
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Nombre *</label>
-                <input className="form-input" value={tipoForm.nombre} onChange={e => setTipoForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Preventivo 300 hrs" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Intervalo (horas)</label>
-                <input className="form-input" type="number" value={tipoForm.intervaloHrs} onChange={e => setTipoForm((p: any) => ({ ...p, intervaloHrs: e.target.value }))} placeholder="Ej. 300" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">💰 Precio total del servicio</label>
-                <input className="form-input" type="number" value={tipoForm.precioTotal}
-                  onChange={e => setTipoForm((p: any) => ({ ...p, precioTotal: +e.target.value }))}
-                  placeholder="Ej. 4700" />
-                {tipoForm.precioTotal > 0 && (
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
-                    + IVA: ${(tipoForm.precioTotal * 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} total con IVA
-                  </p>
-                )}
-              </div>
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Descripción general (opcional)</label>
-                <input className="form-input" value={tipoForm.descripcion} onChange={e => setTipoForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Mantenimiento preventivo a montacargas combustión 5000 a 6000 lbs" />
-              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Nombre *</label><input className="form-input" value={tipoForm.nombre} onChange={e => setTipoForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Ej. Preventivo 300 hrs" /></div>
+              <div className="form-group"><label className="form-label">Intervalo (horas)</label><input className="form-input" type="number" value={tipoForm.intervaloHrs} onChange={e => setTipoForm((p: any) => ({ ...p, intervaloHrs: e.target.value }))} placeholder="Ej. 300" /></div>
+              <div className="form-group"><label className="form-label">💰 Precio total del servicio</label><input className="form-input" type="number" value={tipoForm.precioTotal} onChange={e => setTipoForm((p: any) => ({ ...p, precioTotal: +e.target.value }))} placeholder="Ej. 4700" />{tipoForm.precioTotal > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>+ IVA: ${(tipoForm.precioTotal * 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} total con IVA</p>}</div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}><label className="form-label">Descripción general (opcional)</label><input className="form-input" value={tipoForm.descripcion} onChange={e => setTipoForm((p: any) => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Mantenimiento preventivo a montacargas combustión 5000 a 6000 lbs" /></div>
             </div>
-
             <div style={{ marginTop: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
-                  ✅ Lo que se checa / realiza
-                </p>
-              </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input className="form-input" value={nuevoCheckItem}
-                  onChange={e => setNuevoCheckItem(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCheckItem(); } }}
-                  placeholder="Ej. Ajuste de frenos — Enter para agregar" />
+                <input className="form-input" value={nuevoCheckItem} onChange={e => setNuevoCheckItem(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCheckItem(); } }} placeholder="Ej. Ajuste de frenos — Enter para agregar" />
                 <button className="btn btn-secondary btn-sm" onClick={addCheckItem} style={{ whiteSpace: "nowrap" }}>+ Agregar</button>
               </div>
-              {tipoForm.itemsChecklist.length === 0 ? (
-                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", padding: "8px 0" }}>Sin items — agrega lo que se revisa en este servicio</p>
-              ) : (
+              {tipoForm.itemsChecklist.length === 0 ? <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", padding: "8px 0" }}>Sin items</p> : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto" }}>
                   {tipoForm.itemsChecklist.map((item: string, i: number) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
@@ -893,33 +917,23 @@ export default function Almacen() {
                 </div>
               )}
             </div>
-
             <div style={{ marginTop: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
-                  🔧 Refacciones sugeridas
-                </p>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>🔧 Refacciones sugeridas</p>
                 <button className="btn btn-secondary btn-sm" onClick={addRefaccionTipo}>+ Agregar</button>
               </div>
-              {tipoForm.refacciones.length === 0 ? (
-                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Sin refacciones sugeridas para este tipo</p>
-              ) : (
+              {tipoForm.refacciones.length === 0 ? <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "12px 0" }}>Sin refacciones sugeridas</p> : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {tipoForm.refacciones.map((r: any, i: number) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 32px", gap: 8, alignItems: "center" }}>
-                      <input className="form-input" value={r.nombre}
-                        onChange={e => updateRefaccionTipo(i, "nombre", e.target.value)}
-                        placeholder="Ej. Filtro de aceite, Bujías..." />
-                      <input className="form-input" type="number" min={1} value={r.cantidad}
-                        onChange={e => updateRefaccionTipo(i, "cantidad", +e.target.value)}
-                        style={{ padding: "8px", textAlign: "center" }} />
+                      <input className="form-input" value={r.nombre} onChange={e => updateRefaccionTipo(i, "nombre", e.target.value)} placeholder="Ej. Filtro de aceite..." />
+                      <input className="form-input" type="number" min={1} value={r.cantidad} onChange={e => updateRefaccionTipo(i, "cantidad", +e.target.value)} style={{ padding: "8px", textAlign: "center" }} />
                       <button className="btn btn-danger btn-icon" onClick={() => removeRefaccionTipo(i)}>✕</button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setTipoModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveTipo} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
