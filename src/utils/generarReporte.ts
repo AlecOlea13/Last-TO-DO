@@ -382,7 +382,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
     `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta ${cot.tipoPeriodo ?? "mensual"} del equipo.</p>` : "",
+    cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta del equipo.</p>` : "",
     "</div>",
 
     '<div class="conditions">',
