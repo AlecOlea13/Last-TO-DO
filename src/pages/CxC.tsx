@@ -82,6 +82,13 @@ export default function CuentasCobrar() {
   const [procesandoRep, setProcesandoRep] = useState(false);
   const [resultadosRep, setResultadosRep] = useState<ResultadoRep[] | null>(null);
 
+  // ── Cobro múltiple ──
+  const [seleccionados, setSeleccionados]         = useState<Set<string>>(new Set());
+  const [modalCobMultiple, setModalCobMultiple]   = useState(false);
+  const [formCobMultiple, setFormCobMultiple]     = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
+  const [savingCobMultiple, setSavingCobMultiple] = useState(false);
+  const [uploadingCobMult, setUploadingCobMult]   = useState(false);
+
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
 
@@ -171,7 +178,6 @@ export default function CuentasCobrar() {
     reader.readAsText(file, "UTF-8");
   }
 
-  // ── Parseo del XML del Recibo Electrónico de Pago (REP / Complemento de Pago) ──
   function parseRepXML(file: File) {
     setParsingRep(true);
     setRepError("");
@@ -185,7 +191,6 @@ export default function CuentasCobrar() {
         const doc = parser.parseFromString(text, "application/xml");
         const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
 
-        // DoctoRelacionado puede venir con o sin namespace prefijo, según el generador del XML
         let doctos = Array.from(doc.getElementsByTagName("pago20:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("pago10:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("DoctoRelacionado"));
@@ -235,7 +240,7 @@ export default function CuentasCobrar() {
         complementoPago: complementoRepUrl || null,
       });
       setResultadosRep(data.resultados);
-      await load(); // refresca la tabla con las facturas recién cobradas
+      await load();
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
@@ -303,6 +308,44 @@ export default function CuentasCobrar() {
       setModalComent(null);
     } catch {}
     finally { setSavingComent(false); }
+  }
+
+  // ── Cobro múltiple ──
+  function toggleSeleccion(id: string) {
+    setSeleccionados(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTodos() {
+    const pendientes = paginados.filter(c => c.estatus !== "cobrada").map(c => c._id);
+    const todosMarcados = pendientes.every(id => seleccionados.has(id));
+    if (todosMarcados) {
+      setSeleccionados(prev => { const next = new Set(prev); pendientes.forEach(id => next.delete(id)); return next; });
+    } else {
+      setSeleccionados(prev => { const next = new Set(prev); pendientes.forEach(id => next.add(id)); return next; });
+    }
+  }
+
+  async function ejecutarCobrosMultiples() {
+    if (!seleccionados.size) return;
+    setSavingCobMultiple(true);
+    try {
+      await api.post("/cxc/cobrar-multiple", {
+        ids: [...seleccionados],
+        ...formCobMultiple,
+      });
+      await load();
+      setSeleccionados(new Set());
+      setModalCobMultiple(false);
+      setFormCobMultiple({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    } finally {
+      setSavingCobMultiple(false);
+    }
   }
 
   const filtered = cxcs.filter(c => {
@@ -423,7 +466,16 @@ export default function CuentasCobrar() {
           <h1 className="page-title">Cuentas por Cobrar</h1>
           <p className="page-subtitle">{cxcs.length} facturas · {cxcs.filter(c => c.estatus !== "cobrada").length} pendientes</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {seleccionados.size > 0 && (
+            <button
+              className="btn btn-primary"
+              style={{ background: "var(--green)", color: "#fff" }}
+              onClick={() => { setFormCobMultiple({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); setModalCobMultiple(true); }}
+            >
+              💳 Cobrar {seleccionados.size} seleccionada{seleccionados.size !== 1 ? "s" : ""}
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={abrirReporte}>🖨️ Reporte</button>
           <button className="btn btn-secondary" onClick={() => setModalRep(true)}>📥 Subir recibo de pago</button>
           <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalXml(true); }}>+ Subir XML</button>
@@ -497,6 +549,16 @@ export default function CuentasCobrar() {
               <table style={{ fontSize: "0.8rem" }}>
                 <thead>
                   <tr>
+                    <th style={{ width: 36, textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          paginados.filter(c => c.estatus !== "cobrada").length > 0 &&
+                          paginados.filter(c => c.estatus !== "cobrada").every(c => seleccionados.has(c._id))
+                        }
+                        onChange={toggleTodos}
+                      />
+                    </th>
                     <th style={{ minWidth: 120 }}>Cliente</th>
                     <th style={{ minWidth: 80 }}>No. Factura</th>
                     <th style={{ minWidth: 100 }}>Importe</th>
@@ -512,6 +574,15 @@ export default function CuentasCobrar() {
                 <tbody>
                   {paginados.map(c => (
                     <tr key={c._id}>
+                      <td style={{ textAlign: "center" }}>
+                        {c.estatus !== "cobrada" && (
+                          <input
+                            type="checkbox"
+                            checked={seleccionados.has(c._id)}
+                            onChange={() => toggleSeleccion(c._id)}
+                          />
+                        )}
+                      </td>
                       <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
                       <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
                       <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
@@ -876,6 +947,77 @@ export default function CuentasCobrar() {
               <button className="btn btn-secondary" onClick={() => setModalComent(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarComentario} disabled={savingComent}>
                 {savingComent ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal cobro múltiple ── */}
+      {modalCobMultiple && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalCobMultiple(false); }}>
+          <div className="modal" style={{ maxWidth: 460 }}>
+            <button className="modal-close" onClick={() => setModalCobMultiple(false)}>✕</button>
+            <h2 className="modal-title">Cobrar {seleccionados.size} factura{seleccionados.size !== 1 ? "s" : ""}</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Se marcarán como cobradas las {seleccionados.size} facturas seleccionadas con la misma fecha y complemento.
+            </p>
+
+            <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+              {cxcs.filter(c => seleccionados.has(c._id)).map(c => (
+                <div key={c._id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.82rem" }}>
+                  <span style={{ fontWeight: 600 }}>{c.nombreReceptor ?? "—"} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>· {c.folioFactura ?? "sin folio"}</span></span>
+                  <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
+              Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">Fecha de cobro *</label>
+                <input className="form-input" type="date" value={formCobMultiple.fechaPago}
+                  onChange={e => setFormCobMultiple(p => ({ ...p, fechaPago: e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Complemento de pago (opcional)</label>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
+                  <span style={{ fontSize: "1.3rem" }}>{uploadingCobMult ? "⏳" : "📎"}</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                    {formCobMultiple.complementoPago ? "✅ Archivo subido" : uploadingCobMult ? "Subiendo..." : "Seleccionar archivo"}
+                  </span>
+                  <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }}
+                    onChange={async e => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      setUploadingCobMult(true);
+                      const fd = new FormData();
+                      fd.append("file", f);
+                      fd.append("upload_preset", UPLOAD_PRESET);
+                      const res  = await fetch(CLOUDINARY_RAW, { method: "POST", body: fd });
+                      const data = await res.json();
+                      setFormCobMultiple(p => ({ ...p, complementoPago: data.secure_url }));
+                      setUploadingCobMult(false);
+                    }} />
+                </label>
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Comentarios (opcional)</label>
+                <textarea className="form-textarea" rows={2} value={formCobMultiple.comentarios}
+                  onChange={e => setFormCobMultiple(p => ({ ...p, comentarios: e.target.value }))}
+                  placeholder="Ej. Pago en bloque transferencia 15 julio" />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalCobMultiple(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={ejecutarCobrosMultiples}
+                disabled={savingCobMultiple || uploadingCobMult}
+                style={{ background: "var(--green)", color: "#fff" }}>
+                {savingCobMultiple ? "Procesando..." : `✅ Confirmar ${seleccionados.size} cobro${seleccionados.size !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
