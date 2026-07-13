@@ -71,8 +71,10 @@ const UPLOAD_PRESET  = "pipsa productos";
 // ── Helpers de semana (martes a lunes) ──
 function getMartes(date: Date): Date {
   const d = new Date(date);
+  // Forzar a mediodia para evitar problemas de timezone
+  d.setHours(12, 0, 0, 0);
   const day = d.getDay(); // 0=dom,1=lun,2=mar,3=mie,4=jue,5=vie,6=sab
-  const diff = day >= 2 ? -(day - 2) : -(day + 5);
+  const diff = day === 2 ? 0 : day === 3 ? -1 : day === 4 ? -2 : day === 5 ? -3 : day === 6 ? -4 : day === 0 ? -5 : -6;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -97,14 +99,17 @@ function toInputWeek(martes: Date): string {
   return `${tmp.getFullYear()}-W${String(nSemana).padStart(2, "0")}`;
 }
 function fromInputWeek(val: string): Date {
+  // El input type="week" siempre da el lunes ISO — le sumamos 1 para llegar al martes
   const [year, week] = val.split("-W").map(Number);
   const jan4 = new Date(year, 0, 4);
   const startOfWeek1 = new Date(jan4);
   startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-  const martes = new Date(startOfWeek1);
-  martes.setDate(startOfWeek1.getDate() + (week - 1) * 7 + 1);
-  martes.setHours(0, 0, 0, 0);
-  return martes;
+  const lunes = new Date(startOfWeek1);
+  lunes.setDate(startOfWeek1.getDate() + (week - 1) * 7);
+  // Sumamos 1 día para ir de lunes ISO → martes pipsa
+  lunes.setDate(lunes.getDate() + 1);
+  lunes.setHours(0, 0, 0, 0);
+  return lunes;
 }
 
 function SearchableSelect({
