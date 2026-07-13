@@ -969,7 +969,7 @@ export default function Cotizaciones() {
       {/* ── Modal reporte semanal ── */}
       {modalReporte && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
-          <div className="modal" style={{ maxWidth: 820, maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+          <div style={{ overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 20, paddingRight: 4 }}>
             <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
               <div>
