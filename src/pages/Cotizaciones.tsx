@@ -938,7 +938,7 @@ export default function Cotizaciones() {
       {/* ── Modal reporte semanal ── */}
       {modalReporte && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
-          <div className="modal" style={{ maxWidth: 900, width: "96vw", height: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className="modal" style={{ maxWidth: 900, width: "96vw", display: "flex", flexDirection: "column" }}>
             <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
 
             {/* Header fijo */}
@@ -981,7 +981,7 @@ export default function Cotizaciones() {
             </div>
 
             {/* Zona scrolleable */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cotsSemana.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
                   <p style={{ fontSize: "2rem", marginBottom: 8 }}>📭</p>
