@@ -64,37 +64,33 @@ const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total
 const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
 const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green", refacciones: "badge-purple" };
-const ESTATUS_BADGE: Record<string, string> = {
-  activa:    "badge-green",
-  facturada: "badge-blue",
-  cancelada: "badge-gray",
-};
+const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada: "badge-blue", cancelada: "badge-gray" };
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
-// ── Helpers de semana ──
-function getLunes(date: Date): Date {
+// ── Helpers de semana (martes a lunes) ──
+function getMartes(date: Date): Date {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+  const day = d.getDay(); // 0=dom,1=lun,2=mar...
+  const diff = day === 2 ? 0 : day < 2 ? -(5 + day) : -(day - 2);
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
-function getDomingo(lunes: Date): Date {
-  const d = new Date(lunes);
-  d.setDate(d.getDate() + 6);
+// function getLunes(date: Date): Date { return getMartes(date); } // alias para compatibilidad
+function getFinSemana(martes: Date): Date {
+  const d = new Date(martes);
+  d.setDate(d.getDate() + 6); // martes + 6 = lunes
   d.setHours(23, 59, 59, 999);
   return d;
 }
-function semanaLabel(lunes: Date): string {
-  const domingo = getDomingo(lunes);
+function semanaLabel(martes: Date): string {
+  const fin = getFinSemana(martes);
   const opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short" };
-  return `${lunes.toLocaleDateString("es-MX", opts)} – ${domingo.toLocaleDateString("es-MX", { ...opts, year: "numeric" })}`;
+  return `${martes.toLocaleDateString("es-MX", opts)} – ${fin.toLocaleDateString("es-MX", { ...opts, year: "numeric" })}`;
 }
-function toInputWeek(lunes: Date): string {
-  // Calcula el número de semana ISO para el input type="week"
-  const tmp = new Date(lunes);
+function toInputWeek(martes: Date): string {
+  const tmp = new Date(martes);
   tmp.setHours(12, 0, 0, 0);
   tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
   const semana1 = new Date(tmp.getFullYear(), 0, 4);
@@ -106,10 +102,10 @@ function fromInputWeek(val: string): Date {
   const jan4 = new Date(year, 0, 4);
   const startOfWeek1 = new Date(jan4);
   startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
-  const lunes = new Date(startOfWeek1);
-  lunes.setDate(startOfWeek1.getDate() + (week - 1) * 7);
-  lunes.setHours(0, 0, 0, 0);
-  return lunes;
+  const martes = new Date(startOfWeek1);
+  martes.setDate(startOfWeek1.getDate() + (week - 1) * 7 + 1);
+  martes.setHours(0, 0, 0, 0);
+  return martes;
 }
 
 function SearchableSelect({
@@ -135,7 +131,6 @@ function SearchableSelect({
   }, []);
 
   const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
-
   function select(id: string) { onChange(id); setQuery(""); setOpen(false); }
 
   return (
@@ -234,8 +229,7 @@ export default function Cotizaciones() {
 
   // ── Reporte semanal ──
   const [modalReporte, setModalReporte] = useState(false);
-  const lunasHoy = getLunes(new Date());
-  const [semanaLunes, setSemanaLunes]   = useState<Date>(lunasHoy);
+  const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
 
   useEffect(() => { load(); }, []);
 
@@ -259,8 +253,8 @@ export default function Cotizaciones() {
 
   // ── Lógica del reporte semanal ──
   function getCotizacionesSemana(): Cotizacion[] {
-    const desde  = semanaLunes;
-    const hasta  = getDomingo(semanaLunes);
+    const desde = semanaInicio;
+    const hasta = getFinSemana(semanaInicio);
     return cotizaciones.filter(c => {
       const f = new Date(c.fecha);
       return f >= desde && f <= hasta;
@@ -278,21 +272,17 @@ export default function Cotizaciones() {
 
   function agruparPorAsesor(cots: Cotizacion[]): GrupoAsesor[] {
     const mapa = new Map<string, GrupoAsesor>();
-
     for (const c of cots) {
       const key    = c.asesor?._id ?? "__sin_asesor__";
       const nombre = c.asesor?.nombre ?? "Sin asesor asignado";
-      if (!mapa.has(key)) {
-        mapa.set(key, { nombre, cotizaciones: [], total: 0, facturadas: 0, activas: 0, canceladas: 0 });
-      }
+      if (!mapa.has(key)) mapa.set(key, { nombre, cotizaciones: [], total: 0, facturadas: 0, activas: 0, canceladas: 0 });
       const g = mapa.get(key)!;
       g.cotizaciones.push(c);
       g.total += c.total;
-      if (c.estatus === "facturada")  g.facturadas++;
+      if (c.estatus === "facturada") g.facturadas++;
       else if (c.estatus === "activa") g.activas++;
       else g.canceladas++;
     }
-
     return [...mapa.values()].sort((a, b) => b.total - a.total);
   }
 
@@ -308,18 +298,13 @@ export default function Cotizaciones() {
     setVerTodosMontas(false);
     const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
-      folio: c.folio, tipo: c.tipo,
-      tipoPeriodo: c.tipoPeriodo ?? "mensual",
-      condiciones: c.condiciones ?? "",
-      cliente: c.cliente?._id ?? "",
-      esOcasional,
+      folio: c.folio, tipo: c.tipo, tipoPeriodo: c.tipoPeriodo ?? "mensual", condiciones: c.condiciones ?? "",
+      cliente: c.cliente?._id ?? "", esOcasional,
       clienteOcasional: c.clienteOcasional ?? { ...emptyClienteOcasional },
       montacargas: c.montacargas?._id ?? "", asesor: c.asesor?._id ?? "",
-      fecha: c.fecha.split("T")[0], lugar: c.lugar,
-      descripcionServicio: c.descripcionServicio ?? "",
+      fecha: c.fecha.split("T")[0], lugar: c.lugar, descripcionServicio: c.descripcionServicio ?? "",
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
-      subtotal: c.subtotal, iva: c.iva, total: c.total,
-      estatus: c.estatus, notas: c.notas ?? "",
+      subtotal: c.subtotal, iva: c.iva, total: c.total, estatus: c.estatus, notas: c.notas ?? "",
       equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
     });
     setModal(true);
@@ -333,11 +318,9 @@ export default function Cotizaciones() {
       cliente: c.cliente?._id ?? "", esOcasional: !c.cliente && !!c.clienteOcasional?.nombre,
       clienteOcasional: c.clienteOcasional ?? { ...emptyClienteOcasional },
       montacargas: c.montacargas?._id ?? "", asesor: c.asesor?._id ?? "",
-      fecha: new Date().toISOString().split("T")[0], lugar: c.lugar,
-      descripcionServicio: c.descripcionServicio ?? "",
+      fecha: new Date().toISOString().split("T")[0], lugar: c.lugar, descripcionServicio: c.descripcionServicio ?? "",
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
-      subtotal: c.subtotal, iva: c.iva, total: c.total,
-      estatus: "activa", notas: c.notas ?? "",
+      subtotal: c.subtotal, iva: c.iva, total: c.total, estatus: "activa", notas: c.notas ?? "",
       equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
     });
     setModal(true);
@@ -540,9 +523,9 @@ export default function Cotizaciones() {
   const clienteOpts = clientes.map(c => ({ _id: c._id, label: c.nombre }));
   const asesorOpts  = asesores.map(a => ({ _id: a._id, label: a.nombre }));
 
-  const montasDelCliente = form.cliente ? montas.filter(m => m.clienteActual?._id === form.cliente) : [];
+  const montasDelCliente  = form.cliente ? montas.filter(m => m.clienteActual?._id === form.cliente) : [];
   const montasDisponibles = verTodosMontas || !form.cliente || montasDelCliente.length === 0 ? montas : montasDelCliente;
-  const montaOpts = montasDisponibles.map(m => ({ _id: m._id, label: `${m.numeroEconomico} — ${m.marca} ${m.modelo}` }));
+  const montaOpts         = montasDisponibles.map(m => ({ _id: m._id, label: `${m.numeroEconomico} — ${m.marca} ${m.modelo}` }));
 
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
@@ -564,20 +547,15 @@ export default function Cotizaciones() {
   }
 
   // ── Datos del reporte actual ──
-  const cotsSemana = getCotizacionesSemana();
-  const grupos     = agruparPorAsesor(cotsSemana);
+  const cotsSemana  = getCotizacionesSemana();
+  const grupos      = agruparPorAsesor(cotsSemana);
   const totalSemana = cotsSemana.reduce((a, c) => a + c.total, 0);
 
   const TIPO_COLOR: Record<string, string> = {
-    servicio:    "#f59e0b",
-    renta:       "#3b82f6",
-    venta:       "#22c55e",
-    refacciones: "#a855f7",
+    servicio: "#f59e0b", renta: "#3b82f6", venta: "#22c55e", refacciones: "#a855f7",
   };
   const ESTATUS_COLOR: Record<string, string> = {
-    activa:    "#22c55e",
-    facturada: "#3b82f6",
-    cancelada: "#6b7280",
+    activa: "#22c55e", facturada: "#3b82f6", cancelada: "#6b7280",
   };
 
   const modalForm = (
@@ -611,7 +589,6 @@ export default function Cotizaciones() {
               👤 Cliente prospecto <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>(no se guarda en el catálogo)</span>
             </span>
           </label>
-
           {form.esOcasional ? (
             <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div className="form-group span-2" style={{ margin: 0 }}>
@@ -749,7 +726,6 @@ export default function Cotizaciones() {
           <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>{esRefacciones ? "Refacciones" : "Conceptos"}</p>
           <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar {esRefacciones ? "refacción" : "concepto"}</button>
         </div>
-
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {form.items.map((item: Item, i: number) => {
             const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
@@ -805,7 +781,6 @@ export default function Cotizaciones() {
             );
           })}
         </div>
-
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
           <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
@@ -829,7 +804,7 @@ export default function Cotizaciones() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {["developer", "gerencia"].includes(rol) && (
-            <button className="btn btn-secondary" onClick={() => { setSemanaLunes(getLunes(new Date())); setModalReporte(true); }}>
+            <button className="btn btn-secondary" onClick={() => { setSemanaInicio(getMartes(new Date())); setModalReporte(true); }}>
               📊 Reporte semanal
             </button>
           )}
@@ -902,12 +877,8 @@ export default function Cotizaciones() {
                       <td>
                         {precioBase !== null ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.92rem" }}>
-                              ${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
-                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                              {c.tipo === "renta" ? "precio renta" : "precio venta"}
-                            </span>
+                            <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.92rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{c.tipo === "renta" ? "precio renta" : "precio venta"}</span>
                           </div>
                         ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                       </td>
@@ -946,9 +917,7 @@ export default function Cotizaciones() {
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)" }}
                               onClick={() => cambiarEstatus(c._id, "cancelada")} title="Cancelar">🚫</button>
                           )}
-                          {canDelete && (
-                            <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>
-                          )}
+                          {canDelete && <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>}
                         </div>
                       </td>
                     </tr>
@@ -967,147 +936,157 @@ export default function Cotizaciones() {
       )}
 
       {/* ── Modal reporte semanal ── */}
-     {modalReporte && (
-  <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
-    <div className="modal" style={{ maxWidth: 860, width: "95vw", height: "85vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
+      {modalReporte && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
+          <div className="modal" style={{ maxWidth: 900, width: "96vw", height: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
 
-      {/* Header fijo */}
-      <div style={{ flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-          <div>
-            <h2 className="modal-title" style={{ marginBottom: 2 }}>📊 Reporte semanal de cotizaciones</h2>
-            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{semanaLabel(semanaLunes)}</p>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() - 7); setSemanaLunes(d); }}>‹ Anterior</button>
-            <input
-              type="week"
-              className="form-input"
-              style={{ width: "auto", padding: "6px 10px", fontSize: "0.85rem" }}
-              value={toInputWeek(semanaLunes)}
-              onChange={e => { if (e.target.value) setSemanaLunes(fromInputWeek(e.target.value)); }}
-            />
-            <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() + 7); setSemanaLunes(d); }}
-              disabled={semanaLunes >= getLunes(new Date())}>Siguiente ›</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Imprimir reporte">🖨️</button>
-          </div>
-        </div>
-
-        {/* Resumen global */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
-          {[
-            { label: "Total cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
-            { label: "Monto total", val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
-            { label: "Facturadas", val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6", icon: "🧾" },
-            { label: "Activas", val: cotsSemana.filter(c => c.estatus === "activa").length, color: "#22c55e", icon: "✅" },
-          ].map(s => (
-            <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--border)", textAlign: "center" }}>
-              <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{s.icon}</div>
-              <p style={{ fontSize: "1.1rem", fontWeight: 700, color: s.color }}>{s.val}</p>
-              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Zona scrolleable */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        {cotsSemana.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
-            <p style={{ fontSize: "2rem", marginBottom: 8 }}>📭</p>
-            <p>Sin cotizaciones esta semana</p>
-          </div>
-        ) : grupos.map(g => (
-          <div key={g.nombre} style={{ background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflow: "hidden", flexShrink: 0 }}>
-            {/* Header del asesor */}
-            <div style={{ padding: "14px 18px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.9rem", color: "#000" }}>
-                  {g.nombre.charAt(0).toUpperCase()}
-                </div>
+            {/* Header fijo */}
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
                 <div>
-                  <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>{g.nombre}</p>
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{g.cotizaciones.length} cotización{g.cotizaciones.length !== 1 ? "es" : ""} esta semana</p>
+                  <h2 className="modal-title" style={{ marginBottom: 2 }}>📊 Reporte semanal de cotizaciones</h2>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{semanaLabel(semanaInicio)}</p>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaInicio); d.setDate(d.getDate() - 7); setSemanaInicio(d); }}>‹ Anterior</button>
+                  <input
+                    type="week"
+                    className="form-input"
+                    style={{ width: "auto", padding: "5px 8px", fontSize: "0.82rem" }}
+                    value={toInputWeek(semanaInicio)}
+                    onChange={e => { if (e.target.value) setSemanaInicio(fromInputWeek(e.target.value)); }}
+                  />
+                  <button className="btn btn-secondary btn-sm"
+                    onClick={() => { const d = new Date(semanaInicio); d.setDate(d.getDate() + 7); setSemanaInicio(d); }}
+                    disabled={semanaInicio >= getMartes(new Date())}>Siguiente ›</button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                <div style={{ textAlign: "right" }}>
-                  <p style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                  <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>total cotizado</p>
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {g.facturadas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 20 }}>🧾 {g.facturadas} facturada{g.facturadas !== 1 ? "s" : ""}</span>}
-                  {g.activas > 0    && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)",  padding: "2px 8px", borderRadius: 20 }}>✅ {g.activas} activa{g.activas !== 1 ? "s" : ""}</span>}
-                  {g.canceladas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", background: "rgba(107,114,128,0.12)", padding: "2px 8px", borderRadius: 20 }}>❌ {g.canceladas} cancelada{g.canceladas !== 1 ? "s" : ""}</span>}
-                </div>
+
+              {/* Resumen global */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+                {[
+                  { label: "Cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
+                  { label: "Monto total", val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
+                  { label: "Facturadas", val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6", icon: "🧾" },
+                  { label: "Activas", val: cotsSemana.filter(c => c.estatus === "activa").length, color: "#22c55e", icon: "✅" },
+                ].map(s => (
+                  <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 12px", border: "1px solid var(--border)", textAlign: "center" }}>
+                    <div style={{ fontSize: "1.2rem", marginBottom: 2 }}>{s.icon}</div>
+                    <p style={{ fontSize: "1rem", fontWeight: 700, color: s.color }}>{s.val}</p>
+                    <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{s.label}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Tabla */}
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ fontSize: "0.8rem" }}>
-                <thead>
-                  <tr>
-                    <th>Folio</th>
-                    <th>Tipo</th>
-                    <th>Cliente</th>
-                    <th>Fecha</th>
-                    <th>Concepto principal</th>
-                    <th style={{ textAlign: "right" }}>Total</th>
-                    <th style={{ textAlign: "center" }}>Estatus</th>
-                    <th>No. Factura</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.cotizaciones.map(c => (
-                    <tr key={c._id}>
-                      <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folio}</td>
-                      <td>
-                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: TIPO_COLOR[c.tipo], background: `${TIPO_COLOR[c.tipo]}1a`, padding: "2px 7px", borderRadius: 10 }}>
-                          {c.tipo}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>
-                        {nombreCliente(c)}
-                        {!c.cliente && c.clienteOcasional?.nombre && (
-                          <span style={{ fontSize: "0.62rem", color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "1px 5px", borderRadius: 4, marginLeft: 5, fontWeight: 700 }}>PROSP</span>
-                        )}
-                      </td>
-                      <td style={{ whiteSpace: "nowrap", fontSize: "0.75rem", color: "var(--text-muted)" }}>{fmt(c.fecha)}</td>
-                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: 200 }}>
-                        <span title={c.items[0]?.descripcion ?? "—"}>
-                          {(c.items[0]?.descripcion ?? "—").slice(0, 45)}{(c.items[0]?.descripcion?.length ?? 0) > 45 ? "…" : ""}
-                        </span>
-                      </td>
-                      <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: c.estatus === "cancelada" ? "var(--text-muted)" : "var(--text)" }}>
-                        ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ textAlign: "center" }}>
-                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: ESTATUS_COLOR[c.estatus], background: `${ESTATUS_COLOR[c.estatus]}1a`, padding: "2px 8px", borderRadius: 10 }}>
-                          {c.estatus === "activa" ? "Activa" : c.estatus === "facturada" ? "Facturada" : "Cancelada"}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
-                        {c.numeroFactura ? `#${c.numeroFactura}` : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Zona scrolleable */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+              {cotsSemana.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
+                  <p style={{ fontSize: "2rem", marginBottom: 8 }}>📭</p>
+                  <p>Sin cotizaciones esta semana</p>
+                </div>
+              ) : grupos.map(g => (
+                <div key={g.nombre} style={{ background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflow: "hidden", flexShrink: 0 }}>
+                  {/* Header del asesor */}
+                  <div style={{ padding: "10px 14px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.85rem", color: "#000", flexShrink: 0 }}>
+                        {g.nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text)" }}>{g.nombre}</p>
+                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{g.cotizaciones.length} cotización{g.cotizaciones.length !== 1 ? "es" : ""} esta semana</p>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div style={{ textAlign: "right" }}>
+                        <p style={{ fontSize: "1rem", fontWeight: 700, color: "var(--accent)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>total cotizado</p>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {g.facturadas > 0 && <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 7px", borderRadius: 20 }}>🧾 {g.facturadas} fact.</span>}
+                        {g.activas > 0    && <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)",  padding: "2px 7px", borderRadius: 20 }}>✅ {g.activas} act.</span>}
+                        {g.canceladas > 0 && <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#6b7280", background: "rgba(107,114,128,0.12)", padding: "2px 7px", borderRadius: 20 }}>❌ {g.canceladas} canc.</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabla */}
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ fontSize: "0.78rem" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ minWidth: 90 }}>Folio</th>
+                          <th style={{ minWidth: 70 }}>Tipo</th>
+                          <th style={{ minWidth: 140 }}>Cliente</th>
+                          <th style={{ minWidth: 85 }}>Fecha</th>
+                          <th>Concepto principal</th>
+                          <th style={{ textAlign: "right", minWidth: 100 }}>Total</th>
+                          <th style={{ textAlign: "center", minWidth: 130 }}>Estatus / Factura</th>
+                          <th style={{ width: 40 }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.cotizaciones.map(c => (
+                          <tr key={c._id}>
+                            <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.73rem", whiteSpace: "nowrap" }}>{c.folio}</td>
+                            <td>
+                              <span style={{ fontSize: "0.68rem", fontWeight: 700, color: TIPO_COLOR[c.tipo], background: `${TIPO_COLOR[c.tipo]}1a`, padding: "2px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>
+                                {c.tipo}
+                              </span>
+                            </td>
+                            <td style={{ fontWeight: 600, fontSize: "0.76rem" }}>
+                              {nombreCliente(c)}
+                              {!c.cliente && c.clienteOcasional?.nombre && (
+                                <span style={{ fontSize: "0.6rem", color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "1px 4px", borderRadius: 4, marginLeft: 4, fontWeight: 700 }}>PROSP</span>
+                              )}
+                            </td>
+                            <td style={{ whiteSpace: "nowrap", fontSize: "0.73rem", color: "var(--text-muted)" }}>{fmt(c.fecha)}</td>
+                            <td style={{ fontSize: "0.73rem", color: "var(--text-muted)" }}>
+                              <span title={c.items[0]?.descripcion ?? "—"}>
+                                {(c.items[0]?.descripcion ?? "—").slice(0, 50)}{(c.items[0]?.descripcion?.length ?? 0) > 50 ? "…" : ""}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: c.estatus === "cancelada" ? "var(--text-muted)" : "var(--text)" }}>
+                              ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td style={{ textAlign: "center" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: ESTATUS_COLOR[c.estatus], background: `${ESTATUS_COLOR[c.estatus]}1a`, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>
+                                  {c.estatus === "activa" ? "Activa" : c.estatus === "facturada" ? "Facturada" : "Cancelada"}
+                                </span>
+                                {c.numeroFactura && (
+                                  <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontFamily: "monospace" }}>#{c.numeroFactura}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: "3px 7px" }}
+                                title="Ver cotización"
+                                onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })}
+                              >👁️</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer fijo */}
+            <div className="modal-footer" style={{ flexShrink: 0, paddingTop: 12 }}>
+              <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cerrar</button>
+              <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Imprimir</button>
             </div>
           </div>
-        ))}
-      </div>
-
-      {/* Footer fijo */}
-      <div className="modal-footer" style={{ flexShrink: 0, paddingTop: 16 }}>
-        <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cerrar</button>
-        <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Imprimir</button>
-      </div>
-    </div>
-  </div>
-)}
+        </div>
+      )}
 
       {/* ── Modal marcar facturada ── */}
       {facturaModal && (
