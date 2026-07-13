@@ -967,142 +967,147 @@ export default function Cotizaciones() {
       )}
 
       {/* ── Modal reporte semanal ── */}
-      {modalReporte && (
-        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
-          <div style={{ overflowY: "auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 20, paddingRight: 4 }}>
-            <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-              <div>
-                <h2 className="modal-title" style={{ marginBottom: 2 }}>📊 Reporte semanal de cotizaciones</h2>
-                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{semanaLabel(semanaLunes)}</p>
-              </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() - 7); setSemanaLunes(d); }}>‹ Anterior</button>
-                <input
-                  type="week"
-                  className="form-input"
-                  style={{ width: "auto", padding: "6px 10px", fontSize: "0.85rem" }}
-                  value={toInputWeek(semanaLunes)}
-                  onChange={e => { if (e.target.value) setSemanaLunes(fromInputWeek(e.target.value)); }}
-                />
-                <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() + 7); setSemanaLunes(d); }}
-                  disabled={semanaLunes >= getLunes(new Date())}>Siguiente ›</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Imprimir reporte">🖨️</button>
-              </div>
-            </div>
+     {modalReporte && (
+  <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
+    <div className="modal" style={{ maxWidth: 860, width: "95vw", height: "85vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
 
-            {/* Resumen global de la semana */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
-              {[
-                { label: "Total cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
-                { label: "Monto total",  val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
-                { label: "Facturadas",   val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6", icon: "🧾" },
-                { label: "Activas",      val: cotsSemana.filter(c => c.estatus === "activa").length,    color: "#22c55e", icon: "✅" },
-              ].map(s => (
-                <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--border)", textAlign: "center" }}>
-                  <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{s.icon}</div>
-                  <p style={{ fontSize: "1.1rem", fontWeight: 700, color: s.color }}>{s.val}</p>
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{s.label}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Contenido scrolleable */}
-            <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
-              {cotsSemana.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
-                  <p style={{ fontSize: "2rem", marginBottom: 8 }}>📭</p>
-                  <p>Sin cotizaciones esta semana</p>
-                </div>
-              ) : grupos.map(g => (
-                <div key={g.nombre} style={{ background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflow: "hidden" }}>
-                  {/* Header del asesor */}
-                  <div style={{ padding: "14px 18px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.9rem", color: "#000" }}>
-                        {g.nombre.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>{g.nombre}</p>
-                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{g.cotizaciones.length} cotización{g.cotizaciones.length !== 1 ? "es" : ""} esta semana</p>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                      <div style={{ textAlign: "right" }}>
-                        <p style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                        <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>total cotizado</p>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {g.facturadas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 20 }}>🧾 {g.facturadas} facturada{g.facturadas !== 1 ? "s" : ""}</span>}
-                        {g.activas > 0    && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)",  padding: "2px 8px", borderRadius: 20 }}>✅ {g.activas} activa{g.activas !== 1 ? "s" : ""}</span>}
-                        {g.canceladas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", background: "rgba(107,114,128,0.12)", padding: "2px 8px", borderRadius: 20 }}>❌ {g.canceladas} cancelada{g.canceladas !== 1 ? "s" : ""}</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tabla de cotizaciones del asesor */}
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ fontSize: "0.8rem" }}>
-                      <thead>
-                        <tr>
-                          <th>Folio</th>
-                          <th>Tipo</th>
-                          <th>Cliente</th>
-                          <th>Fecha</th>
-                          <th>Concepto principal</th>
-                          <th style={{ textAlign: "right" }}>Total</th>
-                          <th style={{ textAlign: "center" }}>Estatus</th>
-                          <th>No. Factura</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.cotizaciones.map(c => (
-                          <tr key={c._id}>
-                            <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folio}</td>
-                            <td>
-                              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: TIPO_COLOR[c.tipo], background: `${TIPO_COLOR[c.tipo]}1a`, padding: "2px 7px", borderRadius: 10 }}>
-                                {c.tipo}
-                              </span>
-                            </td>
-                            <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>
-                              {nombreCliente(c)}
-                              {!c.cliente && c.clienteOcasional?.nombre && (
-                                <span style={{ fontSize: "0.62rem", color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "1px 5px", borderRadius: 4, marginLeft: 5, fontWeight: 700 }}>PROSP</span>
-                              )}
-                            </td>
-                            <td style={{ whiteSpace: "nowrap", fontSize: "0.75rem", color: "var(--text-muted)" }}>{fmt(c.fecha)}</td>
-                            <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: 200 }}>
-                              <span title={c.items[0]?.descripcion ?? "—"}>
-                                {(c.items[0]?.descripcion ?? "—").slice(0, 45)}{(c.items[0]?.descripcion?.length ?? 0) > 45 ? "…" : ""}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: c.estatus === "cancelada" ? "var(--text-muted)" : "var(--text)" }}>
-                              ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <span style={{ fontSize: "0.7rem", fontWeight: 700, color: ESTATUS_COLOR[c.estatus], background: `${ESTATUS_COLOR[c.estatus]}1a`, padding: "2px 8px", borderRadius: 10 }}>
-                                {c.estatus === "activa" ? "Activa" : c.estatus === "facturada" ? "Facturada" : "Cancelada"}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
-                              {c.numeroFactura ? `#${c.numeroFactura}` : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="modal-footer" style={{ paddingTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cerrar</button>
-              <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Imprimir</button>
-            </div>
+      {/* Header fijo */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+          <div>
+            <h2 className="modal-title" style={{ marginBottom: 2 }}>📊 Reporte semanal de cotizaciones</h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{semanaLabel(semanaLunes)}</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() - 7); setSemanaLunes(d); }}>‹ Anterior</button>
+            <input
+              type="week"
+              className="form-input"
+              style={{ width: "auto", padding: "6px 10px", fontSize: "0.85rem" }}
+              value={toInputWeek(semanaLunes)}
+              onChange={e => { if (e.target.value) setSemanaLunes(fromInputWeek(e.target.value)); }}
+            />
+            <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaLunes); d.setDate(d.getDate() + 7); setSemanaLunes(d); }}
+              disabled={semanaLunes >= getLunes(new Date())}>Siguiente ›</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Imprimir reporte">🖨️</button>
           </div>
         </div>
-      )}
+
+        {/* Resumen global */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+          {[
+            { label: "Total cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
+            { label: "Monto total", val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
+            { label: "Facturadas", val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6", icon: "🧾" },
+            { label: "Activas", val: cotsSemana.filter(c => c.estatus === "activa").length, color: "#22c55e", icon: "✅" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--border)", textAlign: "center" }}>
+              <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{s.icon}</div>
+              <p style={{ fontSize: "1.1rem", fontWeight: 700, color: s.color }}>{s.val}</p>
+              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Zona scrolleable */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+        {cotsSemana.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
+            <p style={{ fontSize: "2rem", marginBottom: 8 }}>📭</p>
+            <p>Sin cotizaciones esta semana</p>
+          </div>
+        ) : grupos.map(g => (
+          <div key={g.nombre} style={{ background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflow: "hidden", flexShrink: 0 }}>
+            {/* Header del asesor */}
+            <div style={{ padding: "14px 18px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.9rem", color: "#000" }}>
+                  {g.nombre.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)" }}>{g.nombre}</p>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{g.cotizaciones.length} cotización{g.cotizaciones.length !== 1 ? "es" : ""} esta semana</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                  <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>total cotizado</p>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {g.facturadas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 20 }}>🧾 {g.facturadas} facturada{g.facturadas !== 1 ? "s" : ""}</span>}
+                  {g.activas > 0    && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)",  padding: "2px 8px", borderRadius: 20 }}>✅ {g.activas} activa{g.activas !== 1 ? "s" : ""}</span>}
+                  {g.canceladas > 0 && <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6b7280", background: "rgba(107,114,128,0.12)", padding: "2px 8px", borderRadius: 20 }}>❌ {g.canceladas} cancelada{g.canceladas !== 1 ? "s" : ""}</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla */}
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ fontSize: "0.8rem" }}>
+                <thead>
+                  <tr>
+                    <th>Folio</th>
+                    <th>Tipo</th>
+                    <th>Cliente</th>
+                    <th>Fecha</th>
+                    <th>Concepto principal</th>
+                    <th style={{ textAlign: "right" }}>Total</th>
+                    <th style={{ textAlign: "center" }}>Estatus</th>
+                    <th>No. Factura</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.cotizaciones.map(c => (
+                    <tr key={c._id}>
+                      <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folio}</td>
+                      <td>
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: TIPO_COLOR[c.tipo], background: `${TIPO_COLOR[c.tipo]}1a`, padding: "2px 7px", borderRadius: 10 }}>
+                          {c.tipo}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                        {nombreCliente(c)}
+                        {!c.cliente && c.clienteOcasional?.nombre && (
+                          <span style={{ fontSize: "0.62rem", color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "1px 5px", borderRadius: 4, marginLeft: 5, fontWeight: 700 }}>PROSP</span>
+                        )}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap", fontSize: "0.75rem", color: "var(--text-muted)" }}>{fmt(c.fecha)}</td>
+                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: 200 }}>
+                        <span title={c.items[0]?.descripcion ?? "—"}>
+                          {(c.items[0]?.descripcion ?? "—").slice(0, 45)}{(c.items[0]?.descripcion?.length ?? 0) > 45 ? "…" : ""}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: c.estatus === "cancelada" ? "var(--text-muted)" : "var(--text)" }}>
+                        ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: ESTATUS_COLOR[c.estatus], background: `${ESTATUS_COLOR[c.estatus]}1a`, padding: "2px 8px", borderRadius: 10 }}>
+                          {c.estatus === "activa" ? "Activa" : c.estatus === "facturada" ? "Facturada" : "Cancelada"}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
+                        {c.numeroFactura ? `#${c.numeroFactura}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer fijo */}
+      <div className="modal-footer" style={{ flexShrink: 0, paddingTop: 16 }}>
+        <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cerrar</button>
+        <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Imprimir</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ── Modal marcar facturada ── */}
       {facturaModal && (
