@@ -39,6 +39,17 @@ type ResultadoRep = {
   total?: number;
 };
 
+type RentaDetectada = {
+  _id: string;
+  cliente?: { _id: string; nombre: string };
+  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo: string };
+  fechaInicio: string;
+  fechaFin?: string;
+  tipoPeriodo?: string;
+  precioMensual: number;
+  estatus: string;
+};
+
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
@@ -72,13 +83,13 @@ export default function CuentasCobrar() {
   const [savingComent, setSavingComent] = useState(false);
 
   // ── Modal recibo de pago (REP) ──
-  const [modalRep, setModalRep]       = useState(false);
-  const [parsingRep, setParsingRep]   = useState(false);
-  const [repError, setRepError]       = useState("");
-  const [pagosRep, setPagosRep]       = useState<PagoRep[]>([]);
+  const [modalRep, setModalRep]         = useState(false);
+  const [parsingRep, setParsingRep]     = useState(false);
+  const [repError, setRepError]         = useState("");
+  const [pagosRep, setPagosRep]         = useState<PagoRep[]>([]);
   const [fechaPagoRep, setFechaPagoRep] = useState(new Date().toISOString().split("T")[0]);
   const [complementoRepUrl, setComplementoRepUrl] = useState("");
-  const [uploadingRep, setUploadingRep] = useState(false);
+  const [uploadingRep, setUploadingRep]   = useState(false);
   const [procesandoRep, setProcesandoRep] = useState(false);
   const [resultadosRep, setResultadosRep] = useState<ResultadoRep[] | null>(null);
 
@@ -88,6 +99,16 @@ export default function CuentasCobrar() {
   const [formCobMultiple, setFormCobMultiple]     = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
   const [savingCobMultiple, setSavingCobMultiple] = useState(false);
   const [uploadingCobMult, setUploadingCobMult]   = useState(false);
+
+  // ── Detección de renta al guardar CxC ──
+  const [modalRentaDetectada, setModalRentaDetectada] = useState<{
+    rentas: RentaDetectada[];
+    clienteNombre: string;
+    cxcGuardada: CxC;
+  } | null>(null);
+  const [rentaSeleccionada, setRentaSeleccionada]   = useState<RentaDetectada | null>(null);
+  const [formRenovarDesde, setFormRenovarDesde]     = useState({ fechaFinNueva: "", precioMensualNuevo: 0, notas: "" });
+  const [renovandoDesde, setRenovandoDesde]         = useState(false);
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
@@ -256,6 +277,30 @@ export default function CuentasCobrar() {
     setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
+  // ── Extrae fechas del concepto de la factura ──
+  function extraerFechasDeConcepto(concepto: string): { fechaInicio: string; fechaFin: string } | null {
+    const meses: Record<string, string> = {
+      enero: "01", febrero: "02", marzo: "03", abril: "04", mayo: "05", junio: "06",
+      julio: "07", agosto: "08", septiembre: "09", octubre: "10", noviembre: "11", diciembre: "12",
+    };
+    // Patrón: "DD de Mes [de] [YYYY] al DD de Mes [de] YYYY"
+    const patron = /(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})?\s+al\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i;
+    const match = concepto.match(patron);
+    if (match) {
+      const [, d1, m1, y1, d2, m2, y2] = match;
+      const anio2 = y2 ?? y1;
+      const anio1 = y1 ?? y2;
+      const mes1  = meses[m1.toLowerCase()];
+      const mes2  = meses[m2.toLowerCase()];
+      if (!mes1 || !mes2 || !anio1 || !anio2) return null;
+      return {
+        fechaInicio: `${anio1}-${mes1}-${d1.padStart(2, "0")}`,
+        fechaFin:    `${anio2}-${mes2}-${d2.padStart(2, "0")}`,
+      };
+    }
+    return null;
+  }
+
   async function saveCxc() {
     if (!formF.nombreReceptor && !formF.rfcReceptor) return;
     setSavingF(true);
@@ -264,10 +309,53 @@ export default function CuentasCobrar() {
       setCxcs(prev => [data, ...prev]);
       setModalXml(false);
       setFormF({});
+
+      // Detectar si algún concepto es de renta
+      const primerConcepto = formF.conceptos?.[0]?.descripcion ?? "";
+      const esRenta = /renta/i.test(primerConcepto);
+
+      if (esRenta && formF.rfcReceptor) {
+        try {
+          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", {
+            rfc: formF.rfcReceptor,
+          });
+          if (rentaData.rentas?.length > 0) {
+            const fechas = extraerFechasDeConcepto(primerConcepto);
+            const rentaPrincipal = rentaData.rentas[0];
+            setRentaSeleccionada(rentaPrincipal);
+            setFormRenovarDesde({
+              fechaFinNueva:      fechas?.fechaFin ?? "",
+              precioMensualNuevo: formF.subtotal ?? rentaPrincipal.precioMensual,
+              notas:              `Renovación desde factura ${formF.folioFactura ?? ""}`.trim(),
+            });
+            setModalRentaDetectada({
+              rentas:        rentaData.rentas,
+              clienteNombre: rentaData.clienteNombre,
+              cxcGuardada:   data,
+            });
+          }
+        } catch {}
+      }
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setSavingF(false); }
+  }
+
+  async function renovarDesdeCxC() {
+    if (!rentaSeleccionada || !formRenovarDesde.fechaFinNueva) return;
+    setRenovandoDesde(true);
+    try {
+      await api.post(`/rentas/${rentaSeleccionada._id}/renovar`, formRenovarDesde);
+      const clienteNombre = modalRentaDetectada?.clienteNombre ?? "";
+      setModalRentaDetectada(null);
+      setRentaSeleccionada(null);
+      alert(`✅ Renta de ${clienteNombre} renovada hasta ${formRenovarDesde.fechaFinNueva}`);
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    } finally {
+      setRenovandoDesde(false);
+    }
   }
 
   async function deleteCxc(id: string) {
@@ -468,11 +556,8 @@ export default function CuentasCobrar() {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {seleccionados.size > 0 && (
-            <button
-              className="btn btn-primary"
-              style={{ background: "var(--green)", color: "#fff" }}
-              onClick={() => { setFormCobMultiple({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); setModalCobMultiple(true); }}
-            >
+            <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
+              onClick={() => { setFormCobMultiple({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); setModalCobMultiple(true); }}>
               💳 Cobrar {seleccionados.size} seleccionada{seleccionados.size !== 1 ? "s" : ""}
             </button>
           )}
@@ -550,8 +635,7 @@ export default function CuentasCobrar() {
                 <thead>
                   <tr>
                     <th style={{ width: 36, textAlign: "center" }}>
-                      <input
-                        type="checkbox"
+                      <input type="checkbox"
                         checked={
                           paginados.filter(c => c.estatus !== "cobrada").length > 0 &&
                           paginados.filter(c => c.estatus !== "cobrada").every(c => seleccionados.has(c._id))
@@ -576,11 +660,7 @@ export default function CuentasCobrar() {
                     <tr key={c._id}>
                       <td style={{ textAlign: "center" }}>
                         {c.estatus !== "cobrada" && (
-                          <input
-                            type="checkbox"
-                            checked={seleccionados.has(c._id)}
-                            onChange={() => toggleSeleccion(c._id)}
-                          />
+                          <input type="checkbox" checked={seleccionados.has(c._id)} onChange={() => toggleSeleccion(c._id)} />
                         )}
                       </td>
                       <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
@@ -640,7 +720,6 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 12 }}>
               Sube el XML del Complemento de Pago del SAT. El sistema buscará automáticamente las facturas relacionadas por su UUID y las marcará como cobradas.
             </p>
-
             {!resultadosRep && (
               <>
                 <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px", cursor: "pointer", background: "var(--surface2)", gap: 8 }}
@@ -652,9 +731,7 @@ export default function CuentasCobrar() {
                   <input type="file" accept=".xml" style={{ display: "none" }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) parseRepXML(f); }} />
                 </label>
-
                 {repError && <p style={{ color: "var(--red)", fontSize: "0.85rem", marginTop: 10 }}>⚠ {repError}</p>}
-
                 {pagosRep.length > 0 && (
                   <div style={{ marginTop: 14, background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 16, border: "1px solid var(--border)" }}>
                     <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>
@@ -668,7 +745,6 @@ export default function CuentasCobrar() {
                         </div>
                       ))}
                     </div>
-
                     <div className="form-grid">
                       <div className="form-group span-2">
                         <label className="form-label">Fecha de pago</label>
@@ -690,12 +766,9 @@ export default function CuentasCobrar() {
                 )}
               </>
             )}
-
             {resultadosRep && (
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
-                  Resultado del procesamiento
-                </p>
+                <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>Resultado del procesamiento</p>
                 {resultadosRep.map((r, i) => (
                   <div key={i} style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -723,7 +796,6 @@ export default function CuentasCobrar() {
                 ))}
               </div>
             )}
-
             <div className="modal-footer">
               {!resultadosRep ? (
                 <>
@@ -747,14 +819,9 @@ export default function CuentasCobrar() {
           <div className="modal" style={{ maxWidth: 560 }}>
             <button className="modal-close" onClick={() => setModalXml(false)}>✕</button>
             <h2 className="modal-title">Subir factura XML</h2>
-            <label style={{
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px",
-              cursor: "pointer", background: "var(--surface2)", gap: 8,
-            }}
+            <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "2px dashed var(--border2)", borderRadius: "var(--radius)", padding: "28px 20px", cursor: "pointer", background: "var(--surface2)", gap: 8 }}
               onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseXML(f); }}
-            >
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseXML(f); }}>
               <span style={{ fontSize: "2.5rem" }}>{parsing ? "⏳" : "📂"}</span>
               <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CFDI 3.3 o 4.0</p>
@@ -962,7 +1029,6 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
               Se marcarán como cobradas las {seleccionados.size} facturas seleccionadas con la misma fecha y complemento.
             </p>
-
             <div style={{ maxHeight: 180, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
               {cxcs.filter(c => seleccionados.has(c._id)).map(c => (
                 <div key={c._id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.82rem" }}>
@@ -971,11 +1037,9 @@ export default function CuentasCobrar() {
                 </div>
               ))}
             </div>
-
             <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
               Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
             </div>
-
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Fecha de cobro *</label>
@@ -1011,13 +1075,90 @@ export default function CuentasCobrar() {
                   placeholder="Ej. Pago en bloque transferencia 15 julio" />
               </div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalCobMultiple(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={ejecutarCobrosMultiples}
                 disabled={savingCobMultiple || uploadingCobMult}
                 style={{ background: "var(--green)", color: "#fff" }}>
                 {savingCobMultiple ? "Procesando..." : `✅ Confirmar ${seleccionados.size} cobro${seleccionados.size !== 1 ? "s" : ""}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal renta detectada ── */}
+      {modalRentaDetectada && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalRentaDetectada(null); }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => setModalRentaDetectada(null)}>✕</button>
+            <h2 className="modal-title">🔄 Renta detectada</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              La factura es de <strong style={{ color: "var(--text)" }}>{modalRentaDetectada.clienteNombre}</strong> y encontramos{" "}
+              {modalRentaDetectada.rentas.length} renta{modalRentaDetectada.rentas.length !== 1 ? "s" : ""} activa{modalRentaDetectada.rentas.length !== 1 ? "s" : ""}.
+              ¿Quieres renovarla?
+            </p>
+
+            {/* Selector si hay más de una renta */}
+            {modalRentaDetectada.rentas.length > 1 && (
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label">Selecciona la renta a renovar</label>
+                <select className="form-select" value={rentaSeleccionada?._id ?? ""}
+                  onChange={e => {
+                    const r = modalRentaDetectada.rentas.find(r => r._id === e.target.value);
+                    if (r) setRentaSeleccionada(r);
+                  }}>
+                  {modalRentaDetectada.rentas.map(r => (
+                    <option key={r._id} value={r._id}>
+                      {r.montacargas?.numeroEconomico} — {r.montacargas?.marca} {r.montacargas?.modelo}
+                      {r.fechaFin ? ` (hasta ${new Date(r.fechaFin).toLocaleDateString("es-MX")})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {rentaSeleccionada && (
+              <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 14, border: "1px solid var(--border)", marginBottom: 14, fontSize: "0.85rem" }}>
+                <p style={{ fontWeight: 700, marginBottom: 4 }}>
+                  {rentaSeleccionada.montacargas?.numeroEconomico} — {rentaSeleccionada.montacargas?.marca} {rentaSeleccionada.montacargas?.modelo}
+                </p>
+                <p style={{ color: "var(--text-muted)" }}>
+                  Fin actual: <strong style={{ color: "var(--text)" }}>
+                    {rentaSeleccionada.fechaFin ? new Date(rentaSeleccionada.fechaFin).toLocaleDateString("es-MX") : "—"}
+                  </strong>
+                  {" · "}Precio: <strong style={{ color: "var(--text)" }}>${rentaSeleccionada.precioMensual.toLocaleString()}</strong>
+                </p>
+              </div>
+            )}
+
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">Nueva fecha de fin *</label>
+                <input className="form-input" type="date" value={formRenovarDesde.fechaFinNueva}
+                  onChange={e => setFormRenovarDesde(p => ({ ...p, fechaFinNueva: e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Nuevo precio *</label>
+                <input className="form-input" type="number" value={formRenovarDesde.precioMensualNuevo}
+                  onChange={e => setFormRenovarDesde(p => ({ ...p, precioMensualNuevo: +e.target.value }))} />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Notas (opcional)</label>
+                <textarea className="form-textarea" rows={2} value={formRenovarDesde.notas}
+                  onChange={e => setFormRenovarDesde(p => ({ ...p, notas: e.target.value }))}
+                  placeholder="Ej. Renovación desde factura 8288" />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalRentaDetectada(null)}>
+                Omitir
+              </button>
+              <button className="btn btn-primary" onClick={renovarDesdeCxC}
+                disabled={renovandoDesde || !formRenovarDesde.fechaFinNueva || !formRenovarDesde.precioMensualNuevo}
+                style={{ background: "var(--blue)", color: "#fff" }}>
+                {renovandoDesde ? "Renovando..." : "🔄 Confirmar renovación"}
               </button>
             </div>
           </div>
