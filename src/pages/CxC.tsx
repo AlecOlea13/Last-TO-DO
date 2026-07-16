@@ -50,9 +50,19 @@ type RentaDetectada = {
   estatus: string;
 };
 
+type RenovacionItem = {
+  concepto: string;
+  numeroEconomico: string;
+  precioConcepto: number;
+  fechaFin: string;
+  renta: RentaDetectada | null;
+  incluir: boolean;
+};
+
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
+const canVerMontos   = (rol: string) => ["developer", "gerencia"].includes(rol);
 
 export default function CuentasCobrar() {
   const rol       = localStorage.getItem("rol") ?? "";
@@ -100,15 +110,13 @@ export default function CuentasCobrar() {
   const [savingCobMultiple, setSavingCobMultiple] = useState(false);
   const [uploadingCobMult, setUploadingCobMult]   = useState(false);
 
-  // ── Detección de renta al guardar CxC ──
+  // ── Detección de rentas al guardar CxC ──
   const [modalRentaDetectada, setModalRentaDetectada] = useState<{
-    rentas: RentaDetectada[];
     clienteNombre: string;
-    cxcGuardada: CxC;
+    items: RenovacionItem[];
   } | null>(null);
-  const [rentaSeleccionada, setRentaSeleccionada]   = useState<RentaDetectada | null>(null);
-  const [formRenovarDesde, setFormRenovarDesde]     = useState({ fechaFinNueva: "", precioMensualNuevo: 0, notas: "" });
-  const [renovandoDesde, setRenovandoDesde]         = useState(false);
+  const [renovacionItems, setRenovacionItems] = useState<RenovacionItem[]>([]);
+  const [renovandoDesde, setRenovandoDesde]   = useState(false);
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
@@ -211,24 +219,15 @@ export default function CuentasCobrar() {
         const parser = new DOMParser();
         const doc = parser.parseFromString(text, "application/xml");
         const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
-
         let doctos = Array.from(doc.getElementsByTagName("pago20:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("pago10:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("DoctoRelacionado"));
-
-        if (doctos.length === 0) {
-          throw new Error("No se encontraron documentos relacionados (DoctoRelacionado) en el XML. ¿Es un Recibo Electrónico de Pago (REP)?");
-        }
-
+        if (doctos.length === 0) throw new Error("No se encontraron documentos relacionados (DoctoRelacionado) en el XML. ¿Es un Recibo Electrónico de Pago (REP)?");
         const pagos: PagoRep[] = doctos.map(d => ({
           uuid:        getAttr(d, "IdDocumento"),
           montoPagado: parseFloat(getAttr(d, "ImpPagado") || "0"),
         })).filter(p => p.uuid);
-
-        if (pagos.length === 0) {
-          throw new Error("No se pudo extraer el UUID de los documentos relacionados.");
-        }
-
+        if (pagos.length === 0) throw new Error("No se pudo extraer el UUID de los documentos relacionados.");
         setPagosRep(pagos);
         setParsingRep(false);
       } catch (err: any) {
@@ -277,28 +276,25 @@ export default function CuentasCobrar() {
     setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
-  // ── Extrae fechas del concepto de la factura ──
-  function extraerFechasDeConcepto(concepto: string): { fechaInicio: string; fechaFin: string } | null {
+  // ── Helpers de detección de rentas ──
+  function extraerNumeroEconomico(descripcion: string): string | null {
+    const match = descripcion.match(/#(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  function extraerFechaFinDeConcepto(descripcion: string): string {
     const meses: Record<string, string> = {
       enero: "01", febrero: "02", marzo: "03", abril: "04", mayo: "05", junio: "06",
       julio: "07", agosto: "08", septiembre: "09", octubre: "10", noviembre: "11", diciembre: "12",
     };
-    // Patrón: "DD de Mes [de] [YYYY] al DD de Mes [de] YYYY"
-    const patron = /(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})?\s+al\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i;
-    const match = concepto.match(patron);
+    const patron = /al\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i;
+    const match = descripcion.match(patron);
     if (match) {
-      const [, d1, m1, y1, d2, m2, y2] = match;
-      const anio2 = y2 ?? y1;
-      const anio1 = y1 ?? y2;
-      const mes1  = meses[m1.toLowerCase()];
-      const mes2  = meses[m2.toLowerCase()];
-      if (!mes1 || !mes2 || !anio1 || !anio2) return null;
-      return {
-        fechaInicio: `${anio1}-${mes1}-${d1.padStart(2, "0")}`,
-        fechaFin:    `${anio2}-${mes2}-${d2.padStart(2, "0")}`,
-      };
+      const [, dia, mes, anio] = match;
+      const mesNum = meses[mes.toLowerCase()];
+      if (mesNum) return `${anio}-${mesNum}-${dia.padStart(2, "0")}`;
     }
-    return null;
+    return "";
   }
 
   async function saveCxc() {
@@ -310,29 +306,29 @@ export default function CuentasCobrar() {
       setModalXml(false);
       setFormF({});
 
-      // Detectar si algún concepto es de renta
-      const primerConcepto = formF.conceptos?.[0]?.descripcion ?? "";
-      const esRenta = /renta/i.test(primerConcepto);
-
-      if (esRenta && formF.rfcReceptor) {
+      const conceptosRenta = (formF.conceptos ?? []).filter(c => /renta/i.test(c.descripcion));
+      if (conceptosRenta.length > 0 && formF.rfcReceptor) {
         try {
-          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", {
-            rfc: formF.rfcReceptor,
-          });
+          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: formF.rfcReceptor });
           if (rentaData.rentas?.length > 0) {
-            const fechas = extraerFechasDeConcepto(primerConcepto);
-            const rentaPrincipal = rentaData.rentas[0];
-            setRentaSeleccionada(rentaPrincipal);
-            setFormRenovarDesde({
-              fechaFinNueva:      fechas?.fechaFin ?? "",
-              precioMensualNuevo: formF.subtotal ?? rentaPrincipal.precioMensual,
-              notas:              `Renovación desde factura ${formF.folioFactura ?? ""}`.trim(),
+            const rentas: RentaDetectada[] = rentaData.rentas;
+            const items: RenovacionItem[] = conceptosRenta.map(c => {
+              const numEco = extraerNumeroEconomico(c.descripcion);
+              const fechaFin = extraerFechaFinDeConcepto(c.descripcion);
+              const rentaMatch = numEco
+                ? rentas.find(r => r.montacargas?.numeroEconomico === numEco) ?? null
+                : rentas.length === 1 ? rentas[0] : null;
+              return {
+                concepto:        c.descripcion,
+                numeroEconomico: numEco ?? "—",
+                precioConcepto:  c.importe,
+                fechaFin,
+                renta:           rentaMatch,
+                incluir:         !!rentaMatch,
+              };
             });
-            setModalRentaDetectada({
-              rentas:        rentaData.rentas,
-              clienteNombre: rentaData.clienteNombre,
-              cxcGuardada:   data,
-            });
+            setRenovacionItems(items);
+            setModalRentaDetectada({ clienteNombre: rentaData.clienteNombre, items });
           }
         } catch {}
       }
@@ -343,14 +339,20 @@ export default function CuentasCobrar() {
   }
 
   async function renovarDesdeCxC() {
-    if (!rentaSeleccionada || !formRenovarDesde.fechaFinNueva) return;
+    const itemsAplicar = renovacionItems.filter(i => i.incluir && i.renta && i.fechaFin);
+    if (!itemsAplicar.length) return;
     setRenovandoDesde(true);
     try {
-      await api.post(`/rentas/${rentaSeleccionada._id}/renovar`, formRenovarDesde);
-      const clienteNombre = modalRentaDetectada?.clienteNombre ?? "";
+      for (const item of itemsAplicar) {
+        await api.post(`/rentas/${item.renta!._id}/renovar`, {
+          fechaFinNueva:      item.fechaFin,
+          precioMensualNuevo: item.precioConcepto,
+          notas:              `Renovación desde factura ${formF.folioFactura ?? ""}`.trim(),
+        });
+      }
       setModalRentaDetectada(null);
-      setRentaSeleccionada(null);
-      alert(`✅ Renta de ${clienteNombre} renovada hasta ${formRenovarDesde.fechaFinNueva}`);
+      setRenovacionItems([]);
+      alert(`✅ ${itemsAplicar.length} renta${itemsAplicar.length !== 1 ? "s" : ""} renovada${itemsAplicar.length !== 1 ? "s" : ""} correctamente`);
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     } finally {
@@ -421,10 +423,7 @@ export default function CuentasCobrar() {
     if (!seleccionados.size) return;
     setSavingCobMultiple(true);
     try {
-      await api.post("/cxc/cobrar-multiple", {
-        ids: [...seleccionados],
-        ...formCobMultiple,
-      });
+      await api.post("/cxc/cobrar-multiple", { ids: [...seleccionados], ...formCobMultiple });
       await load();
       setSeleccionados(new Set());
       setModalCobMultiple(false);
@@ -578,7 +577,9 @@ export default function CuentasCobrar() {
           <div className="stat-card">
             <span className="stat-card-icon">⏳</span>
             <p className="stat-card-value" style={{ color: "var(--red)", fontSize: "1.3rem" }}>
-              ${totalPendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              {canVerMontos(rol)
+                ? `$${totalPendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
+                : <span style={{ letterSpacing: 4, color: "var(--text-muted)", fontSize: "1.5rem" }}>••••••</span>}
             </p>
             <p className="stat-card-label">Por cobrar</p>
             <div className="stat-card-accent" style={{ background: "var(--red)" }} />
@@ -586,7 +587,9 @@ export default function CuentasCobrar() {
           <div className="stat-card">
             <span className="stat-card-icon">✅</span>
             <p className="stat-card-value" style={{ color: "var(--green)", fontSize: "1.3rem" }}>
-              ${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              {canVerMontos(rol)
+                ? `$${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
+                : <span style={{ letterSpacing: 4, color: "var(--text-muted)", fontSize: "1.5rem" }}>••••••</span>}
             </p>
             <p className="stat-card-label">Cobrado</p>
             <div className="stat-card-accent" style={{ background: "var(--green)" }} />
@@ -617,7 +620,7 @@ export default function CuentasCobrar() {
           {hayFiltros && (
             <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
               🔍 Mostrando {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
-              {filtered.length > 0 && (
+              {filtered.length > 0 && canVerMontos(rol) && (
                 <span style={{ marginLeft: 12, fontWeight: 700 }}>
                   Total: ${filtered.reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                 </span>
@@ -665,7 +668,11 @@ export default function CuentasCobrar() {
                       </td>
                       <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
                       <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
-                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {canVerMontos(rol)
+                          ? `$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
+                          : <span style={{ color: "var(--text-muted)" }}>••••</span>}
+                      </td>
                       <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaEmision)}</td>
                       <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                         {c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}
@@ -680,7 +687,9 @@ export default function CuentasCobrar() {
                       <td style={{ whiteSpace: "nowrap" }}>
                         {c.estatus === "cobrada"
                           ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.78rem" }}>$0.00</span>
-                          : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
+                          : canVerMontos(rol)
+                            ? <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                            : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>••••</span>}
                       </td>
                       <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                         {c.comentarios
@@ -751,7 +760,7 @@ export default function CuentasCobrar() {
                         <input className="form-input" type="date" value={fechaPagoRep} onChange={e => setFechaPagoRep(e.target.value)} />
                       </div>
                       <div className="form-group span-2">
-                        <label className="form-label">Adjuntar XML del recibo (opcional, queda como respaldo)</label>
+                        <label className="form-label">Adjuntar XML del recibo (opcional)</label>
                         <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface3)" }}>
                           <span style={{ fontSize: "1.3rem" }}>{uploadingRep ? "⏳" : "📎"}</span>
                           <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
@@ -954,7 +963,7 @@ export default function CuentasCobrar() {
             <h2 className="modal-title">Registrar cobro</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               {modalCobro.nombreReceptor} — {modalCobro.folioFactura ?? "—"} —{" "}
-              <strong style={{ color: "var(--green)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>
+              {canVerMontos(rol) && <strong style={{ color: "var(--green)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>}
             </p>
             <div className="form-grid" style={{ marginTop: 12 }}>
               <div className="form-group span-2">
@@ -1033,13 +1042,15 @@ export default function CuentasCobrar() {
               {cxcs.filter(c => seleccionados.has(c._id)).map(c => (
                 <div key={c._id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.82rem" }}>
                   <span style={{ fontWeight: 600 }}>{c.nombreReceptor ?? "—"} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>· {c.folioFactura ?? "sin folio"}</span></span>
-                  <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                  {canVerMontos(rol) && <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
                 </div>
               ))}
             </div>
-            <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
-              Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-            </div>
+            {canVerMontos(rol) && (
+              <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
+                Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </div>
+            )}
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Fecha de cobro *</label>
@@ -1087,78 +1098,94 @@ export default function CuentasCobrar() {
         </div>
       )}
 
-      {/* ── Modal renta detectada ── */}
+      {/* ── Modal rentas detectadas ── */}
       {modalRentaDetectada && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalRentaDetectada(null); }}>
-          <div className="modal" style={{ maxWidth: 500 }}>
+          <div className="modal" style={{ maxWidth: 600 }}>
             <button className="modal-close" onClick={() => setModalRentaDetectada(null)}>✕</button>
-            <h2 className="modal-title">🔄 Renta detectada</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
-              La factura es de <strong style={{ color: "var(--text)" }}>{modalRentaDetectada.clienteNombre}</strong> y encontramos{" "}
-              {modalRentaDetectada.rentas.length} renta{modalRentaDetectada.rentas.length !== 1 ? "s" : ""} activa{modalRentaDetectada.rentas.length !== 1 ? "s" : ""}.
-              ¿Quieres renovarla?
+            <h2 className="modal-title">🔄 Renovar rentas detectadas</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 16 }}>
+              Se detectaron <strong style={{ color: "var(--text)" }}>{renovacionItems.length}</strong> concepto{renovacionItems.length !== 1 ? "s" : ""} de renta para <strong style={{ color: "var(--text)" }}>{modalRentaDetectada.clienteNombre}</strong>.
+              Revisa y confirma los que quieras renovar.
             </p>
-
-            {/* Selector si hay más de una renta */}
-            {modalRentaDetectada.rentas.length > 1 && (
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label">Selecciona la renta a renovar</label>
-                <select className="form-select" value={rentaSeleccionada?._id ?? ""}
-                  onChange={e => {
-                    const r = modalRentaDetectada.rentas.find(r => r._id === e.target.value);
-                    if (r) setRentaSeleccionada(r);
-                  }}>
-                  {modalRentaDetectada.rentas.map(r => (
-                    <option key={r._id} value={r._id}>
-                      {r.montacargas?.numeroEconomico} — {r.montacargas?.marca} {r.montacargas?.modelo}
-                      {r.fechaFin ? ` (hasta ${new Date(r.fechaFin).toLocaleDateString("es-MX")})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {rentaSeleccionada && (
-              <div style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: 14, border: "1px solid var(--border)", marginBottom: 14, fontSize: "0.85rem" }}>
-                <p style={{ fontWeight: 700, marginBottom: 4 }}>
-                  {rentaSeleccionada.montacargas?.numeroEconomico} — {rentaSeleccionada.montacargas?.marca} {rentaSeleccionada.montacargas?.modelo}
-                </p>
-                <p style={{ color: "var(--text-muted)" }}>
-                  Fin actual: <strong style={{ color: "var(--text)" }}>
-                    {rentaSeleccionada.fechaFin ? new Date(rentaSeleccionada.fechaFin).toLocaleDateString("es-MX") : "—"}
-                  </strong>
-                  {" · "}Precio: <strong style={{ color: "var(--text)" }}>${rentaSeleccionada.precioMensual.toLocaleString()}</strong>
-                </p>
-              </div>
-            )}
-
-            <div className="form-grid">
-              <div className="form-group span-2">
-                <label className="form-label">Nueva fecha de fin *</label>
-                <input className="form-input" type="date" value={formRenovarDesde.fechaFinNueva}
-                  onChange={e => setFormRenovarDesde(p => ({ ...p, fechaFinNueva: e.target.value }))} />
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Nuevo precio *</label>
-                <input className="form-input" type="number" value={formRenovarDesde.precioMensualNuevo}
-                  onChange={e => setFormRenovarDesde(p => ({ ...p, precioMensualNuevo: +e.target.value }))} />
-              </div>
-              <div className="form-group span-2">
-                <label className="form-label">Notas (opcional)</label>
-                <textarea className="form-textarea" rows={2} value={formRenovarDesde.notas}
-                  onChange={e => setFormRenovarDesde(p => ({ ...p, notas: e.target.value }))}
-                  placeholder="Ej. Renovación desde factura 8288" />
-              </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              {renovacionItems.map((item, idx) => (
+                <div key={idx} style={{
+                  background: item.renta ? "var(--surface2)" : "rgba(239,68,68,0.05)",
+                  borderRadius: "var(--radius-sm)",
+                  border: `1px solid ${item.renta ? "var(--border)" : "rgba(239,68,68,0.2)"}`,
+                  overflow: "hidden",
+                }}>
+                  <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                      <input type="checkbox" checked={item.incluir && !!item.renta}
+                        disabled={!item.renta}
+                        onChange={e => {
+                          const next = [...renovacionItems];
+                          next[idx] = { ...next[idx], incluir: e.target.checked };
+                          setRenovacionItems(next);
+                        }}
+                        style={{ width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }}
+                      />
+                      <div>
+                        <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>
+                          Equipo #{item.numeroEconomico}
+                          {item.renta && (
+                            <span style={{ marginLeft: 8, fontSize: "0.72rem", fontWeight: 400, color: "var(--text-muted)" }}>
+                              {item.renta.montacargas?.marca} {item.renta.montacargas?.modelo}
+                            </span>
+                          )}
+                        </p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>
+                          {item.concepto.slice(0, 70)}{item.concepto.length > 70 ? "…" : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      {item.renta ? (
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.1)", padding: "2px 8px", borderRadius: 10 }}>✅ Renta encontrada</span>
+                      ) : (
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 8px", borderRadius: 10 }}>⚠ Sin match</span>
+                      )}
+                    </div>
+                  </div>
+                  {item.renta && item.incluir && (
+                    <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "var(--surface3)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Nueva fecha de fin *</label>
+                        <input className="form-input" type="date" value={item.fechaFin}
+                          onChange={e => {
+                            const next = [...renovacionItems];
+                            next[idx] = { ...next[idx], fechaFin: e.target.value };
+                            setRenovacionItems(next);
+                          }} />
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Precio *</label>
+                        <input className="form-input" type="number" value={item.precioConcepto}
+                          onChange={e => {
+                            const next = [...renovacionItems];
+                            next[idx] = { ...next[idx], precioConcepto: +e.target.value };
+                            setRenovacionItems(next);
+                          }} />
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", gridColumn: "1/-1" }}>
+                        Fin anterior: <strong>{item.renta.fechaFin ? new Date(item.renta.fechaFin).toLocaleDateString("es-MX") : "—"}</strong>
+                        {" · "}Precio anterior: <strong>${item.renta.precioMensual.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModalRentaDetectada(null)}>
-                Omitir
-              </button>
+              <button className="btn btn-secondary" onClick={() => setModalRentaDetectada(null)}>Omitir</button>
               <button className="btn btn-primary" onClick={renovarDesdeCxC}
-                disabled={renovandoDesde || !formRenovarDesde.fechaFinNueva || !formRenovarDesde.precioMensualNuevo}
+                disabled={renovandoDesde || !renovacionItems.some(i => i.incluir && i.renta && i.fechaFin)}
                 style={{ background: "var(--blue)", color: "#fff" }}>
-                {renovandoDesde ? "Renovando..." : "🔄 Confirmar renovación"}
+                {renovandoDesde
+                  ? "Renovando..."
+                  : `🔄 Renovar ${renovacionItems.filter(i => i.incluir && i.renta).length} renta${renovacionItems.filter(i => i.incluir && i.renta).length !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>

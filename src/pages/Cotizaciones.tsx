@@ -71,9 +71,8 @@ const UPLOAD_PRESET  = "pipsa productos";
 // ── Helpers de semana (martes a lunes) ──
 function getMartes(date: Date): Date {
   const d = new Date(date);
-  // Forzar a mediodia para evitar problemas de timezone
   d.setHours(12, 0, 0, 0);
-  const day = d.getDay(); // 0=dom,1=lun,2=mar,3=mie,4=jue,5=vie,6=sab
+  const day = d.getDay();
   const diff = day === 2 ? 0 : day === 3 ? -1 : day === 4 ? -2 : day === 5 ? -3 : day === 6 ? -4 : day === 0 ? -5 : -6;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
@@ -99,14 +98,12 @@ function toInputWeek(martes: Date): string {
   return `${tmp.getFullYear()}-W${String(nSemana).padStart(2, "0")}`;
 }
 function fromInputWeek(val: string): Date {
-  // El input type="week" siempre da el lunes ISO — le sumamos 1 para llegar al martes
   const [year, week] = val.split("-W").map(Number);
   const jan4 = new Date(year, 0, 4);
   const startOfWeek1 = new Date(jan4);
   startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
   const lunes = new Date(startOfWeek1);
   lunes.setDate(startOfWeek1.getDate() + (week - 1) * 7);
-  // Sumamos 1 día para ir de lunes ISO → martes pipsa
   lunes.setDate(lunes.getDate() + 1);
   lunes.setHours(0, 0, 0, 0);
   return lunes;
@@ -531,13 +528,30 @@ export default function Cotizaciones() {
   const montasDisponibles = verTodosMontas || !form.cliente || montasDelCliente.length === 0 ? montas : montasDelCliente;
   const montaOpts         = montasDisponibles.map(m => ({ _id: m._id, label: `${m.numeroEconomico} — ${m.marca} ${m.modelo}` }));
 
+  // ── Filtro corregido ──
+  const tiposFiltro = ["servicio", "renta", "venta", "refacciones"];
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
       nombreCliente(c).toLowerCase().includes(search.toLowerCase()) ||
       (c.asesor?.nombre ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (c.numeroFactura ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchFiltro = filtro === "todos" || c.tipo === filtro || c.estatus === filtro;
+
+    let matchFiltro: boolean;
+    if (filtro === "todos") {
+      matchFiltro = true;
+    } else if (filtro === "activa") {
+      matchFiltro = c.estatus === "activa";
+    } else if (filtro === "facturada") {
+      matchFiltro = c.estatus === "facturada";
+    } else if (filtro === "cancelada") {
+      matchFiltro = c.estatus === "cancelada";
+    } else if (tiposFiltro.includes(filtro)) {
+      matchFiltro = c.tipo === filtro && c.estatus === "activa";
+    } else {
+      matchFiltro = true;
+    }
+
     const matchAsesor = filtroAsesor === "todos" || c.asesor?._id === filtroAsesor;
     return matchSearch && matchFiltro && matchAsesor;
   });
@@ -839,13 +853,17 @@ export default function Cotizaciones() {
               <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
               <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtro} onChange={e => setFiltro(e.target.value)}>
                 <option value="todos">Todas</option>
-                <option value="activa">Activas</option>
-                <option value="facturada">Facturadas</option>
-                <option value="cancelada">Canceladas</option>
-                <option value="servicio">Servicio</option>
-                <option value="renta">Renta</option>
-                <option value="venta">Venta</option>
-                <option value="refacciones">Refacciones</option>
+                <optgroup label="Por estatus">
+                  <option value="activa">✅ Activas</option>
+                  <option value="facturada">🧾 Facturadas</option>
+                  <option value="cancelada">❌ Canceladas</option>
+                </optgroup>
+                <optgroup label="Por tipo (solo activas)">
+                  <option value="servicio">🔧 Servicio</option>
+                  <option value="renta">📦 Renta</option>
+                  <option value="venta">💰 Venta</option>
+                  <option value="refacciones">🔩 Refacciones</option>
+                </optgroup>
               </select>
               <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
                 <option value="todos">Todos los asesores</option>
@@ -965,7 +983,6 @@ export default function Cotizaciones() {
               </div>
             </div>
 
-            {/* Resumen global */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               {[
                 { label: "Cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
@@ -981,7 +998,6 @@ export default function Cotizaciones() {
               ))}
             </div>
 
-            {/* Grupos por asesor */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {cotsSemana.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
@@ -990,7 +1006,6 @@ export default function Cotizaciones() {
                 </div>
               ) : grupos.map(g => (
                 <div key={g.nombre} style={{ background: "var(--surface2)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflow: "hidden" }}>
-                  {/* Header del asesor */}
                   <div style={{ padding: "10px 14px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.85rem", color: "#000", flexShrink: 0 }}>
@@ -1013,8 +1028,6 @@ export default function Cotizaciones() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Tabla */}
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ fontSize: "0.78rem" }}>
                       <thead>
@@ -1056,12 +1069,8 @@ export default function Cotizaciones() {
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                                 {precioBase !== null ? (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-                                    <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.78rem" }}>
-                                      ${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                                    </span>
-                                    <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>
-                                      {c.tipo === "renta" ? "renta" : "venta"}
-                                    </span>
+                                    <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.78rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                    <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{c.tipo === "renta" ? "renta" : "venta"}</span>
                                   </div>
                                 ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                               </td>
@@ -1079,12 +1088,8 @@ export default function Cotizaciones() {
                                 </div>
                               </td>
                               <td>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  style={{ padding: "3px 7px" }}
-                                  title="Ver cotización"
-                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })}
-                                >👁️</button>
+                                <button className="btn btn-secondary btn-sm" style={{ padding: "3px 7px" }} title="Ver cotización"
+                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })}>👁️</button>
                               </td>
                             </tr>
                           );
