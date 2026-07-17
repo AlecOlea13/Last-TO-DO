@@ -128,54 +128,107 @@ function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => v
   );
 }
 
-function imprimirVale(vale: Vale) {
-  const fecha = new Date(vale.createdAt).toLocaleString("es-MX", {
-    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
-  });
-  const html = `
-    <!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Vale ${vale.folio}</title>
-    <style>
-      body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #111; }
-      h1 { font-size: 1.4rem; margin-bottom: 4px; }
-      .folio { font-size: 1.8rem; font-weight: 900; color: #f59e0b; margin-bottom: 16px; }
-      .meta { display: flex; gap: 32px; margin-bottom: 24px; padding: 12px 16px; background: #f7f7f9; border-radius: 8px; }
-      .meta div { display: flex; flex-direction: column; gap: 2px; }
-      .meta label { font-size: 0.7rem; text-transform: uppercase; color: #888; letter-spacing: 0.06em; }
-      .meta span { font-weight: 700; font-size: 0.95rem; }
-      table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-      th { padding: 8px 12px; text-align: left; font-size: 0.75rem; text-transform: uppercase; background: #f0f0f0; border-bottom: 2px solid #ddd; }
-      td { padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
-      .firma { margin-top: 48px; display: flex; justify-content: space-between; }
-      .firma div { text-align: center; width: 200px; }
-      .firma .linea { border-top: 1px solid #333; padding-top: 8px; font-size: 0.82rem; color: #555; }
-      .notas { padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; font-size: 0.85rem; margin-bottom: 16px; }
-      @media print { body { margin: 20px; } }
-    </style></head><body>
-    <h1>Vale de Salida de Material</h1>
-    <div class="folio">${vale.folio}</div>
-    <div class="meta">
-      <div><label>Técnico</label><span>${vale.tecnico.nombre}</span></div>
-      <div><label>Fecha y hora</label><span>${fecha}</span></div>
-      <div><label>Registrado por</label><span>${vale.registradoPor?.nombre ?? "—"}</span></div>
-    </div>
-    ${vale.notas ? `<div class="notas">📝 ${vale.notas}</div>` : ""}
-    <table>
-      <thead><tr><th>Refacción</th><th>No. Parte</th><th>Cantidad</th><th>Unidad</th></tr></thead>
-      <tbody>
-        ${vale.items.map(i => `<tr><td>${i.nombre}</td><td>${i.numeroParte ?? "—"}</td><td>${i.cantidad}</td><td>${i.unidad}</td></tr>`).join("")}
-      </tbody>
-    </table>
-    <div class="firma">
-      <div><div class="linea">Entregó</div></div>
-      <div><div class="linea">Recibió: ${vale.tecnico.nombre}</div></div>
-    </div>
-    <script>window.onload = () => { window.print(); }</script>
-    </body></html>
-  `;
-  const w = window.open("", "_blank");
-  w?.document.write(html);
-  w?.document.close();
+async function imprimirValeTermico(vale: Vale) {
+  const qz = (window as any).qz;
+  if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
+
+  try {
+    await qz.websocket.connect();
+    const config = qz.configs.create("GHIA GTP801");
+
+    const fecha = new Date(vale.createdAt).toLocaleString("es-MX", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+
+    const LINE = "--------------------------------\n";
+    const BR   = "\n";
+
+    const fila = (izq: string, der: string) =>
+      izq.substring(0, 22).padEnd(22) + der.substring(0, 10).padStart(10) + "\n";
+
+    let d = "";
+
+    // Init
+    d += "\x1B\x40";
+
+    // Header
+    d += "\x1B\x61\x01";           // centrar
+    d += "\x1B\x21\x30";           // doble alto+ancho
+    d += "PIPSA\n";
+    d += "\x1B\x21\x00";           // normal
+    d += "Montacargas de Guadalajara\n";
+    d += BR;
+    d += "\x1B\x21\x08";           // negrita
+    d += "VALE DE SALIDA DE MATERIAL\n";
+    d += "\x1B\x21\x00";
+    d += LINE;
+
+    // Folio
+    d += "\x1B\x61\x01";
+    d += "\x1B\x21\x10";           // doble ancho
+    d += `${vale.folio}\n`;
+    d += "\x1B\x21\x00";
+    d += BR;
+
+    // Datos generales
+    d += "\x1B\x61\x00";           // izquierda
+    d += `Tecnico : ${vale.tecnico.nombre}\n`;
+    d += `Fecha   : ${fecha}\n`;
+    d += `Reg. por: ${vale.registradoPor?.nombre ?? "—"}\n`;
+
+    if (vale.notas) {
+      d += BR;
+      d += `Notas: ${vale.notas}\n`;
+    }
+
+    d += LINE;
+
+    // Encabezado tabla
+    d += "\x1B\x21\x08";
+    d += fila("DESCRIPCION", "CANT/UND");
+    d += "\x1B\x21\x00";
+    d += LINE;
+
+    // Items
+    for (const item of vale.items) {
+      const cant = `${item.cantidad} ${item.unidad}`;
+      if (item.nombre.length <= 22) {
+        d += fila(item.nombre, cant);
+      } else {
+        d += item.nombre.substring(0, 32) + "\n";
+        d += fila("", cant);
+      }
+      if (item.numeroParte) {
+        d += `  Parte: ${item.numeroParte}\n`;
+      }
+    }
+
+    d += LINE;
+
+    // Firma
+    d += BR;
+    d += "\x1B\x61\x01";
+    d += "Firma de recibido\n";
+    d += BR;
+    d += BR;
+    d += BR;
+    d += "________________________________\n";
+    d += `${vale.tecnico.nombre}\n`;
+    d += BR;
+    d += BR;
+
+    // Corte
+    d += "\x1D\x56\x42\x00";
+
+    const printData = [{ type: "raw", format: "plain", data: d, options: { language: "ESCPOS" } }];
+    await qz.print(config, printData);
+    await qz.websocket.disconnect();
+
+  } catch (err: any) {
+    console.error("Error imprimiendo vale:", err);
+    alert("Error al imprimir: " + (err?.message ?? err));
+  }
 }
 
 export default function Almacen() {
@@ -204,7 +257,6 @@ export default function Almacen() {
 
   const [escanerModal, setEscanerModal] = useState(false);
 
-  // Vale de salida manual (múltiples items)
   const [valeModal, setValeModal]     = useState(false);
   const [valeItems, setValeItems]     = useState<{ refaccionId: string; nombre: string; cantidad: number; unidad: string }[]>([]);
   const [valeTecnico, setValeTecnico] = useState("");
@@ -293,7 +345,6 @@ export default function Almacen() {
 
   async function ajustarStock() {
     if (!stockModal) return;
-    // Si es salida, crear vale
     if (stockForm.tipo === "salida") {
       if (!stockForm.tecnicoId) { alert("Selecciona el técnico que solicita el material"); return; }
       setSaving(true);
@@ -309,7 +360,6 @@ export default function Almacen() {
       } catch {}
       finally { setSaving(false); }
     } else {
-      // Entrada normal
       setSaving(true);
       try {
         const { data } = await api.post(`/refacciones/${stockModal._id}/stock`, { tipo: stockForm.tipo, cantidad: stockForm.cantidad });
@@ -320,7 +370,6 @@ export default function Almacen() {
     }
   }
 
-  // Vale manual con múltiples items
   function openValeManual() {
     setValeItems([]);
     setValeTecnico("");
@@ -344,7 +393,6 @@ export default function Almacen() {
         items: valeItems,
       });
       setVales(prev => [data, ...prev]);
-      // Actualizar stock local
       setRefacciones(prev => prev.map(r => {
         const item = valeItems.find(i => i.refaccionId === r._id);
         if (!item) return r;
@@ -594,7 +642,7 @@ export default function Almacen() {
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.registradoPor?.nombre ?? "—"}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.notas || "—"}</td>
                       <td>
-                        <button className="btn btn-secondary btn-sm" onClick={() => imprimirVale(v)} title="Imprimir vale">🖨️</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => imprimirValeTermico(v)} title="Imprimir vale">🖨️</button>
                       </td>
                     </tr>
                   ))}
@@ -661,10 +709,8 @@ export default function Almacen() {
         </div>
       </div>
 
-      {/* ── Modal escáner ── */}
       {escanerModal && <EscanerModal onScanned={handleScanned} onClose={() => setEscanerModal(false)} />}
 
-      {/* ── Modal refacción ── */}
       {modal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal" style={{ maxWidth: 560 }}>
@@ -689,7 +735,6 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal ajustar stock ── */}
       {stockModal && canAddRefac && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setStockModal(null)}>
           <div className="modal" style={{ maxWidth: 420 }}>
@@ -738,7 +783,6 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal vale de salida manual (múltiples items) ── */}
       {valeModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setValeModal(false)}>
           <div className="modal" style={{ maxWidth: 600 }}>
@@ -757,7 +801,6 @@ export default function Almacen() {
                 <input className="form-input" value={valeNotas} onChange={e => setValeNotas(e.target.value)} placeholder="Ej. Para servicio SRV-008, montacargas #45..." />
               </div>
             </div>
-
             <div style={{ marginTop: 16 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Material a entregar</p>
               <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
@@ -782,7 +825,6 @@ export default function Almacen() {
                 </div>
               )}
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setValeModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarValeManual} disabled={saving || !valeTecnico || !valeItems.length}>
@@ -793,7 +835,6 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal surtir orden ── */}
       {surtirModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSurtirModal(null)}>
           <div className="modal" style={{ maxWidth: 620 }}>
@@ -844,7 +885,6 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal nueva refacción usada ── */}
       {usadaModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setUsadaModal(false)}>
           <div className="modal" style={{ maxWidth: 540 }}>
@@ -889,7 +929,6 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal tipo servicio ── */}
       {tipoModal && canSurtir && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTipoModal(false)}>
           <div className="modal" style={{ maxWidth: 640 }}>

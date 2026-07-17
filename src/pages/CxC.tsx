@@ -62,7 +62,6 @@ type RenovacionItem = {
 const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
-const canVerMontos   = (rol: string) => ["developer", "gerencia"].includes(rol);
 
 export default function CuentasCobrar() {
   const rol       = localStorage.getItem("rol") ?? "";
@@ -486,23 +485,19 @@ export default function CuentasCobrar() {
 
   function abrirReporte() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-    let acum = 0;
     const rows = [...filtered]
       .sort((a, b) => new Date(a.fechaEmision ?? 0).getTime() - new Date(b.fechaEmision ?? 0).getTime())
-      .map(c => {
-        if (c.estatus !== "cobrada") acum += c.total;
-        return `<tr>
-          <td>${c.nombreReceptor ?? "—"}</td>
-          <td>${c.folioFactura ?? "—"}</td>
-          <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-          <td>${fmtCorto(c.fechaEmision)}</td>
-          <td>${c.conceptos[0]?.descripcion?.slice(0,40) ?? "—"}</td>
-          <td>${fmtCorto(c.fechaPago)}</td>
-          <td style="text-align:center">${c.complementoPago ? '<a href="'+c.complementoPago+'">Ver</a>' : "—"}</td>
-          <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$"+c.total.toLocaleString("es-MX",{minimumFractionDigits:2})}</td>
-          <td>${c.comentarios ?? "—"}</td>
-        </tr>`;
-      }).join("");
+      .map(c => `<tr>
+        <td>${c.nombreReceptor ?? "—"}</td>
+        <td>${c.folioFactura ?? "—"}</td>
+        <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td>${fmtCorto(c.fechaEmision)}</td>
+        <td>${c.conceptos[0]?.descripcion?.slice(0,40) ?? "—"}</td>
+        <td>${fmtCorto(c.fechaPago)}</td>
+        <td style="text-align:center">${c.complementoPago ? '<a href="'+c.complementoPago+'">Ver</a>' : "—"}</td>
+        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$"+c.total.toLocaleString("es-MX",{minimumFractionDigits:2})}</td>
+        <td>${c.comentarios ?? "—"}</td>
+      </tr>`).join("");
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Cuentas por Cobrar</title>
 <style>
@@ -567,35 +562,6 @@ export default function CuentasCobrar() {
       </div>
 
       <div className="page-content">
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-          <div className="stat-card">
-            <span className="stat-card-icon">📄</span>
-            <p className="stat-card-value">{cxcs.length}</p>
-            <p className="stat-card-label">Total facturas</p>
-            <div className="stat-card-accent" style={{ background: "var(--blue)" }} />
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-icon">⏳</span>
-            <p className="stat-card-value" style={{ color: "var(--red)", fontSize: "1.3rem" }}>
-              {canVerMontos(rol)
-                ? `$${totalPendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
-                : <span style={{ letterSpacing: 4, color: "var(--text-muted)", fontSize: "1.5rem" }}>••••••</span>}
-            </p>
-            <p className="stat-card-label">Por cobrar</p>
-            <div className="stat-card-accent" style={{ background: "var(--red)" }} />
-          </div>
-          <div className="stat-card">
-            <span className="stat-card-icon">✅</span>
-            <p className="stat-card-value" style={{ color: "var(--green)", fontSize: "1.3rem" }}>
-              {canVerMontos(rol)
-                ? `$${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
-                : <span style={{ letterSpacing: 4, color: "var(--text-muted)", fontSize: "1.5rem" }}>••••••</span>}
-            </p>
-            <p className="stat-card-label">Cobrado</p>
-            <div className="stat-card-accent" style={{ background: "var(--green)" }} />
-          </div>
-        </div>
-
         <div className="table-card" style={{ overflowX: "auto" }}>
           <div className="table-card-header">
             <p className="table-card-title">Todas las cuentas por cobrar</p>
@@ -620,11 +586,9 @@ export default function CuentasCobrar() {
           {hayFiltros && (
             <div style={{ padding: "8px 20px", background: "rgba(245,158,11,0.08)", borderBottom: "1px solid var(--border)", fontSize: "0.8rem", color: "var(--accent)" }}>
               🔍 Mostrando {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
-              {filtered.length > 0 && canVerMontos(rol) && (
-                <span style={{ marginLeft: 12, fontWeight: 700 }}>
-                  Total: ${filtered.reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                </span>
-              )}
+              <span style={{ marginLeft: 12, fontWeight: 700 }}>
+                Total: ${filtered.reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </span>
             </div>
           )}
 
@@ -668,11 +632,7 @@ export default function CuentasCobrar() {
                       </td>
                       <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
                       <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
-                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {canVerMontos(rol)
-                          ? `$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`
-                          : <span style={{ color: "var(--text-muted)" }}>••••</span>}
-                      </td>
+                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaEmision)}</td>
                       <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                         {c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}
@@ -687,9 +647,7 @@ export default function CuentasCobrar() {
                       <td style={{ whiteSpace: "nowrap" }}>
                         {c.estatus === "cobrada"
                           ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.78rem" }}>$0.00</span>
-                          : canVerMontos(rol)
-                            ? <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                            : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>••••</span>}
+                          : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
                       </td>
                       <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                         {c.comentarios
@@ -963,7 +921,7 @@ export default function CuentasCobrar() {
             <h2 className="modal-title">Registrar cobro</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               {modalCobro.nombreReceptor} — {modalCobro.folioFactura ?? "—"} —{" "}
-              {canVerMontos(rol) && <strong style={{ color: "var(--green)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>}
+              <strong style={{ color: "var(--green)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>
             </p>
             <div className="form-grid" style={{ marginTop: 12 }}>
               <div className="form-group span-2">
@@ -1042,15 +1000,13 @@ export default function CuentasCobrar() {
               {cxcs.filter(c => seleccionados.has(c._id)).map(c => (
                 <div key={c._id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.82rem" }}>
                   <span style={{ fontWeight: 600 }}>{c.nombreReceptor ?? "—"} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>· {c.folioFactura ?? "sin folio"}</span></span>
-                  {canVerMontos(rol) && <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
+                  <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                 </div>
               ))}
             </div>
-            {canVerMontos(rol) && (
-              <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
-                Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-              </div>
-            )}
+            <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
+              Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+            </div>
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Fecha de cobro *</label>
