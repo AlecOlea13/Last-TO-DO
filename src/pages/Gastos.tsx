@@ -78,9 +78,10 @@ function urlArchivo(url?: string): string {
 }
 
 export default function Gastos() {
-  const rol       = localStorage.getItem("rol") ?? "";
-  const canDelete = ["developer", "gerencia", "oficina"].includes(rol);
-  const canCancel = ["developer", "gerencia", "oficina"].includes(rol);
+  const rol           = localStorage.getItem("rol") ?? "";
+  const canDelete     = ["developer", "gerencia", "oficina"].includes(rol);
+  const canCancel     = ["developer", "gerencia", "oficina"].includes(rol);
+  const canVerTotales = ["developer", "gerencia"].includes(rol);
 
   const [tab, setTab]               = useState<"fiscal" | "nofiscal">("fiscal");
   const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
@@ -179,6 +180,31 @@ export default function Gastos() {
     setFechaDesde("");
     setFechaHasta("");
     setSearch("");
+  }
+
+  function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const now = new Date();
+    if (tipo === "semana") {
+      const lunes = new Date(now);
+      lunes.setDate(now.getDate() - now.getDay() + 1);
+      lunes.setHours(0,0,0,0);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      domingo.setHours(23,59,59,999);
+      return d >= lunes && d <= domingo;
+    }
+    if (tipo === "mes") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (tipo === "año") return d.getFullYear() === now.getFullYear();
+    return false;
+  }
+
+  function sumaFiscal(tipo?: "semana" | "mes" | "año") {
+    return fiscales.filter(g => tipo ? enRango(g.fechaEmision, tipo) : true).reduce((acc, g) => acc + g.total, 0);
+  }
+  function sumaNoFiscal(tipo?: "semana" | "mes" | "año") {
+    return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
   }
 
   function enRangoCustom(dateStr?: string, mesDesde?: string, mesHasta?: string): boolean {
@@ -679,24 +705,6 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
     setModalReportes(false);
   }
 
-  // function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
-  //   if (!dateStr) return false;
-  //   const d = new Date(dateStr);
-  //   const now = new Date();
-  //   if (tipo === "semana") {
-  //     const lunes = new Date(now);
-  //     lunes.setDate(now.getDate() - now.getDay() + 1);
-  //     lunes.setHours(0,0,0,0);
-  //     const domingo = new Date(lunes);
-  //     domingo.setDate(lunes.getDate() + 6);
-  //     domingo.setHours(23,59,59,999);
-  //     return d >= lunes && d <= domingo;
-  //   }
-  //   if (tipo === "mes") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  //   if (tipo === "año") return d.getFullYear() === now.getFullYear();
-  //   return false;
-  // }
-
   const filteredF = fiscales.filter(g => {
     const matchSearch =
       (g.nombreEmisor ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -745,6 +753,19 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
     const g = fiscales.find(x => x._id === id);
     return acc + (g?.total ?? 0);
   }, 0);
+
+  const statsF = [
+    { label: "Esta semana",   val: sumaFiscal("semana") },
+    { label: "Este mes",      val: sumaFiscal("mes") },
+    { label: "Este año",      val: sumaFiscal("año") },
+    { label: "Total general", val: sumaFiscal() },
+  ];
+  const statsNF = [
+    { label: "Esta semana",   val: sumaNoFiscal("semana") },
+    { label: "Este mes",      val: sumaNoFiscal("mes") },
+    { label: "Este año",      val: sumaNoFiscal("año") },
+    { label: "Total general", val: sumaNoFiscal() },
+  ];
 
   function EstatusPago({ g }: { g: GastoFiscal }) {
     const { estatus, fechaPago, comprobantePago, total, pagos } = g;
@@ -818,7 +839,6 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
     </div>
   );
 
-  // ── Preview del periodo en el modal ──
   function labelPeriodo() {
     if (reportePeriodo === "semana") {
       const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
@@ -866,6 +886,18 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
             </button>
           ))}
         </div>
+
+        {canVerTotales && (
+          <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+            {(tab === "fiscal" ? statsF : statsNF).map(s => (
+              <div key={s.label} className="stat-card">
+                <p className="stat-card-value" style={{ color: "var(--accent)", fontSize: "1.2rem" }}>${s.val.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <p className="stat-card-label">{s.label}</p>
+                <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
+              </div>
+            ))}
+          </div>
+        )}
 
         {tab === "fiscal" && (
           <div className="table-card">

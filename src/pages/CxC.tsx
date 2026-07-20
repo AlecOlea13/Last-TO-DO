@@ -64,8 +64,9 @@ const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
 export default function CuentasCobrar() {
-  const rol       = localStorage.getItem("rol") ?? "";
-  const canDelete = ["developer", "gerencia"].includes(rol);
+  const rol          = localStorage.getItem("rol") ?? "";
+  const canDelete    = ["developer", "gerencia"].includes(rol);
+  const canVerTotales = ["developer", "gerencia"].includes(rol);
 
   const [cxcs, setCxcs]         = useState<CxC[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -113,6 +114,24 @@ export default function CuentasCobrar() {
   } | null>(null);
   const [renovacionItems, setRenovacionItems] = useState<RenovacionItem[]>([]);
   const [renovandoDesde, setRenovandoDesde]   = useState(false);
+
+  // ── Modal Reportes ──
+  const [modalReportes, setModalReportes] = useState(false);
+  const [reportePeriodo, setReportePeriodo] = useState<"semana" | "mes" | "año" | "custom">("mes");
+  const [reporteMesDesde, setReporteMesDesde] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [reporteMesHasta, setReporteMesHasta] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [reporteAnio, setReporteAnio] = useState(() => new Date().getFullYear());
+  const [reporteSemana, setReporteSemana] = useState(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    return Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+  });
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
@@ -429,6 +448,132 @@ export default function CuentasCobrar() {
     }
   }
 
+  // ── Reporte ──
+  function getLunesDeSemana(semana: number, anio: number): Date {
+    const enero1 = new Date(anio, 0, 1);
+    const lunes = new Date(enero1);
+    lunes.setDate(enero1.getDate() + (semana - 1) * 7 - enero1.getDay() + 1);
+    lunes.setHours(0, 0, 0, 0);
+    return lunes;
+  }
+
+  function filtrarPorPeriodo(c: CxC): boolean {
+    const dateStr = c.fechaEmision;
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      domingo.setHours(23, 59, 59, 999);
+      return d >= lunes && d <= domingo;
+    }
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      return d.getFullYear() === y && d.getMonth() === m - 1;
+    }
+    if (reportePeriodo === "año") return d.getFullYear() === reporteAnio;
+    if (reportePeriodo === "custom") {
+      if (reporteMesDesde) {
+        const [y, m] = reporteMesDesde.split("-").map(Number);
+        if (d < new Date(y, m - 1, 1)) return false;
+      }
+      if (reporteMesHasta) {
+        const [y, m] = reporteMesHasta.split("-").map(Number);
+        if (d > new Date(y, m, 0, 23, 59, 59)) return false;
+      }
+      return true;
+    }
+    return true;
+  }
+
+  function labelPeriodo(): string {
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+      return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
+    }
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+    if (reportePeriodo === "año") return `Año ${reporteAnio}`;
+    const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    return desde === hasta ? desde : `${desde} — ${hasta}`;
+  }
+
+  function generarReporte() {
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const datos = cxcs.filter(filtrarPorPeriodo);
+    const rows = [...datos]
+      .sort((a, b) => new Date(a.fechaEmision ?? 0).getTime() - new Date(b.fechaEmision ?? 0).getTime())
+      .map(c => `<tr>
+        <td>${c.nombreReceptor ?? "—"}</td>
+        <td>${c.folioFactura ?? "—"}</td>
+        <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td>${fmtCorto(c.fechaEmision)}</td>
+        <td>${c.conceptos[0]?.descripcion?.slice(0,40) ?? "—"}</td>
+        <td>${fmtCorto(c.fechaPago)}</td>
+        <td style="text-align:center">${c.complementoPago ? '<a href="'+c.complementoPago+'">Ver</a>' : "—"}</td>
+        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$"+c.total.toLocaleString("es-MX",{minimumFractionDigits:2})}</td>
+        <td>${c.comentarios ?? "—"}</td>
+      </tr>`).join("");
+
+    const pendiente = datos.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + c.total, 0);
+    const cobrado   = datos.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
+    const subtitulo = labelPeriodo();
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Cuentas por Cobrar — ${subtitulo}</title>
+<style>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px; }
+  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
+  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
+  h1 { font-size:13pt;font-weight:900; }
+  p { font-size:8.5pt;color:#555; }
+  table { width:100%;border-collapse:collapse;font-size:8.5pt; }
+  thead { background:#222;color:#fff; }
+  thead th { padding:5px 7px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; }
+  td { padding:4px 7px;border-bottom:1px solid #ddd; }
+  .totales { margin-top:12px;text-align:right;font-size:9.5pt; }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+  @media print { .print-btn { display:none; } body { padding:10px; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Pipsa" />
+  <div>
+    <h1>Cuentas por Cobrar — ${subtitulo}</h1>
+    <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX",{day:"2-digit",month:"long",year:"numeric"})}</p>
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th>Cliente</th><th>No. Factura</th><th style="text-align:right">Importe</th><th>Fecha factura</th>
+    <th>Concepto</th><th>Fecha pago</th><th>Complemento</th><th style="text-align:right">Pendiente</th><th>Comentarios</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="totales">
+  <div>Total pendiente: <strong style="color:#dc2626">$${pendiente.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
+  <div>Total cobrado: <strong style="color:#16a34a">$${cobrado.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
+</div>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setModalReportes(false);
+  }
+
   const filtered = cxcs.filter(c => {
     const matchSearch =
       (c.nombreReceptor ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -478,64 +623,6 @@ export default function CuentasCobrar() {
     );
   }
 
-  function abrirReporte() {
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-    const rows = [...filtered]
-      .sort((a, b) => new Date(a.fechaEmision ?? 0).getTime() - new Date(b.fechaEmision ?? 0).getTime())
-      .map(c => `<tr>
-        <td>${c.nombreReceptor ?? "—"}</td>
-        <td>${c.folioFactura ?? "—"}</td>
-        <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-        <td>${fmtCorto(c.fechaEmision)}</td>
-        <td>${c.conceptos[0]?.descripcion?.slice(0,40) ?? "—"}</td>
-        <td>${fmtCorto(c.fechaPago)}</td>
-        <td style="text-align:center">${c.complementoPago ? '<a href="'+c.complementoPago+'">Ver</a>' : "—"}</td>
-        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$"+c.total.toLocaleString("es-MX",{minimumFractionDigits:2})}</td>
-        <td>${c.comentarios ?? "—"}</td>
-      </tr>`).join("");
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Cuentas por Cobrar</title>
-<style>
-  * { margin:0;padding:0;box-sizing:border-box; }
-  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px; }
-  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
-  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
-  h1 { font-size:13pt;font-weight:900; }
-  p { font-size:8.5pt;color:#555; }
-  table { width:100%;border-collapse:collapse;font-size:8.5pt; }
-  thead { background:#222;color:#fff; }
-  thead th { padding:5px 7px;text-align:left; }
-  tbody tr:nth-child(even) { background:#f5f5f5; }
-  td { padding:4px 7px;border-bottom:1px solid #ddd; }
-  .totales { margin-top:12px;text-align:right;font-size:9.5pt; }
-  @media print { body { padding:10px; } }
-</style></head><body>
-<div class="header">
-  <img src="${logoUrl}" class="logo" alt="Pipsa" />
-  <div><h1>Cuentas por Cobrar</h1>
-  <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-  <p>Generado el ${new Date().toLocaleDateString("es-MX",{day:"2-digit",month:"long",year:"numeric"})}</p></div>
-</div>
-<table>
-  <thead><tr>
-    <th>Cliente</th><th>No. Factura</th><th style="text-align:right">Importe</th><th>Fecha factura</th>
-    <th>Concepto</th><th>Fecha pago</th><th>Complemento</th><th style="text-align:right">Pendiente</th><th>Comentarios</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<div class="totales">
-  <div>Total pendiente: <strong style="color:#dc2626">$${totalPendiente.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
-  <div>Total cobrado: <strong style="color:#16a34a">$${totalCobrado.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
-</div>
-<script>window.onload=function(){setTimeout(function(){window.print();},500);window.onafterprint=function(){window.close();};};</script>
-</body></html>`;
-    const blob = new Blob([html], { type: "text/html" });
-    const url  = URL.createObjectURL(blob);
-    const win  = window.open(url, "_blank");
-    if (win) win.focus();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-
   return (
     <>
       <div className="page-header">
@@ -550,13 +637,40 @@ export default function CuentasCobrar() {
               💳 Cobrar {seleccionados.size} seleccionada{seleccionados.size !== 1 ? "s" : ""}
             </button>
           )}
-          <button className="btn btn-secondary btn-sm" onClick={abrirReporte}>🖨️ Reporte</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setModalReportes(true)}>🖨️ Reporte</button>
           <button className="btn btn-secondary" onClick={() => setModalRep(true)}>📥 Subir recibo de pago</button>
           <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalXml(true); }}>+ Subir XML</button>
         </div>
       </div>
 
       <div className="page-content">
+        {canVerTotales && (
+          <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+            <div className="stat-card">
+              <span className="stat-card-icon">📄</span>
+              <p className="stat-card-value" style={{ color: "var(--blue)" }}>{cxcs.length}</p>
+              <p className="stat-card-label">Total facturas</p>
+              <div className="stat-card-accent" style={{ background: "var(--blue)" }} />
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-icon">⏳</span>
+              <p className="stat-card-value" style={{ color: "var(--red)" }}>
+                ${totalPendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </p>
+              <p className="stat-card-label">Por cobrar</p>
+              <div className="stat-card-accent" style={{ background: "var(--red)" }} />
+            </div>
+            <div className="stat-card">
+              <span className="stat-card-icon">✅</span>
+              <p className="stat-card-value" style={{ color: "var(--green)" }}>
+                ${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </p>
+              <p className="stat-card-label">Cobrado</p>
+              <div className="stat-card-accent" style={{ background: "var(--green)" }} />
+            </div>
+          </div>
+        )}
+
         <div className="table-card" style={{ overflowX: "auto" }}>
           <div className="table-card-header">
             <p className="table-card-title">Todas las cuentas por cobrar</p>
@@ -672,6 +786,85 @@ export default function CuentasCobrar() {
           )}
         </div>
       </div>
+
+      {/* ── Modal Reportes ── */}
+      {modalReportes && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReportes(false); }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
+            <h2 className="modal-title">🖨️ Generar reporte</h2>
+
+            <div className="form-group" style={{ marginTop: 8 }}>
+              <label className="form-label">Periodo</label>
+              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {([["semana","Semana"],["mes","Mes"],["año","Año"],["custom","Rango"]] as const).map(([val, label], i, arr) => (
+                  <button key={val} onClick={() => setReportePeriodo(val as any)}
+                    style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {reportePeriodo === "semana" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Semana del año</label>
+                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana}
+                    onChange={e => setReporteSemana(+e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Año</label>
+                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
+                    onChange={e => setReporteAnio(+e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {reportePeriodo === "mes" && (
+              <div className="form-group">
+                <label className="form-label">Mes y año</label>
+                <input className="form-input" type="month" value={reporteMesDesde}
+                  onChange={e => setReporteMesDesde(e.target.value)} />
+              </div>
+            )}
+
+            {reportePeriodo === "año" && (
+              <div className="form-group">
+                <label className="form-label">Año</label>
+                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
+                  onChange={e => setReporteAnio(+e.target.value)} />
+              </div>
+            )}
+
+            {reportePeriodo === "custom" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Desde</label>
+                  <input className="form-input" type="month" value={reporteMesDesde}
+                    onChange={e => setReporteMesDesde(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Hasta</label>
+                  <input className="form-input" type="month" value={reporteMesHasta}
+                    onChange={e => setReporteMesHasta(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong>
+              <br />
+              <span style={{ fontSize: "0.75rem" }}>Se abrirá una pestaña — usa el botón 🖨️ para imprimir o guardar como PDF.</span>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={generarReporte}>📄 Ver reporte</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal recibo de pago REP ── */}
       {modalRep && (
