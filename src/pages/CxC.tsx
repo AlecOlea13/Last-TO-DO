@@ -91,7 +91,6 @@ export default function CuentasCobrar() {
   const [comentarioEdit, setComentEdit] = useState("");
   const [savingComent, setSavingComent] = useState(false);
 
-  // ── Modal recibo de pago (REP) ──
   const [modalRep, setModalRep]         = useState(false);
   const [parsingRep, setParsingRep]     = useState(false);
   const [repError, setRepError]         = useState("");
@@ -102,14 +101,12 @@ export default function CuentasCobrar() {
   const [procesandoRep, setProcesandoRep] = useState(false);
   const [resultadosRep, setResultadosRep] = useState<ResultadoRep[] | null>(null);
 
-  // ── Cobro múltiple ──
   const [seleccionados, setSeleccionados]         = useState<Set<string>>(new Set());
   const [modalCobMultiple, setModalCobMultiple]   = useState(false);
   const [formCobMultiple, setFormCobMultiple]     = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
   const [savingCobMultiple, setSavingCobMultiple] = useState(false);
   const [uploadingCobMult, setUploadingCobMult]   = useState(false);
 
-  // ── Detección de rentas al guardar CxC ──
   const [modalRentaDetectada, setModalRentaDetectada] = useState<{
     clienteNombre: string;
     items: RenovacionItem[];
@@ -275,7 +272,6 @@ export default function CuentasCobrar() {
     setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
-  // ── Helpers de detección de rentas ──
   function extraerNumeroEconomico(descripcion: string): string | null {
     const match = descripcion.match(/#(\d+)/);
     return match ? match[1] : null;
@@ -399,7 +395,6 @@ export default function CuentasCobrar() {
     finally { setSavingComent(false); }
   }
 
-  // ── Cobro múltiple ──
   function toggleSeleccion(id: string) {
     setSeleccionados(prev => {
       const next = new Set(prev);
@@ -678,7 +673,7 @@ export default function CuentasCobrar() {
         </div>
       </div>
 
-      {/* ── Modal subir recibo de pago (REP) ── */}
+      {/* ── Modal recibo de pago REP ── */}
       {modalRep && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) cerrarModalRep(); }}>
           <div className="modal" style={{ maxWidth: 560 }}>

@@ -95,6 +95,19 @@ export default function Gastos() {
   const [fechaDesde, setFechaDesde]       = useState("");
   const [fechaHasta, setFechaHasta]       = useState("");
 
+  // ── Modal Reportes ──
+  const [modalReportes, setModalReportes] = useState(false);
+  const [reporteTipo, setReporteTipo]     = useState<"fiscal" | "nofiscal" | "general">("general");
+  const [reportePeriodo, setReportePeriodo] = useState<"semana" | "mes" | "año" | "custom">("mes");
+  const [reporteMesDesde, setReporteMesDesde] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [reporteMesHasta, setReporteMesHasta] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+
   const [modalFiscal, setModalFiscal] = useState(false);
   const [parsing, setParsing]         = useState(false);
   const [savingF, setSavingF]         = useState(false);
@@ -180,11 +193,19 @@ export default function Gastos() {
     return false;
   }
 
-  function sumaFiscal(tipo?: "semana" | "mes" | "año") {
-    return fiscales.filter(g => tipo ? enRango(g.fechaEmision, tipo) : true).reduce((acc, g) => acc + g.total, 0);
-  }
-  function sumaNoFiscal(tipo?: "semana" | "mes" | "año") {
-    return noFiscales.filter(g => tipo ? enRango(g.fecha, tipo) : true).reduce((acc, g) => acc + g.monto, 0);
+  function enRangoCustom(dateStr?: string, mesDesde?: string, mesHasta?: string): boolean {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (mesDesde) {
+      const [y, m] = mesDesde.split("-").map(Number);
+      if (d < new Date(y, m - 1, 1)) return false;
+    }
+    if (mesHasta) {
+      const [y, m] = mesHasta.split("-").map(Number);
+      const finMes = new Date(y, m, 0, 23, 59, 59);
+      if (d > finMes) return false;
+    }
+    return true;
   }
 
   function totalPagadoParcial(g: GastoFiscal) {
@@ -536,13 +557,28 @@ export default function Gastos() {
     );
   }
 
-  function abrirReporte(tipo: "fiscal" | "nofiscal" | "general", periodo: "semana" | "mes" | "año" | "todo") {
-    const periodoLabel: Record<string, string> = { semana: "Semanal", mes: "Mensual", año: "Anual", todo: "General" };
-    const filtrarF  = (g: GastoFiscal)   => periodo === "todo" ? true : enRango(g.fechaEmision, periodo);
-    const filtrarNF = (g: GastoNoFiscal) => periodo === "todo" ? true : enRango(g.fecha, periodo);
+  function generarReporte() {
+    const periodoLabel: Record<string, string> = {
+      semana: "Semanal", mes: "Mensual", año: "Anual", custom: "Personalizado",
+    };
+
+    const filtrarF = (g: GastoFiscal) => {
+      if (reportePeriodo === "custom") return enRangoCustom(g.fechaEmision, reporteMesDesde, reporteMesHasta);
+      if (reportePeriodo === "semana" || reportePeriodo === "mes" || reportePeriodo === "año")
+        return enRango(g.fechaEmision, reportePeriodo);
+      return true;
+    };
+    const filtrarNF = (g: GastoNoFiscal) => {
+      if (reportePeriodo === "custom") return enRangoCustom(g.fecha, reporteMesDesde, reporteMesHasta);
+      if (reportePeriodo === "semana" || reportePeriodo === "mes" || reportePeriodo === "año")
+        return enRango(g.fecha, reportePeriodo);
+      return true;
+    };
+
     const gastosFR  = fiscales.filter(filtrarF);
     const gastosNFR = noFiscales.filter(filtrarNF);
     const nfOrdenados = [...gastosNFR].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
     let acum = 0;
     const rowsF = gastosFR.map(g => `
       <tr>
@@ -564,11 +600,20 @@ export default function Gastos() {
         <td style="text-align:center">${g.estatus === "pagado" ? "✅" : "⏳"}</td>
       </tr>`;
     }).join("");
+
     const totalF  = gastosFR.reduce((a, g) => a + g.total, 0);
     const totalNF = gastosNFR.reduce((a, g) => a + g.monto, 0);
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+
+    let subtitulo = periodoLabel[reportePeriodo];
+    if (reportePeriodo === "custom") {
+      const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+      const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+      subtitulo = desde === hasta ? desde : `${desde} — ${hasta}`;
+    }
+
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Reporte de Gastos ${periodoLabel[periodo]}</title>
+<title>Reporte de Gastos ${subtitulo}</title>
 <style>
   * { margin:0;padding:0;box-sizing:border-box; }
   body { font-family:Arial,sans-serif;font-size:10pt;color:#222;padding:24px; }
@@ -589,31 +634,33 @@ export default function Gastos() {
 <div class="header">
   <img src="${logoUrl}" class="logo" alt="Pipsa" />
   <div class="header-info">
-    <h1>Reporte de Gastos — ${periodoLabel[periodo]}</h1>
+    <h1>Reporte de Gastos — ${subtitulo}</h1>
     <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
     <p>Generado el ${new Date().toLocaleDateString("es-MX", { day:"2-digit",month:"long",year:"numeric" })}</p>
   </div>
 </div>
-${(tipo==="fiscal"||tipo==="general") ? `
+${(reporteTipo === "fiscal" || reporteTipo === "general") ? `
 <div class="section-title">Gastos Fiscales</div>
-${gastosFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
+${gastosFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
 <table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th>No. Factura</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsF}</tbody></table>
 <p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
-${(tipo==="nofiscal"||tipo==="general") ? `
+${(reporteTipo === "nofiscal" || reporteTipo === "general") ? `
 <div class="section-title">Gastos No Fiscales</div>
-${gastosNFR.length===0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
+${gastosNFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
 <table><thead><tr><th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsNF}</tbody></table>
 <p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
-${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>` : ""}
+${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>` : ""}
 <script>window.onload=function(){setTimeout(function(){window.print();},500);window.onafterprint=function(){window.close();};};</script>
 </body></html>`;
+
     const blob = new Blob([html], { type: "text/html" });
     const url  = URL.createObjectURL(blob);
     const win  = window.open(url, "_blank");
     if (win) win.focus();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setModalReportes(false);
   }
 
   const filteredF = fiscales.filter(g => {
@@ -655,19 +702,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
   const paginadosNF    = [...filteredNF]
     .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
     .slice((paginaNF - 1) * POR_PAGINA, paginaNF * POR_PAGINA);
-
-  const statsF = [
-    { label: "Esta semana",   val: sumaFiscal("semana") },
-    { label: "Este mes",      val: sumaFiscal("mes") },
-    { label: "Este año",      val: sumaFiscal("año") },
-    { label: "Total general", val: sumaFiscal() },
-  ];
-  const statsNF = [
-    { label: "Esta semana",   val: sumaNoFiscal("semana") },
-    { label: "Este mes",      val: sumaNoFiscal("mes") },
-    { label: "Este año",      val: sumaNoFiscal("año") },
-    { label: "Total general", val: sumaNoFiscal() },
-  ];
 
   const gastosDelMismoProveedor = modalPago?.tipo === "fiscal" && modalPago.gasto
     ? filteredF.filter(g => g.estatus !== "pagado" && g.estatus !== "cancelada" && g.nombreEmisor === modalPago.gasto!.nombreEmisor)
@@ -771,18 +805,12 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
           <p className="page-subtitle">{fiscales.length} fiscales · {noFiscales.length} no fiscales</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            {(["semana","mes","año","todo"] as const).map(p => (
-              <button key={p} className="btn btn-secondary btn-sm" onClick={() => abrirReporte("general", p)}>
-                📊 {p === "semana" ? "Semanal" : p === "mes" ? "Mensual" : p === "año" ? "Anual" : "General"}
-              </button>
-            ))}
-          </div>
+          <button className="btn btn-secondary" onClick={() => setModalReportes(true)}>📊 Reportes</button>
           {tab === "fiscal" && (
-            <div style={{ display: "flex", gap: 6 }}>
+            <>
               <button className="btn btn-secondary" onClick={() => { setFormManual(emptyManual); setModalManual(true); }}>✏️ Captura manual</button>
               <button className="btn btn-primary" onClick={() => { setFormF({}); setXmlError(""); setModalFiscal(true); }}>+ Subir XML</button>
-            </div>
+            </>
           )}
           {tab === "nofiscal" && <button className="btn btn-primary" onClick={openNewNF}>+ Nuevo gasto</button>}
         </div>
@@ -794,25 +822,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <button key={t} onClick={() => { setTab(t); limpiarFiltros(); setPagoMultipleIds([]); }}
               style={{ padding: "10px 24px", border: "none", cursor: "pointer", background: "transparent", fontFamily: "var(--font-head)", fontWeight: 700, fontSize: "0.88rem", color: tab === t ? "var(--accent)" : "var(--text-muted)", borderBottom: tab === t ? "2px solid var(--accent)" : "2px solid transparent", transition: "all 0.15s" }}>
               {t === "fiscal" ? "🧾 Fiscal" : "💵 No Fiscal"}
-            </button>
-          ))}
-        </div>
-
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
-          {(tab === "fiscal" ? statsF : statsNF).map(s => (
-            <div key={s.label} className="stat-card">
-              <p className="stat-card-value" style={{ color: "var(--accent)", fontSize: "1.2rem" }}>${s.val.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-              <p className="stat-card-label">{s.label}</p>
-              <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Reporte {tab === "fiscal" ? "fiscal" : "no fiscal"}:</span>
-          {(["semana","mes","año","todo"] as const).map(p => (
-            <button key={p} className="btn btn-secondary btn-sm" onClick={() => abrirReporte(tab === "fiscal" ? "fiscal" : "nofiscal", p)}>
-              🖨️ {p === "semana" ? "Semanal" : p === "mes" ? "Mensual" : p === "año" ? "Anual" : "General"}
             </button>
           ))}
         </div>
@@ -996,6 +1005,68 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
         )}
       </div>
 
+      {/* ── Modal Reportes ── */}
+      {modalReportes && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReportes(false); }}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
+            <h2 className="modal-title">📊 Generar reporte</h2>
+
+            <div className="form-group" style={{ marginTop: 8 }}>
+              <label className="form-label">Tipo de reporte</label>
+              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {([["fiscal","🧾 Fiscal"],["nofiscal","💵 No Fiscal"],["general","📋 General"]] as const).map(([val, label]) => (
+                  <button key={val} onClick={() => setReporteTipo(val as any)}
+                    style={{ flex: 1, padding: "10px 8px", border: "none", borderRight: val !== "general" ? "1px solid var(--border)" : "none", cursor: "pointer", background: reporteTipo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reporteTipo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reporteTipo === val ? 700 : 400, fontSize: "0.82rem" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Periodo</label>
+              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {([["semana","Esta semana"],["mes","Este mes"],["año","Este año"],["custom","Personalizado"]] as const).map(([val, label], i, arr) => (
+                  <button key={val} onClick={() => setReportePeriodo(val as any)}
+                    style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {reportePeriodo === "custom" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Mes inicio</label>
+                  <input className="form-input" type="month" value={reporteMesDesde}
+                    onChange={e => setReporteMesDesde(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Mes fin</label>
+                  <input className="form-input" type="month" value={reporteMesHasta}
+                    onChange={e => setReporteMesHasta(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              Se generará un reporte de gastos <strong style={{ color: "var(--text)" }}>
+                {reporteTipo === "fiscal" ? "fiscales" : reporteTipo === "nofiscal" ? "no fiscales" : "generales (fiscal + no fiscal)"}
+              </strong> para <strong style={{ color: "var(--text)" }}>
+                {reportePeriodo === "semana" ? "esta semana" : reportePeriodo === "mes" ? "este mes" : reportePeriodo === "año" ? "este año" : "el rango seleccionado"}
+              </strong>.
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={generarReporte}>🖨️ Generar e imprimir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal captura manual ── */}
       {modalManual && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalManual(false); }}>
@@ -1158,7 +1229,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
               ) : null)}
             </div>
-
             {(detalleF.pagos ?? []).length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>🔶 Historial de pagos</p>
@@ -1189,7 +1259,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 )}
               </div>
             )}
-
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {detalleF.comprobantePago && (
@@ -1203,11 +1272,9 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 )}
               </div>
             )}
-
             {detalleF.complementoXml && (
               <a href={urlArchivo(detalleF.complementoXml)} download target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>🗂️ Descargar complemento XML</a>
             )}
-
             {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
@@ -1224,13 +1291,11 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
               </div>
             )}
-
             <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
               <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>${detalleF.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
               <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA:</span><span>${detalleF.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
               <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: detalleF.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)" }}><span>Total:</span><span>${detalleF.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
               {canDelete && detalleF.estatus !== "cancelada" && (
@@ -1242,10 +1307,8 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                   🚫 Cancelar factura
                 </button>
               )}
-              {/* ── Complemento de pago para facturas ya pagadas ── */}
               {detalleF.estatus === "pagado" && canDelete && (
-                <button className="btn btn-secondary"
-                  style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
+                <button className="btn btn-secondary" style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
                   onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>
                   ➕ Complemento de pago
                 </button>
@@ -1269,7 +1332,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
             <h2 className="modal-title">
               {modalPago.gasto?.estatus === "pagado" ? "➕ Complemento de pago" : "Registrar pago"}
             </h2>
-
             {modalPago.tipo === "fiscal" && pagoMultipleIds.length === 1 && modalPago.gasto?.estatus !== "pagado" && (
               <div style={{ display: "flex", gap: 0, marginBottom: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                 {(["total", "parcial"] as const).map(t => (
@@ -1280,7 +1342,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 ))}
               </div>
             )}
-
             {(tipoPago === "parcial" || modalPago.gasto?.estatus === "pagado") && modalPago.tipo === "fiscal" && (() => {
               const g = fiscales.find(x => x._id === modalPago.id);
               const pagadoAcum = totalPagadoParcial(g ?? {} as GastoFiscal);
@@ -1318,7 +1379,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 </div>
               );
             })()}
-
             {modalPago.tipo === "fiscal" && pagoMultipleIds.length > 1 && gastosDelMismoProveedor.length > 1 && (
               <div style={{ marginBottom: 16, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>💳 Pago múltiple — {modalPago.gasto?.nombreEmisor}</p>
@@ -1342,7 +1402,6 @@ ${tipo==="general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF
                 )}
               </div>
             )}
-
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Fecha de pago *</label>
