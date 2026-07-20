@@ -107,6 +107,12 @@ export default function Gastos() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [reporteAnio, setReporteAnio] = useState(() => new Date().getFullYear());
+  const [reporteSemana, setReporteSemana] = useState(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    return Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+  });
 
   const [modalFiscal, setModalFiscal] = useState(false);
   const [parsing, setParsing]         = useState(false);
@@ -173,24 +179,6 @@ export default function Gastos() {
     setFechaDesde("");
     setFechaHasta("");
     setSearch("");
-  }
-
-  function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    const now = new Date();
-    if (tipo === "semana") {
-      const lunes = new Date(now);
-      lunes.setDate(now.getDate() - now.getDay() + 1);
-      lunes.setHours(0,0,0,0);
-      const domingo = new Date(lunes);
-      domingo.setDate(lunes.getDate() + 6);
-      domingo.setHours(23,59,59,999);
-      return d >= lunes && d <= domingo;
-    }
-    if (tipo === "mes") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    if (tipo === "año") return d.getFullYear() === now.getFullYear();
-    return false;
   }
 
   function enRangoCustom(dateStr?: string, mesDesde?: string, mesHasta?: string): boolean {
@@ -557,26 +545,42 @@ export default function Gastos() {
     );
   }
 
+  function getLunesDeSemana(semana: number, anio: number): Date {
+    const enero1 = new Date(anio, 0, 1);
+    const diasOffset = (semana - 1) * 7;
+    const lunes = new Date(enero1);
+    lunes.setDate(enero1.getDate() + diasOffset - enero1.getDay() + 1);
+    lunes.setHours(0, 0, 0, 0);
+    return lunes;
+  }
+
+  function filtrarPorPeriodo(dateStr?: string): boolean {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      domingo.setHours(23, 59, 59, 999);
+      return d >= lunes && d <= domingo;
+    }
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      return d.getFullYear() === y && d.getMonth() === m - 1;
+    }
+    if (reportePeriodo === "año") {
+      return d.getFullYear() === reporteAnio;
+    }
+    if (reportePeriodo === "custom") {
+      return enRangoCustom(dateStr, reporteMesDesde, reporteMesHasta);
+    }
+    return true;
+  }
+
   function generarReporte() {
-    const periodoLabel: Record<string, string> = {
-      semana: "Semanal", mes: "Mensual", año: "Anual", custom: "Personalizado",
-    };
-
-    const filtrarF = (g: GastoFiscal) => {
-      if (reportePeriodo === "custom") return enRangoCustom(g.fechaEmision, reporteMesDesde, reporteMesHasta);
-      if (reportePeriodo === "semana" || reportePeriodo === "mes" || reportePeriodo === "año")
-        return enRango(g.fechaEmision, reportePeriodo);
-      return true;
-    };
-    const filtrarNF = (g: GastoNoFiscal) => {
-      if (reportePeriodo === "custom") return enRangoCustom(g.fecha, reporteMesDesde, reporteMesHasta);
-      if (reportePeriodo === "semana" || reportePeriodo === "mes" || reportePeriodo === "año")
-        return enRango(g.fecha, reportePeriodo);
-      return true;
-    };
-
-    const gastosFR  = fiscales.filter(filtrarF);
-    const gastosNFR = noFiscales.filter(filtrarNF);
+    const gastosFR  = fiscales.filter(g => filtrarPorPeriodo(g.fechaEmision));
+    const gastosNFR = noFiscales.filter(g => filtrarPorPeriodo(g.fecha));
     const nfOrdenados = [...gastosNFR].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
     let acum = 0;
@@ -605,15 +609,27 @@ export default function Gastos() {
     const totalNF = gastosNFR.reduce((a, g) => a + g.monto, 0);
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
 
-    let subtitulo = periodoLabel[reportePeriodo];
-    if (reportePeriodo === "custom") {
+    let subtitulo = "";
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      const fmtS = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+      subtitulo = `Semana ${reporteSemana} · ${fmtS(lunes)} – ${fmtS(domingo)} ${reporteAnio}`;
+    } else if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+      subtitulo = s.charAt(0).toUpperCase() + s.slice(1);
+    } else if (reportePeriodo === "año") {
+      subtitulo = `Año ${reporteAnio}`;
+    } else {
       const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
       const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
       subtitulo = desde === hasta ? desde : `${desde} — ${hasta}`;
     }
 
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Reporte de Gastos ${subtitulo}</title>
+<title>Reporte de Gastos — ${subtitulo}</title>
 <style>
   * { margin:0;padding:0;box-sizing:border-box; }
   body { font-family:Arial,sans-serif;font-size:10pt;color:#222;padding:24px; }
@@ -629,39 +645,57 @@ export default function Gastos() {
   td { padding:5px 8px;border-bottom:1px solid #ddd; }
   .total-row { text-align:right;font-size:10pt;font-weight:700;margin-top:4px; }
   .grand-total { margin-top:16px;padding:10px 16px;background:#222;color:#fff;border-radius:6px;text-align:right;font-size:12pt;font-weight:900; }
-  @media print { body { padding:12px; } }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+  @media print { .print-btn { display:none; } body { padding:12px; } }
 </style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
 <div class="header">
   <img src="${logoUrl}" class="logo" alt="Pipsa" />
   <div class="header-info">
     <h1>Reporte de Gastos — ${subtitulo}</h1>
     <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day:"2-digit",month:"long",year:"numeric" })}</p>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day:"2-digit", month:"long", year:"numeric" })}</p>
   </div>
 </div>
 ${(reporteTipo === "fiscal" || reporteTipo === "general") ? `
 <div class="section-title">Gastos Fiscales</div>
-${gastosFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos fiscales en este periodo.</p>" : `
+${gastosFR.length === 0 ? "<p style='color:#999;font-size:9pt;margin-bottom:12px'>Sin gastos fiscales en este periodo.</p>" : `
 <table><thead><tr><th>Fecha</th><th>Quien</th><th>Proveedor</th><th>RFC</th><th>No. Factura</th><th style="text-align:right">Total</th><th>Concepto</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsF}</tbody></table>
 <p class="total-row">Total fiscal: $${totalF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
 ${(reporteTipo === "nofiscal" || reporteTipo === "general") ? `
 <div class="section-title">Gastos No Fiscales</div>
-${gastosNFR.length === 0 ? "<p style='color:#999;font-size:9pt'>Sin gastos no fiscales en este periodo.</p>" : `
+${gastosNFR.length === 0 ? "<p style='color:#999;font-size:9pt;margin-bottom:12px'>Sin gastos no fiscales en este periodo.</p>" : `
 <table><thead><tr><th>Fecha</th><th>Quien</th><th>Entrada</th><th style="text-align:right">Monto</th><th style="text-align:right">Acumulado</th><th>Descripción</th><th>Notas</th><th>Pago</th></tr></thead>
 <tbody>${rowsNF}</tbody></table>
 <p class="total-row">Total no fiscal: $${totalNF.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`}` : ""}
 ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(totalF+totalNF).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>` : ""}
-<script>window.onload=function(){setTimeout(function(){window.print();},500);window.onafterprint=function(){window.close();};};</script>
 </body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
     const url  = URL.createObjectURL(blob);
-    const win  = window.open(url, "_blank");
-    if (win) win.focus();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
     setModalReportes(false);
   }
+
+  // function enRango(dateStr?: string, tipo?: "semana" | "mes" | "año") {
+  //   if (!dateStr) return false;
+  //   const d = new Date(dateStr);
+  //   const now = new Date();
+  //   if (tipo === "semana") {
+  //     const lunes = new Date(now);
+  //     lunes.setDate(now.getDate() - now.getDay() + 1);
+  //     lunes.setHours(0,0,0,0);
+  //     const domingo = new Date(lunes);
+  //     domingo.setDate(lunes.getDate() + 6);
+  //     domingo.setHours(23,59,59,999);
+  //     return d >= lunes && d <= domingo;
+  //   }
+  //   if (tipo === "mes") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  //   if (tipo === "año") return d.getFullYear() === now.getFullYear();
+  //   return false;
+  // }
 
   const filteredF = fiscales.filter(g => {
     const matchSearch =
@@ -725,23 +759,10 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
     const label = cancelada ? "🚫 Cancelada"            : pagado ? "✅ Pagado"             : parcial ? "🔶 Parcial"            : "⏳ Pendiente";
     return (
       <div>
-        <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>
-          {label}
-        </span>
-        {pagado && fechaPago && (
-          <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>
-        )}
-        {parcial && (
-          <p style={{ fontSize: "0.68rem", color: "var(--accent)", marginTop: 2 }}>
-            Pagado: ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })} · Falta: ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-          </p>
-        )}
-        {pagado && comprobantePago && (
-          <a href={urlArchivo(comprobantePago)} download target="_blank" rel="noreferrer"
-            style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>
-            📎 Descargar comprobante
-          </a>
-        )}
+        <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>{label}</span>
+        {pagado && fechaPago && <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>}
+        {parcial && <p style={{ fontSize: "0.68rem", color: "var(--accent)", marginTop: 2 }}>Pagado: ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })} · Falta: ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
+        {pagado && comprobantePago && <a href={urlArchivo(comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>📎 Descargar comprobante</a>}
       </div>
     );
   }
@@ -796,6 +817,26 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
       </select>
     </div>
   );
+
+  // ── Preview del periodo en el modal ──
+  function labelPeriodo() {
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+      return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
+    }
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+    if (reportePeriodo === "año") return `Año ${reporteAnio}`;
+    const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    return desde === hasta ? desde : `${desde} — ${hasta}`;
+  }
 
   return (
     <>
@@ -1008,7 +1049,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
       {/* ── Modal Reportes ── */}
       {modalReportes && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReportes(false); }}>
-          <div className="modal" style={{ maxWidth: 480 }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
             <h2 className="modal-title">📊 Generar reporte</h2>
 
@@ -1027,7 +1068,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
             <div className="form-group">
               <label className="form-label">Periodo</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                {([["semana","Esta semana"],["mes","Este mes"],["año","Este año"],["custom","Personalizado"]] as const).map(([val, label], i, arr) => (
+                {([["semana","Semana"],["mes","Mes"],["año","Año"],["custom","Rango"]] as const).map(([val, label], i, arr) => (
                   <button key={val} onClick={() => setReportePeriodo(val as any)}
                     style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
                     {label}
@@ -1036,32 +1077,65 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
               </div>
             </div>
 
+            {reportePeriodo === "semana" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Semana del año</label>
+                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana}
+                    onChange={e => setReporteSemana(+e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Año</label>
+                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
+                    onChange={e => setReporteAnio(+e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {reportePeriodo === "mes" && (
+              <div className="form-group">
+                <label className="form-label">Mes y año</label>
+                <input className="form-input" type="month" value={reporteMesDesde}
+                  onChange={e => setReporteMesDesde(e.target.value)} />
+              </div>
+            )}
+
+            {reportePeriodo === "año" && (
+              <div className="form-group">
+                <label className="form-label">Año</label>
+                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
+                  onChange={e => setReporteAnio(+e.target.value)} />
+              </div>
+            )}
+
             {reportePeriodo === "custom" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div className="form-group">
-                  <label className="form-label">Mes inicio</label>
+                  <label className="form-label">Desde</label>
                   <input className="form-input" type="month" value={reporteMesDesde}
                     onChange={e => setReporteMesDesde(e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Mes fin</label>
+                  <label className="form-label">Hasta</label>
                   <input className="form-input" type="month" value={reporteMesHasta}
                     onChange={e => setReporteMesHasta(e.target.value)} />
                 </div>
               </div>
             )}
 
-            <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Se generará un reporte de gastos <strong style={{ color: "var(--text)" }}>
-                {reporteTipo === "fiscal" ? "fiscales" : reporteTipo === "nofiscal" ? "no fiscales" : "generales (fiscal + no fiscal)"}
-              </strong> para <strong style={{ color: "var(--text)" }}>
-                {reportePeriodo === "semana" ? "esta semana" : reportePeriodo === "mes" ? "este mes" : reportePeriodo === "año" ? "este año" : "el rango seleccionado"}
-              </strong>.
+            <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              <strong style={{ color: "var(--text)" }}>
+                {reporteTipo === "fiscal" ? "🧾 Fiscal" : reporteTipo === "nofiscal" ? "💵 No Fiscal" : "📋 General"}
+              </strong>
+              {" · "}
+              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong>
+              <br />
+              <span style={{ fontSize: "0.75rem" }}>Se abrirá una pestaña — usa el botón 🖨️ para imprimir o guardar como PDF.</span>
             </div>
 
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={generarReporte}>🖨️ Generar e imprimir</button>
+              <button className="btn btn-primary" onClick={generarReporte}>📄 Ver reporte</button>
             </div>
           </div>
         </div>
@@ -1261,9 +1335,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
             )}
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                {detalleF.comprobantePago && (
-                  <a href={urlArchivo(detalleF.comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.82rem", color: "var(--blue)" }}>📎 Descargar comprobante</a>
-                )}
+                {detalleF.comprobantePago && <a href={urlArchivo(detalleF.comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.82rem", color: "var(--blue)" }}>📎 Descargar comprobante</a>}
                 {canDelete && (
                   <label style={{ cursor: "pointer", fontSize: "0.82rem", color: "var(--accent)", display: "flex", alignItems: "center", gap: 4 }}>
                     {reemplazandoComp ? "⏳ Subiendo..." : "🔄 Reemplazar comprobante"}
@@ -1272,9 +1344,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 )}
               </div>
             )}
-            {detalleF.complementoXml && (
-              <a href={urlArchivo(detalleF.complementoXml)} download target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>🗂️ Descargar complemento XML</a>
-            )}
+            {detalleF.complementoXml && <a href={urlArchivo(detalleF.complementoXml)} download target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>🗂️ Descargar complemento XML</a>}
             {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
@@ -1298,26 +1368,15 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalleF(null)}>Cerrar</button>
-              {canDelete && detalleF.estatus !== "cancelada" && (
-                <button className="btn btn-secondary" onClick={() => { setDetalleF(null); openEditF(detalleF); }}>✏️ Editar</button>
-              )}
+              {canDelete && detalleF.estatus !== "cancelada" && <button className="btn btn-secondary" onClick={() => { setDetalleF(null); openEditF(detalleF); }}>✏️ Editar</button>}
               {detalleF.estatus !== "pagado" && detalleF.estatus !== "cancelada" && canCancel && (
-                <button className="btn btn-secondary" style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }}
-                  onClick={() => { cancelarFiscal(detalleF); setDetalleF(null); }}>
-                  🚫 Cancelar factura
-                </button>
+                <button className="btn btn-secondary" style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }} onClick={() => { cancelarFiscal(detalleF); setDetalleF(null); }}>🚫 Cancelar factura</button>
               )}
               {detalleF.estatus === "pagado" && canDelete && (
-                <button className="btn btn-secondary" style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
-                  onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>
-                  ➕ Complemento de pago
-                </button>
+                <button className="btn btn-secondary" style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }} onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>➕ Complemento de pago</button>
               )}
               {detalleF.estatus !== "pagado" && detalleF.estatus !== "cancelada" && canDelete && (
-                <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
-                  onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>
-                  💳 Registrar pago
-                </button>
+                <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }} onClick={() => { setDetalleF(null); abrirModalPago(detalleF._id, "fiscal", detalleF); }}>💳 Registrar pago</button>
               )}
             </div>
           </div>
@@ -1329,9 +1388,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) { setModalPago(null); setPagoMultipleIds([]); } }}>
           <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>✕</button>
-            <h2 className="modal-title">
-              {modalPago.gasto?.estatus === "pagado" ? "➕ Complemento de pago" : "Registrar pago"}
-            </h2>
+            <h2 className="modal-title">{modalPago.gasto?.estatus === "pagado" ? "➕ Complemento de pago" : "Registrar pago"}</h2>
             {modalPago.tipo === "fiscal" && pagoMultipleIds.length === 1 && modalPago.gasto?.estatus !== "pagado" && (
               <div style={{ display: "flex", gap: 0, marginBottom: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                 {(["total", "parcial"] as const).map(t => (
@@ -1366,15 +1423,11 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                   )}
                   <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Monto del complemento *</label>
-                    <input className="form-input" type="number" value={formPago.monto || ""}
-                      onChange={e => setFormPago(p => ({ ...p, monto: +e.target.value }))}
-                      placeholder="Ej. 3800" />
+                    <input className="form-input" type="number" value={formPago.monto || ""} onChange={e => setFormPago(p => ({ ...p, monto: +e.target.value }))} placeholder="Ej. 3800" />
                   </div>
                   <div className="form-group" style={{ margin: "8px 0 0" }}>
                     <label className="form-label">Notas (opcional)</label>
-                    <input className="form-input" value={formPago.notas}
-                      onChange={e => setFormPago(p => ({ ...p, notas: e.target.value }))}
-                      placeholder="Ej. Complemento por diferencia de transferencia" />
+                    <input className="form-input" value={formPago.notas} onChange={e => setFormPago(p => ({ ...p, notas: e.target.value }))} placeholder="Ej. Complemento por diferencia de transferencia" />
                   </div>
                 </div>
               );
@@ -1412,8 +1465,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
                   <span style={{ fontSize: "1.3rem" }}>{uploadingPago ? "⏳" : "📎"}</span>
                   <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{formPago.comprobantePago ? "✅ Archivo listo" : uploadingPago ? "Procesando..." : "Seleccionar archivo"}</span>
-                  <input type="file" accept=".pdf,image/*" style={{ display: "none" }}
-                    onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, comprobantePago: url })); } }} />
+                  <input type="file" accept=".pdf,image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, comprobantePago: url })); } }} />
                 </label>
                 {formPago.comprobantePago && <a href={urlArchivo(formPago.comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>📎 Ver archivo seleccionado</a>}
               </div>
@@ -1423,8 +1475,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                   <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px dashed var(--border2)", borderRadius: "var(--radius-sm)", cursor: "pointer", background: "var(--surface2)" }}>
                     <span style={{ fontSize: "1.3rem" }}>🗂️</span>
                     <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{formPago.complementoXml ? "✅ Complemento listo" : "Seleccionar XML"}</span>
-                    <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }}
-                      onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, complementoXml: url })); } }} />
+                    <input type="file" accept=".xml,.pdf,image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormPago(p => ({ ...p, complementoXml: url })); } }} />
                   </label>
                   {formPago.complementoXml && <a href={urlArchivo(formPago.complementoXml)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>🗂️ Ver complemento seleccionado</a>}
                 </div>
