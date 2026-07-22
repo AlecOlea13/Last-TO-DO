@@ -285,26 +285,37 @@ export default function Almacen() {
 
   useEffect(() => { load(); }, []);
 
-    async function load() {
-    try {
-    const [r, o, t, u, s, us, v] = await Promise.all([
-      api.get("/refacciones"), api.get("/ordenes-refaccion"),
-      api.get("/tipos-servicio"), api.get("/refacciones-usadas"),
-      api.get("/servicios"), 
-      // ── solo pedir users si tiene permiso ──
-      ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol)
-        ? api.get("/users")
-        : Promise.resolve({ data: [] }),
-      api.get("/vales-salida"),
-    ]);
-    // ... resto igual
-      setRefacciones(r.data); setOrdenes(o.data); setTipos(t.data);
+      async function load() {
+      try {
+      const [r, o, t, u, s, v] = await Promise.all([
+        api.get("/refacciones"),
+        api.get("/ordenes-refaccion"),
+        api.get("/tipos-servicio"),
+        api.get("/refacciones-usadas"),
+        api.get("/servicios"),
+        api.get("/vales-salida"),
+      ]);
+      setRefacciones(r.data);
+      setOrdenes(o.data);
+      setTipos(t.data);
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
-      setTecnicos(us.data.filter((u: any) => ["tecnico", "almacen", "developer", "gerencia", "oficina"].includes(u.rol)));
       setVales(v.data);
-    } catch {}
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error("Error cargando almacén:", e);
+    }
+
+    // Separado para que un 403 no tumbe todo lo demás
+    try {
+      const { data } = await api.get("/users");
+      setTecnicos(data.filter((u: any) => ["tecnico", "almacen", "developer", "gerencia", "oficina"].includes(u.rol)));
+    } catch {
+      setTecnicos([]);
+    }
+
+    setLoading(false);
+     
+     
   }
 
   const handleScanned = useCallback((codigo: string) => {
