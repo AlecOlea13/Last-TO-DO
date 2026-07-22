@@ -48,8 +48,10 @@ const PERIODO_LABEL: Record<string, string> = {
 };
 
 export default function Rentas() {
-  const rol         = localStorage.getItem("rol") ?? "";
-  const canEditRenta = ["developer", "gerencia"].includes(rol);
+  const rol              = localStorage.getItem("rol") ?? "";
+  const canEditRenta     = ["developer", "gerencia"].includes(rol);
+  const canCreateRenta   = ["developer", "gerencia", "oficina"].includes(rol);
+  const soloVerRentas    = rol === "supervisor_almacen";
 
   const [rentas, setRentas]         = useState<Renta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
@@ -96,7 +98,6 @@ export default function Rentas() {
     finally { setLoading(false); }
   }
 
-  // ── Cuando cambia montacargas o periodo, auto-llenar precio ───────────────
   function aplicarPrecioAutomatico(montaId: string, periodo: string, setter: typeof setForm) {
     const m = todosMontas.find(m => m._id === montaId);
     if (!m) return;
@@ -217,7 +218,6 @@ export default function Rentas() {
   const montaSeleccionada = montas.find(m => m._id === form.montacargas);
   const precioLabel = form.tipoPeriodo === "semanal" ? "Precio semanal" : form.tipoPeriodo === "anual" ? "Precio anual" : "Precio mensual";
 
-  // Para el modal de editar: incluye el montacargas actual de la renta aunque esté "rentado" (no solo disponibles)
   const montasParaEditar = modalEditar
     ? todosMontas.filter(m => m.estatus === "disponible" || m._id === modalEditar.montacargas?._id)
     : [];
@@ -231,9 +231,11 @@ export default function Rentas() {
           <h1 className="page-title">Rentas</h1>
           <p className="page-subtitle">{rentas.filter(r => r.estatus === "activa").length} rentas activas</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
-          + Nueva renta
-        </button>
+        {canCreateRenta && (
+          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
+            + Nueva renta
+          </button>
+        )}
       </div>
 
       <div className="page-content">
@@ -270,7 +272,8 @@ export default function Rentas() {
                 <tr>
                   <th>Cliente</th><th>Equipo</th><th>Asesor</th><th>Inicio</th><th>Fin</th>
                   <th>Periodo</th><th>Precio</th><th>Flete</th><th>Depósito</th>
-                  <th>Días restantes</th><th>Estatus</th><th></th>
+                  <th>Días restantes</th><th>Estatus</th>
+                  {!soloVerRentas && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -315,24 +318,26 @@ export default function Rentas() {
                           </button>
                         )}
                       </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {canEditRenta && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => abrirModalEditar(r)}>
-                              ✏️
-                            </button>
-                          )}
-                          {r.estatus !== "terminada" && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
-                              onClick={() => abrirModalRenovar(r)}>
-                              🔄 Renovar
-                            </button>
-                          )}
-                          {r.estatus === "activa" && (
-                            <button className="btn btn-danger btn-sm" onClick={() => cerrar(r)}>Cerrar</button>
-                          )}
-                        </div>
-                      </td>
+                      {!soloVerRentas && (
+                        <td>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {canEditRenta && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => abrirModalEditar(r)}>
+                                ✏️
+                              </button>
+                            )}
+                            {r.estatus !== "terminada" && (
+                              <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
+                                onClick={() => abrirModalRenovar(r)}>
+                                🔄 Renovar
+                              </button>
+                            )}
+                            {r.estatus === "activa" && (
+                              <button className="btn btn-danger btn-sm" onClick={() => cerrar(r)}>Cerrar</button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -343,7 +348,7 @@ export default function Rentas() {
       </div>
 
       {/* ── Modal nueva renta ── */}
-      {modal && (
+      {modal && canCreateRenta && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
           <div className="modal">
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
@@ -398,7 +403,6 @@ export default function Rentas() {
                 </div>
               </div>
 
-              {/* Precios del equipo seleccionado */}
               {montaSeleccionada && (
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <div style={{

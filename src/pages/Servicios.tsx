@@ -171,15 +171,6 @@ function VistaTecnicoMovil({
               ⏸️ <strong>Motivo de pausa:</strong> {pausaActiva.razon}
             </div>
           )}
-          {/* {activo.ubicacionInicio && (
-            <a
-              href={"https://www.google.com/maps?q=" + activo.ubicacionInicio.lat + "," + activo.ubicacionInicio.lng}
-              target="_blank" rel="noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.75rem", color: "var(--green)", marginBottom: 8, textDecoration: "none" }}
-            >
-              📍 Ver ubicación de inicio →
-            </a>
-          )} */}
           {activo.horaInicio && activo.estatus === "en_proceso" && (
             <Cronometro horaInicio={activo.horaInicio} pausas={activo.pausas} grande />
           )}
@@ -276,11 +267,12 @@ function VistaTecnicoMovil({
 }
 
 export default function Servicios() {
-  const rol       = localStorage.getItem("rol") ?? "";
-  const userId    = localStorage.getItem("userId") ?? "";
-  const canCreate = ["developer", "gerencia", "oficina"].includes(rol);
-  const esTecnico = rol === "tecnico";
-  const soloVer   = rol === "oficina";
+  const rol               = localStorage.getItem("rol") ?? "";
+  const userId            = localStorage.getItem("userId") ?? "";
+  const canCreate         = ["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol);
+  const canAsignarTecnico = ["developer", "gerencia", "oficina"].includes(rol);
+  const esTecnico         = rol === "tecnico";
+  const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
   const [montas, setMontas]             = useState<Monta[]>([]);
@@ -354,7 +346,7 @@ export default function Servicios() {
       setClientes(c.data);
       setTipos(t.data);
     } catch {}
-    if (["developer", "gerencia", "oficina"].includes(rol)) {
+    if (["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol)) {
       try {
         const { data } = await api.get("/users");
         setUsuarios(data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
@@ -726,7 +718,7 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista normal (gerencia / developer / oficina) ──
+  // ── Vista normal (gerencia / developer / oficina / supervisor_almacen) ──
   return (
     <>
       <div className="page-header">
@@ -905,13 +897,15 @@ export default function Servicios() {
                   {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
                 </select>
               </div>
-              <div className="form-group">
-                <label className="form-label">Técnico asignado</label>
-                <select className="form-select" value={form.tecnicoAsignado} onChange={e => setForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
-                </select>
-              </div>
+              {canAsignarTecnico && (
+                <div className="form-group">
+                  <label className="form-label">Técnico asignado</label>
+                  <select className="form-select" value={form.tecnicoAsignado} onChange={e => setForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
+                    <option value="">Sin asignar</option>
+                    {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label">Fecha reporte</label>
                 <input className="form-input" type="date" value={form.fechaReporte} onChange={e => setForm((p: any) => ({ ...p, fechaReporte: e.target.value }))} />

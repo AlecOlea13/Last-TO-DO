@@ -234,9 +234,10 @@ async function imprimirValeTermico(vale: Vale) {
 export default function Almacen() {
   const rol         = localStorage.getItem("rol") ?? "";
   const canEdit     = ["developer", "gerencia"].includes(rol);
-  const canAddRefac = ["developer", "gerencia", "almacen"].includes(rol);
-  const canSurtir   = ["developer", "gerencia", "oficina", "almacen"].includes(rol);
-  const canUsadas   = ["developer", "gerencia", "almacen", "tecnico"].includes(rol);
+  const canAddRefac = ["developer", "gerencia", "almacen", "supervisor_almacen"].includes(rol);
+  const canSurtir   = ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol);
+  const canUsadas   = ["developer", "gerencia", "almacen", "tecnico", "supervisor_almacen"].includes(rol);
+  // ... todo lo demás igual ...
 
   const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales">("inventario");
   const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
