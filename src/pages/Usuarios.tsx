@@ -5,18 +5,19 @@ type Usuario = {
   _id: string;
   username: string;
   nombre: string;
-  rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen";
+  rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen" | "supervisor_almacen";
   activo: boolean;
   permisos: string[];
   createdAt: string;
 };
 
 const ROL_BADGE: Record<string, string> = {
-  developer: "badge-red",
-  gerencia:  "badge-blue",
-  oficina:   "badge-green",
-  tecnico:   "badge-amber",
-  almacen:   "badge-purple",
+  developer:          "badge-red",
+  gerencia:           "badge-blue",
+  oficina:            "badge-green",
+  tecnico:            "badge-amber",
+  almacen:            "badge-purple",
+  supervisor_almacen: "badge-purple",
 };
 
 const emptyForm = {
@@ -104,13 +105,11 @@ export default function Usuarios() {
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  // Permisos especiales disponibles — aquí agregas más en el futuro
   const PERMISOS_DISPONIBLES = [
     { key: "flota", label: "🚗 Flota", desc: "Acceso al módulo de camionetas y flota vehicular" },
   ];
 
-  // Solo mostrar permisos para roles que no los tienen por defecto
-  const mostrarPermisos = form.rol === "oficina" || form.rol === "tecnico" || form.rol === "almacen";
+  const mostrarPermisos = ["oficina", "tecnico", "almacen", "supervisor_almacen"].includes(form.rol);
 
   return (
     <>
@@ -150,7 +149,11 @@ export default function Usuarios() {
                   <tr key={u._id}>
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>@{u.username}</td>
                     <td style={{ fontWeight: 600 }}>{u.nombre}</td>
-                    <td><span className={`badge ${ROL_BADGE[u.rol]}`}>{u.rol}</span></td>
+                    <td>
+                      <span className={`badge ${ROL_BADGE[u.rol] ?? "badge-gray"}`}>
+                        {u.rol === "supervisor_almacen" ? "sup. almacén" : u.rol}
+                      </span>
+                    </td>
                     <td>
                       {(u.permisos ?? []).length > 0 ? (
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -216,6 +219,7 @@ export default function Usuarios() {
                 <select className="form-select" value={form.rol} onChange={e => setForm((p: any) => ({ ...p, rol: e.target.value }))}>
                   <option value="tecnico">Técnico</option>
                   <option value="almacen">Almacén</option>
+                  <option value="supervisor_almacen">Supervisor de almacén</option>
                   <option value="oficina">Oficina</option>
                   <option value="gerencia">Gerencia</option>
                 </select>
