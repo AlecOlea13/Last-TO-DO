@@ -285,14 +285,19 @@ export default function Almacen() {
 
   useEffect(() => { load(); }, []);
 
-  async function load() {
+    async function load() {
     try {
-      const [r, o, t, u, s, us, v] = await Promise.all([
-        api.get("/refacciones"), api.get("/ordenes-refaccion"),
-        api.get("/tipos-servicio"), api.get("/refacciones-usadas"),
-        api.get("/servicios"), api.get("/users"),
-        api.get("/vales-salida"),
-      ]);
+    const [r, o, t, u, s, us, v] = await Promise.all([
+      api.get("/refacciones"), api.get("/ordenes-refaccion"),
+      api.get("/tipos-servicio"), api.get("/refacciones-usadas"),
+      api.get("/servicios"), 
+      // ── solo pedir users si tiene permiso ──
+      ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol)
+        ? api.get("/users")
+        : Promise.resolve({ data: [] }),
+      api.get("/vales-salida"),
+    ]);
+    // ... resto igual
       setRefacciones(r.data); setOrdenes(o.data); setTipos(t.data);
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));

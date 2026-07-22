@@ -59,14 +59,16 @@ export default function Dashboard() {
     setTheme(prev => prev === "dark" ? "light" : "dark");
   }
 
-  async function loadStats() {
+    async function loadStats() {
     try {
-      const [montas, servicios, rentas, facturas] = await Promise.all([
-        api.get("/montacargas"),
-        api.get("/servicios"),
-        api.get("/rentas"),
-        api.get("/facturas"),
-      ]);
+    const puedeVerFacturas = ["developer", "gerencia", "oficina"].includes(rol);
+
+    const [montas, servicios, rentas, facturas] = await Promise.all([
+      api.get("/montacargas"),
+      api.get("/servicios"),
+      api.get("/rentas"),
+      puedeVerFacturas ? api.get("/facturas") : Promise.resolve({ data: [] }),
+    ]);
       const montaList    = montas.data    ?? [];
       const servicioList = servicios.data ?? [];
       const rentaList    = rentas.data    ?? [];
