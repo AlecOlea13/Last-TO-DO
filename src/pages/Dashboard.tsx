@@ -5,11 +5,12 @@ import MontaScrollbar from "./MontaScrollbar";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
-  developer: "Developer",
-  gerencia:  "Gerencia",
-  oficina:   "Oficina",
-  tecnico:   "Técnico",
-  almacen:   "Almacén",
+  developer:          "Developer",
+  gerencia:           "Gerencia",
+  oficina:            "Oficina",
+  tecnico:            "Técnico",
+  almacen:            "Almacén",
+  supervisor_almacen: "Sup. Almacén",
 };
 
 function getSaludo(nombre: string) {
@@ -199,21 +200,20 @@ export default function Dashboard() {
   }
 
   const allNav = [
-  { to: "/dashboard",               icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico","almacen"] },
-  { to: "/dashboard/montacargas",   icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico","almacen"] },
-  { to: "/dashboard/servicios",     icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico","almacen"] },
-  { to: "/dashboard/almacen",       icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico","almacen"] },
-  { to: "/dashboard/clientes",      icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/rentas",        icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/cotizaciones",  icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
-  // { to: "/dashboard/facturas",      icon: "💰", label: "Cobranza",     roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/gastos", icon: "🧾", label: "Gastos", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/asesores",      icon: "👤", label: "Asesores",     roles: ["developer"] },
-  { to: "/dashboard/usuarios",      icon: "👥", label: "Usuarios",     roles: ["developer"] },
-  { to: "/dashboard/cxc", icon: "💰", label: "CxC", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/portales", icon: "🔑", label: "Portales", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/flota", icon: "🚗", label: "Flota", roles: ["developer", "gerencia", "oficina"], permiso: "flota" },
+  { to: "/dashboard",             icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+  { to: "/dashboard/montacargas", icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+  { to: "/dashboard/servicios",   icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+  { to: "/dashboard/almacen",     icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+  { to: "/dashboard/clientes",    icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/rentas",      icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina","supervisor_almacen"] },
+  { to: "/dashboard/cotizaciones",icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/gastos",      icon: "🧾", label: "Gastos",       roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/asesores",    icon: "👤", label: "Asesores",     roles: ["developer"] },
+  { to: "/dashboard/usuarios",    icon: "👥", label: "Usuarios",     roles: ["developer"] },
+  { to: "/dashboard/cxc",         icon: "💰", label: "CxC",          roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores",  roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/portales",    icon: "🔑", label: "Portales",     roles: ["developer","gerencia","oficina"] },
+  { to: "/dashboard/flota",       icon: "🚗", label: "Flota",        roles: ["developer","gerencia","oficina"], permiso: "flota" },
 ];
 
   const permisos = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
