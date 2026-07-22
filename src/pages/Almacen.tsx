@@ -56,6 +56,22 @@ type Vale = {
   createdAt: string;
 };
 
+type SolicitudItem = {
+  nombre: string; cantidad: number; unidad: string;
+  precioEstimado: number; notas: string;
+};
+
+type Solicitud = {
+  _id: string; folio: string;
+  solicitadoPor: { nombre: string; rol: string };
+  liberadaPor?: { nombre: string };
+  items: SolicitudItem[];
+  notas?: string;
+  estatus: "sin_liberar" | "liberada" | "cancelada";
+  fechaLiberacion?: string;
+  createdAt: string;
+};
+
 const emptyRefaccion = {
   nombre: "", numeroParte: "", categoria: "", proveedor: "", marcaCompatible: "",
   unidad: "pieza", stock: 0, stockMinimo: 1, precio: 0,
@@ -131,100 +147,58 @@ function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => v
 async function imprimirValeTermico(vale: Vale) {
   const qz = (window as any).qz;
   if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
-
   try {
     await qz.websocket.connect();
     const config = qz.configs.create("GHIA GTP801");
-
-    const fecha = new Date(vale.createdAt).toLocaleString("es-MX", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-
+    const fecha = new Date(vale.createdAt).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
     const LINE = "--------------------------------\n";
     const BR   = "\n";
-
-    const fila = (izq: string, der: string) =>
-      izq.substring(0, 22).padEnd(22) + der.substring(0, 10).padStart(10) + "\n";
-
+    const fila = (izq: string, der: string) => izq.substring(0, 22).padEnd(22) + der.substring(0, 10).padStart(10) + "\n";
     let d = "";
-
-    // Init
     d += "\x1B\x40";
-
-    // Header
-    d += "\x1B\x61\x01";           // centrar
-    d += "\x1B\x21\x30";           // doble alto+ancho
+    d += "\x1B\x61\x01";
+    d += "\x1B\x21\x30";
     d += "PIPSA\n";
-    d += "\x1B\x21\x00";           // normal
+    d += "\x1B\x21\x00";
     d += "Montacargas de Guadalajara\n";
     d += BR;
-    d += "\x1B\x21\x08";           // negrita
+    d += "\x1B\x21\x08";
     d += "VALE DE SALIDA DE MATERIAL\n";
     d += "\x1B\x21\x00";
     d += LINE;
-
-    // Folio
     d += "\x1B\x61\x01";
-    d += "\x1B\x21\x10";           // doble ancho
+    d += "\x1B\x21\x10";
     d += `${vale.folio}\n`;
     d += "\x1B\x21\x00";
     d += BR;
-
-    // Datos generales
-    d += "\x1B\x61\x00";           // izquierda
+    d += "\x1B\x61\x00";
     d += `Tecnico : ${vale.tecnico.nombre}\n`;
     d += `Fecha   : ${fecha}\n`;
     d += `Reg. por: ${vale.registradoPor?.nombre ?? "—"}\n`;
-
-    if (vale.notas) {
-      d += BR;
-      d += `Notas: ${vale.notas}\n`;
-    }
-
+    if (vale.notas) { d += BR; d += `Notas: ${vale.notas}\n`; }
     d += LINE;
-
-    // Encabezado tabla
     d += "\x1B\x21\x08";
     d += fila("DESCRIPCION", "CANT/UND");
     d += "\x1B\x21\x00";
     d += LINE;
-
-    // Items
     for (const item of vale.items) {
       const cant = `${item.cantidad} ${item.unidad}`;
-      if (item.nombre.length <= 22) {
-        d += fila(item.nombre, cant);
-      } else {
-        d += item.nombre.substring(0, 32) + "\n";
-        d += fila("", cant);
-      }
-      if (item.numeroParte) {
-        d += `  Parte: ${item.numeroParte}\n`;
-      }
+      if (item.nombre.length <= 22) { d += fila(item.nombre, cant); }
+      else { d += item.nombre.substring(0, 32) + "\n"; d += fila("", cant); }
+      if (item.numeroParte) { d += `  Parte: ${item.numeroParte}\n`; }
     }
-
     d += LINE;
-
-    // Firma
     d += BR;
     d += "\x1B\x61\x01";
     d += "Firma de recibido\n";
-    d += BR;
-    d += BR;
-    d += BR;
+    d += BR; d += BR; d += BR;
     d += "________________________________\n";
     d += `${vale.tecnico.nombre}\n`;
-    d += BR;
-    d += BR;
-
-    // Corte
+    d += BR; d += BR;
     d += "\x1D\x56\x42\x00";
-
     const printData = [{ type: "raw", format: "plain", data: d, options: { language: "ESCPOS" } }];
     await qz.print(config, printData);
     await qz.websocket.disconnect();
-
   } catch (err: any) {
     console.error("Error imprimiendo vale:", err);
     alert("Error al imprimir: " + (err?.message ?? err));
@@ -237,9 +211,11 @@ export default function Almacen() {
   const canAddRefac = ["developer", "gerencia", "almacen", "supervisor_almacen"].includes(rol);
   const canSurtir   = ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol);
   const canUsadas   = ["developer", "gerencia", "almacen", "tecnico", "supervisor_almacen"].includes(rol);
-  // ... todo lo demás igual ...
+  const canVerSolicitudes = ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol);
+  const canLiberar        = ["developer", "gerencia"].includes(rol);
+  const canVerSinLiberar  = ["developer", "gerencia"].includes(rol);
 
-  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales">("inventario");
+  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales" | "solicitudes">("inventario");
   const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
   const [ordenes, setOrdenes]         = useState<Orden[]>([]);
   const [tipos, setTipos]             = useState<TipoServicio[]>([]);
@@ -247,6 +223,7 @@ export default function Almacen() {
   const [servicios, setServicios]     = useState<{ _id: string; folio: string; problema?: string }[]>([]);
   const [tecnicos, setTecnicos]       = useState<Usuario[]>([]);
   const [vales, setVales]             = useState<Vale[]>([]);
+  const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
 
@@ -266,7 +243,7 @@ export default function Almacen() {
   const [surtirModal, setSurtirModal]   = useState<Orden | null>(null);
   const [surtirItems, setSurtirItems]   = useState<any[]>([]);
   const [surtirNotas, setSurtirNotas]   = useState("");
-  const [fotosEvidencia, setFotosEvidencia]     = useState<string[]>([]);
+  const [fotosEvidencia, setFotosEvidencia]         = useState<string[]>([]);
   const [uploadingEvidencia, setUploadingEvidencia] = useState(false);
 
   const [tipoModal, setTipoModal]     = useState(false);
@@ -278,6 +255,14 @@ export default function Almacen() {
   const [usadaForm, setUsadaForm]   = useState<any>(emptyUsada);
   const [uploadingUsada, setUploadingUsada] = useState(false);
 
+  // ── Solicitudes de compra ──
+  const [solicitudModal, setSolicitudModal]   = useState(false);
+  const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([
+    { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }
+  ]);
+  const [solicitudNotas, setSolicitudNotas]   = useState("");
+  const [savingSolicitud, setSavingSolicitud] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   const evidenciaRef = useRef<HTMLInputElement>(null);
@@ -285,8 +270,8 @@ export default function Almacen() {
 
   useEffect(() => { load(); }, []);
 
-      async function load() {
-      try {
+  async function load() {
+    try {
       const [r, o, t, u, s, v] = await Promise.all([
         api.get("/refacciones"),
         api.get("/ordenes-refaccion"),
@@ -305,7 +290,6 @@ export default function Almacen() {
       console.error("Error cargando almacén:", e);
     }
 
-    // Separado para que un 403 no tumbe todo lo demás
     try {
       const { data } = await api.get("/users");
       setTecnicos(data.filter((u: any) => ["tecnico", "almacen", "developer", "gerencia", "oficina"].includes(u.rol)));
@@ -313,9 +297,16 @@ export default function Almacen() {
       setTecnicos([]);
     }
 
+    if (canVerSolicitudes) {
+      try {
+        const { data } = await api.get("/solicitudes-compra");
+        setSolicitudes(data);
+      } catch {
+        setSolicitudes([]);
+      }
+    }
+
     setLoading(false);
-     
-     
   }
 
   const handleScanned = useCallback((codigo: string) => {
@@ -387,12 +378,7 @@ export default function Almacen() {
     }
   }
 
-  function openValeManual() {
-    setValeItems([]);
-    setValeTecnico("");
-    setValeNotas("");
-    setValeModal(true);
-  }
+  function openValeManual() { setValeItems([]); setValeTecnico(""); setValeNotas(""); setValeModal(true); }
   function addValeItem(r: Refaccion) {
     setValeItems(prev => {
       const existe = prev.find(i => i.refaccionId === r._id);
@@ -499,6 +485,51 @@ export default function Almacen() {
   }
   async function removeUsada(id: string) { if (!confirm("¿Eliminar este registro?")) return; await api.delete(`/refacciones-usadas/${id}`); setUsadas(prev => prev.filter(x => x._id !== id)); }
 
+  // ── Solicitudes de compra ──
+  function addSolicitudItem() {
+    setSolicitudItems(p => [...p, { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+  }
+  function removeSolicitudItem(i: number) {
+    setSolicitudItems(p => p.filter((_, idx) => idx !== i));
+  }
+  function updateSolicitudItem(i: number, field: string, val: any) {
+    setSolicitudItems(p => p.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
+  }
+  async function guardarSolicitud() {
+    if (!solicitudItems.some(i => i.nombre.trim())) return;
+    setSavingSolicitud(true);
+    try {
+      const { data } = await api.post("/solicitudes-compra", {
+        items: solicitudItems.filter(i => i.nombre.trim()),
+        notas: solicitudNotas,
+      });
+      setSolicitudes(prev => [data, ...prev]);
+      setSolicitudModal(false);
+      setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+      setSolicitudNotas("");
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+    finally { setSavingSolicitud(false); }
+  }
+  async function liberarSolicitud(id: string) {
+    try {
+      const { data } = await api.post(`/solicitudes-compra/${id}/liberar`);
+      setSolicitudes(prev => prev.map(s => s._id === id ? data : s));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+  }
+  async function cancelarSolicitud(id: string) {
+    if (!confirm("¿Cancelar esta solicitud?")) return;
+    try {
+      const { data } = await api.post(`/solicitudes-compra/${id}/cancelar`);
+      setSolicitudes(prev => prev.map(s => s._id === id ? data : s));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+  }
+
   function fmt(date?: string) {
     if (!date) return "—";
     return new Date(date).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
@@ -513,9 +544,15 @@ export default function Almacen() {
   const filteredTipos  = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredVales  = vales.filter(v => v.folio.toLowerCase().includes(search.toLowerCase()) || v.tecnico.nombre.toLowerCase().includes(search.toLowerCase()));
+  const filteredSols   = solicitudes.filter(s =>
+    s.folio.toLowerCase().includes(search.toLowerCase()) ||
+    s.solicitadoPor?.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    s.items.some(i => i.nombre.toLowerCase().includes(search.toLowerCase()))
+  );
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
+  const solsPendientes    = solicitudes.filter(s => s.estatus === "sin_liberar").length;
 
   const tabStyle = (t: string) => ({
     padding: "8px 20px", borderRadius: "var(--radius-sm)", border: "1.5px solid", cursor: "pointer",
@@ -542,11 +579,20 @@ export default function Almacen() {
           )}
           {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
           {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
+          {canVerSolicitudes && tab === "solicitudes" && (
+            <button className="btn btn-primary" onClick={() => {
+              setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+              setSolicitudNotas("");
+              setSolicitudModal(true);
+            }}>
+              + Nueva solicitud
+            </button>
+          )}
         </div>
       </div>
 
       <div className="page-content">
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
           <div className="stat-card">
             <span className="stat-card-icon">📦</span>
             <p className="stat-card-value" style={{ color: "var(--blue)" }}>{refacciones.length}</p>
@@ -565,6 +611,14 @@ export default function Almacen() {
             <p className="stat-card-label">Órdenes pendientes</p>
             <div className="stat-card-accent" style={{ background: ordenesPendientes > 0 ? "var(--accent)" : "var(--green)" }} />
           </div>
+          {canVerSolicitudes && (
+            <div className="stat-card" style={{ cursor: "pointer" }} onClick={() => setTab("solicitudes")}>
+              <span className="stat-card-icon">🛒</span>
+              <p className="stat-card-value" style={{ color: solsPendientes > 0 ? "var(--orange)" : "var(--green)" }}>{solsPendientes}</p>
+              <p className="stat-card-label">Solicitudes sin liberar</p>
+              <div className="stat-card-accent" style={{ background: solsPendientes > 0 ? "var(--orange)" : "var(--green)" }} />
+            </div>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -573,12 +627,27 @@ export default function Almacen() {
           {canUsadas && <button onClick={() => { setTab("usadas"); setSearch(""); }} style={tabStyle("usadas")}>🔩 Refacciones usadas</button>}
           {canSurtir && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
           {canAddRefac && <button onClick={() => { setTab("vales"); setSearch(""); }} style={tabStyle("vales")}>📤 Vales de salida</button>}
+          {canVerSolicitudes && (
+            <button onClick={() => { setTab("solicitudes"); setSearch(""); }} style={tabStyle("solicitudes")}>
+              🛒 Solicitudes de compra
+              {canVerSinLiberar && solsPendientes > 0 && (
+                <span style={{ marginLeft: 6, background: "var(--orange)", color: "#fff", borderRadius: 99, fontSize: "0.65rem", fontWeight: 700, padding: "1px 7px" }}>
+                  {solsPendientes}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="table-card">
           <div className="table-card-header">
             <p className="table-card-title">
-              {tab === "inventario" ? "Inventario de refacciones" : tab === "ordenes" ? "Órdenes de refacciones" : tab === "usadas" ? "Refacciones usadas / reemplazadas" : tab === "vales" ? "Vales de salida de material" : "Tipos de servicio"}
+              {tab === "inventario"   ? "Inventario de refacciones"          :
+               tab === "ordenes"      ? "Órdenes de refacciones"             :
+               tab === "usadas"       ? "Refacciones usadas / reemplazadas"  :
+               tab === "vales"        ? "Vales de salida de material"        :
+               tab === "solicitudes"  ? "Solicitudes de compra"              :
+               "Tipos de servicio"}
             </p>
             <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
@@ -693,6 +762,73 @@ export default function Almacen() {
                         ) : <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>}
                       </td>
                       <td>{canEdit && <button className="btn btn-danger btn-sm" onClick={() => removeUsada(u._id)}>🗑️</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : tab === "solicitudes" ? (
+            filteredSols.filter(s => canVerSinLiberar || s.estatus === "liberada").length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🛒</span><p>Sin solicitudes de compra</p></div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Folio</th><th>Solicitado por</th><th>Artículos</th>
+                    <th>Notas</th><th>Fecha</th><th>Estatus</th><th>Liberado por</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSols
+                    .filter(s => canVerSinLiberar || s.estatus === "liberada")
+                    .map(s => (
+                    <tr key={s._id}>
+                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>
+                        {s.folio}
+                      </td>
+                      <td style={{ fontWeight: 600 }}>{s.solicitadoPor?.nombre ?? "—"}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {s.items.map((item, i) => (
+                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                              {item.cantidad}× {item.nombre} ({item.unidad})
+                              {item.precioEstimado > 0 && (
+                                <span style={{ color: "var(--green)", marginLeft: 4 }}>
+                                  ~${item.precioEstimado.toLocaleString()}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>
+                        {s.notas || "—"}
+                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{fmt(s.createdAt)}</td>
+                      <td>
+                        <span className={`badge ${
+                          s.estatus === "liberada"   ? "badge-green" :
+                          s.estatus === "cancelada"  ? "badge-gray"  : "badge-amber"
+                        }`}>
+                          {s.estatus === "sin_liberar" ? "Sin liberar" :
+                           s.estatus === "liberada"    ? "Liberada"    : "Cancelada"}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                        {s.liberadaPor?.nombre ?? "—"}
+                      </td>
+                      <td>
+                        {canLiberar && s.estatus === "sin_liberar" && (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => liberarSolicitud(s._id)}>
+                              ✅ Liberar
+                            </button>
+                            <button className="btn btn-danger btn-sm" onClick={() => cancelarSolicitud(s._id)}>
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -993,6 +1129,77 @@ export default function Almacen() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setTipoModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveTipo} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal nueva solicitud de compra ── */}
+      {solicitudModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSolicitudModal(false)}>
+          <div className="modal" style={{ maxWidth: 640 }}>
+            <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
+            <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
+
+            <div className="form-group">
+              <label className="form-label">Notas generales (opcional)</label>
+              <textarea className="form-textarea" rows={2} value={solicitudNotas}
+                onChange={e => setSolicitudNotas(e.target.value)}
+                placeholder="Ej. Urgente para servicio preventivo de la semana..." />
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
+                  Artículos a solicitar
+                </p>
+                <button className="btn btn-secondary btn-sm" onClick={addSolicitudItem}>+ Agregar artículo</button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {solicitudItems.map((item, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 100px 100px 32px", gap: 8, alignItems: "center", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                    <div>
+                      <input className="form-input" value={item.nombre}
+                        onChange={e => updateSolicitudItem(i, "nombre", e.target.value)}
+                        placeholder="Nombre del artículo..." style={{ padding: "6px 10px" }} />
+                    </div>
+                    <input className="form-input" type="number" min={1} value={item.cantidad}
+                      onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)}
+                      style={{ padding: "6px 8px", textAlign: "center" }} />
+                    <select className="form-select" value={item.unidad}
+                      onChange={e => updateSolicitudItem(i, "unidad", e.target.value)}
+                      style={{ padding: "6px 8px" }}>
+                      <option value="pieza">Pieza</option>
+                      <option value="litro">Litro</option>
+                      <option value="juego">Juego</option>
+                      <option value="par">Par</option>
+                      <option value="metro">Metro</option>
+                      <option value="kg">Kg</option>
+                    </select>
+                    <input className="form-input" type="number" min={0} value={item.precioEstimado}
+                      onChange={e => updateSolicitudItem(i, "precioEstimado", +e.target.value)}
+                      placeholder="$ estimado" style={{ padding: "6px 8px", textAlign: "right" }} />
+                    <button onClick={() => removeSolicitudItem(i)}
+                      disabled={solicitudItems.length === 1}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                💡 La solicitud quedará <strong style={{ color: "var(--accent)" }}>Sin liberar</strong> hasta que gerencia o developer la apruebe.
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSolicitudModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarSolicitud}
+                disabled={savingSolicitud || !solicitudItems.some(i => i.nombre.trim())}>
+                {savingSolicitud ? "Enviando..." : "📤 Enviar solicitud"}
+              </button>
             </div>
           </div>
         </div>
