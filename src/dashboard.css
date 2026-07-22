@@ -41,6 +41,7 @@
   --orange:     #ea580c;
   --purple:     #9333ea;
 }
+
 [data-theme="light"] .dash-root::before {
   background:
     radial-gradient(ellipse 70% 50% at 15% 50%, rgba(180,120,0,0.04) 0%, transparent 60%),
@@ -52,6 +53,61 @@
   background-image:
     linear-gradient(rgba(180,120,0,0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(180,120,0,0.04) 1px, transparent 1px);
+}
+
+/* ── SIDEBAR MODO CLARO ── */
+[data-theme="light"] .sidebar {
+  background: rgba(255, 255, 255, 0.82);
+  border-right: 1px solid rgba(180, 120, 0, 0.15);
+}
+
+[data-theme="light"] .sidebar-brand {
+  border-bottom-color: rgba(180, 120, 0, 0.15);
+}
+
+[data-theme="light"] .sidebar-user {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(180, 120, 0, 0.12);
+}
+
+[data-theme="light"] .nav-item {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .nav-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text);
+}
+
+[data-theme="light"] .nav-item.active {
+  background: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.25);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+[data-theme="light"] .nav-section-label {
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .sidebar-logout {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+[data-theme="light"] .theme-toggle {
+  background: var(--surface2);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+[data-theme="light"] .theme-toggle:hover {
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+[data-theme="light"] .sidebar::-webkit-scrollbar-thumb {
+  background: rgba(180, 120, 0, 0.2);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -97,7 +153,6 @@ html { transition: background-color 0.25s ease; }
   -webkit-mask-image: radial-gradient(ellipse 90% 90% at 50% 50%, black 20%, transparent 100%);
 }
 
-/* Asegurar que todo el contenido quede encima del fondo */
 .sidebar,
 .dash-main,
 .mobile-topbar,
@@ -106,7 +161,6 @@ html { transition: background-color 0.25s ease; }
   z-index: 1;
 }
 
-/* Transición suave en todos los elementos que cambian de color con el tema */
 .sidebar, .sidebar-user, .mobile-topbar, .mobile-menu-btn, .stat-card,
 .table-card, th, .search-input, .btn-secondary, .modal, .modal-close,
 .form-input, .form-select, .form-textarea, .nav-item, .badge {
@@ -332,7 +386,6 @@ html { transition: background-color 0.25s ease; }
 }
 .mobile-menu-btn:hover { background: var(--surface3); }
 
-/* Overlay para cerrar sidebar en móvil */
 .sidebar-overlay {
   display: none;
   position: fixed;
@@ -632,7 +685,6 @@ tbody tr:hover { background: var(--surface2); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── INPUT TIPO FILE OCULTO ── */
 input[type="file"] { display: none; }
 
 /* ────────────────────────────────────────────────
@@ -649,8 +701,6 @@ input[type="file"] { display: none; }
    RESPONSIVE — MÓVIL  (≤ 640px)
 ──────────────────────────────────────────────── */
 @media (max-width: 640px) {
-
-  /* Sidebar se convierte en drawer */
   .sidebar {
     position: fixed;
     top: 0; left: 0;
@@ -660,27 +710,15 @@ input[type="file"] { display: none; }
     padding-top: 16px;
   }
   .sidebar.open { transform: translateX(0); }
-
-  /* Topbar fija en móvil */
   .mobile-topbar { display: flex; }
-
-  /* Main con espacio para topbar */
   .dash-main { padding-top: 56px; }
-
-  /* Header y contenido con padding reducido */
   .page-header  { padding: 20px 16px 0; gap: 12px; }
   .page-content { padding: 16px 16px 32px; gap: 16px; }
   .page-title   { font-size: 1.3rem; }
-
-  /* Stats en 2 columnas */
   .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .stat-card  { padding: 14px; }
   .stat-card-value { font-size: 1.6rem; }
-
-  /* Tabla con scroll horizontal */
   .table-card { overflow-x: auto; }
-
-  /* Header de tabla en columna */
   .table-card-header {
     padding: 14px 16px;
     flex-direction: column;
@@ -694,12 +732,8 @@ input[type="file"] { display: none; }
   }
   .search-input { min-width: unset; width: 100%; }
   .form-select  { width: 100%; }
-
-  /* th / td más compactos */
   th { padding: 10px 12px; font-size: 0.65rem; }
   td { padding: 10px 12px; font-size: 0.82rem; }
-
-  /* Modal a pantalla completa */
   .modal-overlay { padding: 0; align-items: flex-end; }
   .modal {
     border-radius: 20px 20px 0 0;
@@ -707,21 +741,15 @@ input[type="file"] { display: none; }
     padding: 24px 20px;
     gap: 16px;
   }
-
-  /* Form en 1 columna */
   .form-grid { grid-template-columns: 1fr; }
   .form-group.span-2 { grid-column: span 1; }
-
-  /* Footer del modal en columna */
   .modal-footer { flex-direction: column-reverse; }
   .modal-footer .btn { width: 100%; justify-content: center; }
-
-  /* Botones más grandes para touch */
   .btn    { padding: 10px 16px; font-size: 0.85rem; }
   .btn-sm { padding: 8px 12px;  font-size: 0.78rem; }
 }
-/* ── SCROLLBAR CUSTOM CON MONTACARGAS ── */
 
+/* ── SCROLLBAR CUSTOM CON MONTACARGAS ── */
 @media (min-width: 641px) {
   .dash-main {
     scrollbar-width: none;
@@ -730,15 +758,6 @@ input[type="file"] { display: none; }
     display: none;
   }
 }
-/* @media (min-width: 641px) {
-  html, body {
-    scrollbar-width: none;
-    overflow: hidden;
-  }
-  html::-webkit-scrollbar, body::-webkit-scrollbar {
-    display: none;
-  }
-} */
 
 .monta-scrollbar-track {
   position: fixed;
@@ -792,42 +811,27 @@ input[type="file"] { display: none; }
   object-fit: contain;
   pointer-events: none;
 }
+
 /* ── TRANSICIÓN DE PÁGINA ── */
 @keyframes pageEnter {
-  from {
-    opacity: 0;
-    transform: translateX(-14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-
 .page-transition {
   animation: pageEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-
-/* Respeta accesibilidad: si el usuario pidió reducir movimiento, sin animación */
 @media (prefers-reduced-motion: reduce) {
   .page-transition { animation: none; }
 }
+
 /* ── Scrollbar sidebar ── */
-.sidebar::-webkit-scrollbar {
-  width: 4px;
-}
-.sidebar::-webkit-scrollbar-track {
-  background: transparent;
-}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
 .sidebar::-webkit-scrollbar-thumb {
   background: rgba(255,180,0,0.2);
   border-radius: 99px;
 }
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,180,0,0.45);
-}
-
-/* Firefox */
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,180,0,0.45); }
 .sidebar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255,180,0,0.2) transparent;
