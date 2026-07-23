@@ -35,6 +35,15 @@ export type CotizacionReporte = {
   iva: number;
   total: number;
   flete?: number;
+  // ── Nuevo ──
+  cursoDC3?: {
+    modalidad?: string;
+    participantes?: number;
+    precioPorPersona?: number;
+    duracionHoras?: number;
+    incluyeConstancia?: boolean;
+    lugar?: string;
+  };
 };
 
 export type OrdenTrabajoReporte = {
@@ -60,16 +69,10 @@ function generarPlantillaCondiciones(
   const lineas: string[] = [];
 
   if (tipo === "renta") {
-    const plazoLabel: Record<string, string> = {
-      semanal: "1 semana",
-      mensual: "1 mes",
-      anual:   "1 año",
-    };
+    const plazoLabel: Record<string, string> = { semanal: "1 semana", mensual: "1 mes", anual: "1 año" };
     const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
     lineas.push(`Contrato por ${plazo}.`);
-    if (incluirCancelacion) {
-      lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
-    }
+    if (incluirCancelacion) lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
     lineas.push("Todos los precios son en pesos mexicanos más IVA.");
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
@@ -84,6 +87,15 @@ function generarPlantillaCondiciones(
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("Las existencias son salvo previa venta.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
+  } else if (tipo === "curso") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("El curso incluye material didáctico y evaluación teórica y práctica.");
+    lineas.push("La calificación mínima aprobatoria es de 80%.");
+    lineas.push("Los participantes que no aprueben el examen teórico no podrán realizar la evaluación práctica.");
+    lineas.push("La constancia DC-3 ante la STPS se entrega únicamente a los participantes que aprueben ambas evaluaciones.");
+    lineas.push("El cliente deberá proporcionar: sala de juntas o salón, cañón proyector, hojas blancas y plumas.");
+    lineas.push("Para la evaluación práctica, el cliente deberá tener disponible un montacargas en buen estado.");
   } else {
     lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
     lineas.push("El servicio solo incluye lo señalado en esta cotización.");
@@ -102,6 +114,223 @@ function condicionesHtml(cot: CotizacionReporte): string {
     return cot.condiciones.split("\n").filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join("");
   }
   return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo).split("\n").map(l => `<li>${l}</li>`).join("");
+}
+
+// ── NUEVO: reporte HTML para cursos DC3 ──
+function htmlCurso(cot: CotizacionReporte): string {
+  const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
+  const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+
+  const asesorNombre = cot.asesor?.nombre   ?? "Tania Hernandez";
+  const asesorPuesto = cot.asesor?.puesto   ?? "Ventas";
+  const asesorTel    = cot.asesor?.telefono ?? "33 3856 8329";
+  const asesorEmail  = cot.asesor?.email    ?? "pipsamontacargas@hotmail.com";
+
+  const clienteNombre   = cot.cliente?.nombre    ?? "";
+  const clienteDirec    = cot.cliente?.direccion ?? "";
+  const clienteTel      = cot.cliente?.telefono  ?? "";
+  const clienteContacto = cot.cliente?.contacto  ?? "";
+
+  const dc3 = cot.cursoDC3 ?? {};
+  const participantes    = dc3.participantes    ?? 1;
+  const precioPorPersona = dc3.precioPorPersona ?? 0;
+  const duracion         = dc3.duracionHoras    ?? 4;
+  const incluyeConst     = dc3.incluyeConstancia !== false;
+  const modalidadLabel: Record<string, string> = {
+    "teorico":           "Teórico",
+    "practico":          "Práctico",
+    "teorico-practico":  "Teórico-Práctico",
+  };
+  const modalidad = modalidadLabel[dc3.modalidad ?? "teorico-practico"] ?? "Teórico-Práctico";
+  const lugarCurso = dc3.lugar ?? cot.lugar ?? "Instalaciones del cliente";
+
+  const temasTeoricos = [
+    "Introducción y parámetros de estándares nacionales e internacionales para ser un montacarguista calificado.",
+    "Responsabilidades y obligaciones del operador y el porqué del entrenamiento para operadores de montacargas.",
+    "Diferentes clases de montacargas: características y sus componentes.",
+    "Definiciones y conceptos básicos de estabilidad y balance en un montacargas.",
+    "Cómo realizar la inspección pre-turno y/o check list del equipo montacargas antes de comenzar a laborar.",
+    "Pasos a seguir antes de comenzar a trabajar en un equipo montacargas y maniobras seguras al momento de trabajar en el equipo.",
+    "Maniobras correctas y medidas de seguridad de la operación del equipo montacargas.",
+    "Concientización con videos sobre los accidentes en un equipo montacargas.",
+  ];
+
+  const temasPracticos = [
+    "Realización de la revisión Pre-Turno al equipo.",
+    "Traslado de materiales.",
+    "Técnica para manejo de los diferentes materiales, maniobras para estiba de producto sobre producto, en racks, carga y descarga de contenedores.",
+    "Confiabilidad y Seguridad Peatonal al conducir en áreas de tráfico concurrido.",
+    "Estacionado correcto del montacargas.",
+  ];
+
+  const mostrarTeorico  = dc3.modalidad !== "practico";
+  const mostrarPractico = dc3.modalidad !== "teorico";
+
+  const teoricoHtml = mostrarTeorico ? `
+    <div class="modulo">
+      <div class="modulo-title">📚 Curso Teórico <span class="modulo-dur">Duración aprox. ${duracion} horas</span></div>
+      <ul class="temas-list">
+        ${temasTeoricos.map(t => `<li>${t}</li>`).join("")}
+      </ul>
+      <div class="eval-nota">
+        <strong>Evaluación teórica:</strong> Examen escrito (preguntas abiertas y opción múltiple).
+        Duración máxima: 45 min. Calificación mínima aprobatoria: <strong>80%</strong>.
+      </div>
+    </div>` : "";
+
+  const practicoHtml = mostrarPractico ? `
+    <div class="modulo">
+      <div class="modulo-title">🏭 Evaluación Práctica <span class="modulo-dur">15–20 min por participante</span></div>
+      <ul class="temas-list">
+        ${temasPracticos.map(t => `<li>${t}</li>`).join("")}
+      </ul>
+      <div class="eval-nota">
+        Solo participantes que aprueben el examen teórico pueden realizar esta evaluación.
+        Se realiza en las instalaciones del cliente evaluando el trabajo cotidiano del operador.
+        Calificación mínima aprobatoria: <strong>80%</strong>.
+      </div>
+    </div>` : "";
+
+  const requisitosHtml = `
+    <div class="requisitos">
+      <strong>Material requerido por el cliente:</strong>
+      <ul>
+        <li>Sala de juntas o salón con mesas</li>
+        <li>Cañón proyector</li>
+        <li>Hojas blancas, lápices y/o plumas</li>
+        ${mostrarPractico ? "<li>Montacargas en buen estado para la evaluación práctica</li>" : ""}
+        <li>Mesa de Coffee Break para los asistentes</li>
+      </ul>
+    </div>`;
+
+  return [
+    "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
+    `<title>${cot.folio}</title>`,
+    "<style>",
+    "* { margin: 0; padding: 0; box-sizing: border-box; }",
+    "body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 820px; margin: auto; }",
+    ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px solid #222; }",
+    ".header-left { display: flex; align-items: center; gap: 14px; }",
+    ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
+    ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
+    ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
+    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
+    ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
+    ".saludo { font-size: 10pt; margin: 12px 0 16px; line-height: 1.7; }",
+    ".curso-titulo { font-size: 13pt; font-weight: 900; text-align: center; border: 2px solid #222; padding: 10px; margin: 12px 0; background: #f5f5f5; letter-spacing: 0.5px; }",
+    ".ficha { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }",
+    ".ficha-item { background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; padding: 8px 12px; font-size: 10pt; }",
+    ".ficha-label { font-size: 8pt; color: #666; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; }",
+    ".ficha-value { font-weight: 600; color: #222; }",
+    ".modulo { margin: 14px 0; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; }",
+    ".modulo-title { background: #222; color: #fff; font-weight: 700; padding: 8px 14px; font-size: 10.5pt; display: flex; justify-content: space-between; align-items: center; }",
+    ".modulo-dur { font-size: 8.5pt; font-weight: 400; color: #ccc; }",
+    ".temas-list { padding: 10px 14px 10px 32px; font-size: 10pt; line-height: 1.9; }",
+    ".temas-list li { margin-bottom: 2px; }",
+    ".eval-nota { background: #fffbeb; border-top: 1px solid #f0d060; padding: 8px 14px; font-size: 9.5pt; color: #555; }",
+    ".requisitos { margin: 14px 0; background: #f0f7ff; border: 1px solid #bbd6f5; border-radius: 4px; padding: 10px 14px; font-size: 10pt; }",
+    ".requisitos ul { padding-left: 20px; margin-top: 6px; line-height: 1.9; }",
+    ".precio-box { margin: 16px 0; border: 2px solid #222; border-radius: 4px; overflow: hidden; }",
+    ".precio-header { background: #222; color: #fff; font-weight: 700; padding: 8px 14px; font-size: 10pt; }",
+    "table.precio-table { width: 100%; border-collapse: collapse; font-size: 10pt; }",
+    "table.precio-table thead { background: #444; color: #fff; }",
+    "table.precio-table th { padding: 7px 12px; text-align: left; }",
+    "table.precio-table th:last-child { text-align: right; }",
+    "table.precio-table td { padding: 7px 12px; border-bottom: 1px solid #eee; }",
+    "table.precio-table td:last-child { text-align: right; font-weight: 700; }",
+    ".totals { text-align: right; padding: 10px 14px; background: #f9f9f9; border-top: 2px solid #222; }",
+    ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; font-size: 10pt; }",
+    ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
+    ".constancia-badge { display: inline-block; background: #16a34a; color: #fff; border-radius: 20px; padding: 3px 12px; font-size: 9pt; font-weight: 700; margin-top: 8px; }",
+    ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
+    ".conditions ul { margin-top: 6px; padding-left: 18px; }",
+    ".conditions li { margin-bottom: 2px; }",
+    ".signature { margin-top: 28px; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
+    ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 4px; }",
+    "@media print { body { padding: 16px; } }",
+    "</style>", "</head>", "<body>",
+
+    `<p class="folio-ref">${cot.folio}</p>`,
+    '<div class="header">',
+    '<div class="header-left">',
+    `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
+    '<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
+    "</div>",
+    '<div class="header-right">',
+    `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
+    "Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>",
+    "45602, Zapopán, Jal.<br>",
+    "www.pipsamontacargas.com",
+    "</div>",
+    "</div>",
+
+    '<div class="client-info">',
+    `<strong>${clienteNombre}.</strong><br>`,
+    clienteDirec    ? clienteDirec + "<br>"                                     : "",
+    clienteTel      ? "Tel. " + clienteTel + "<br>"                             : "",
+    clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
+    "</div>",
+
+    `<div class="saludo">El equipo de <strong>Pipsa Montacargas</strong> le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta <strong>COTIZACIÓN</strong> le pueda generar.</div>`,
+
+    `<div class="curso-titulo">Entrenamiento para el Operador de Montacargas:<br>El Manejo Seguro del Montacargas</div>`,
+
+    '<div class="ficha">',
+    `<div class="ficha-item"><div class="ficha-label">Modalidad</div><div class="ficha-value">${modalidad}</div></div>`,
+    `<div class="ficha-item"><div class="ficha-label">Participantes</div><div class="ficha-value">${participantes} persona${participantes !== 1 ? "s" : ""}</div></div>`,
+    `<div class="ficha-item"><div class="ficha-label">Duración total aprox.</div><div class="ficha-value">${duracion} horas</div></div>`,
+    `<div class="ficha-item"><div class="ficha-label">Lugar</div><div class="ficha-value">${lugarCurso}</div></div>`,
+    "</div>",
+
+    incluyeConst ? `<div><span class="constancia-badge">✅ Incluye constancia DC-3 ante la STPS</span></div>` : "",
+
+    teoricoHtml,
+    practicoHtml,
+    requisitosHtml,
+
+    '<div class="precio-box">',
+    '<div class="precio-header">💰 Inversión</div>',
+    `<table class="precio-table">
+      <thead><tr>
+        <th>Concepto</th>
+        <th>Participantes</th>
+        <th style="text-align:right">Precio por persona</th>
+        <th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>Curso ${modalidad} — Operador de Montacargas DC-3</td>
+          <td style="text-align:center">${participantes}</td>
+          <td style="text-align:right">$${precioPorPersona.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right;font-weight:700">$${(participantes * precioPorPersona).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        </tr>
+      </tbody>
+    </table>`,
+    '<div class="totals">',
+    `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    "</div>",
+    "</div>",
+
+    '<div class="conditions">',
+    "<strong>Condiciones comerciales:</strong>",
+    "<ul>", condicionesHtml(cot), "</ul>",
+    "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su elección, quedamos a sus órdenes para cualquier duda o comentario.</p>",
+    "</div>",
+
+    '<div class="signature">',
+    "<strong>Le Atendió:</strong>",
+    `<div class="name">${asesorNombre}</div>`,
+    `${asesorPuesto}<br>`,
+    `<strong>Tel: ${asesorTel}</strong><br>`,
+    asesorEmail,
+    "</div>",
+
+    `<script>window.onload = function() { document.title = '${cot.folio}'; };</script>`,
+    "</body>", "</html>",
+  ].join("\n");
 }
 
 function htmlServicio(cot: CotizacionReporte): string {
@@ -192,7 +421,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
     "Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>",
-    "45602, Zapópan, Jal.<br>",
+    "45602, Zapopán, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
     "</div>",
@@ -205,7 +434,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     "</div>",
 
     equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
-
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
 
@@ -224,9 +452,7 @@ function htmlServicio(cot: CotizacionReporte): string {
 
     '<div class="conditions">',
     "<strong>Condiciones comerciales:</strong>",
-    "<ul>",
-    condicionesHtml(cot),
-    "</ul>",
+    "<ul>", condicionesHtml(cot), "</ul>",
     "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
     "</div>",
 
@@ -270,7 +496,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     : m?.tipo === "diesel" ? "Diésel"
     : "";
 
-  // Datos del equipo para mostrar en el primer concepto
   const equipoDatos = [
     equipoMarca    ? `<strong>Marca:</strong> ${equipoMarca}`     : "",
     equipoModelo   ? `<strong>Modelo:</strong> ${equipoModelo}`   : "",
@@ -286,12 +511,9 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
         <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
       </div>`
     ).join("");
-
-    // Solo en el primer concepto, si hay datos del equipo, los agrega debajo
     const equipoExtra = idx === 0 && equipoDatos
       ? `<div style="margin-top:6px;font-size:9pt;color:#555;border-top:1px dotted #ddd;padding-top:4px;">${equipoDatos}</div>`
       : "";
-
     return `<tr>
       <td style="padding:6px 8px;border:1px solid #ddd;width:80px;text-align:center;vertical-align:middle">
         ${item.imagen
@@ -387,9 +609,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
 
     '<div class="conditions">',
     "<strong>TÉRMINOS Y CONDICIONES COMERCIALES:</strong>",
-    "<ul>",
-    condicionesHtml(cot),
-    "</ul>",
+    "<ul>", condicionesHtml(cot), "</ul>",
     "</div>",
 
     '<div class="signature">',
@@ -618,17 +838,19 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 </html>`;
 }
 
+// ── Selector de template ──
+function resolverHtml(cot: CotizacionReporte): Promise<string> | string {
+  if (cot.tipo === "venta" || cot.tipo === "renta") return htmlVentaRenta(cot);
+  if (cot.tipo === "curso")                          return htmlCurso(cot);
+  return htmlServicio(cot);
+}
+
 export async function generarReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? await htmlVentaRenta(cot)
-    : htmlServicio(cot);
-  abrirVentana(html);
+  abrirVentana(await Promise.resolve(resolverHtml(cot)));
 }
 
 export async function imprimirReporte(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? await htmlVentaRenta(cot)
-    : htmlServicio(cot);
+  const html = await Promise.resolve(resolverHtml(cot));
   const htmlConPrint = html.replace(
     `window.onload = function() { document.title = '${cot.folio}'; };`,
     `window.onload = function() { document.title = '${cot.folio}'; setTimeout(function(){ window.print(); }, 600); window.onafterprint = function(){ window.close(); }; };`
@@ -660,9 +882,7 @@ function abrirVentana(html: string) {
 }
 
 export async function descargarPDF(cot: CotizacionReporte) {
-  const html = cot.tipo === "venta" || cot.tipo === "renta"
-    ? await htmlVentaRenta(cot)
-    : htmlServicio(cot);
+  const html = await Promise.resolve(resolverHtml(cot));
 
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:850px;height:1px;border:none;visibility:hidden;";
@@ -685,16 +905,10 @@ export async function descargarPDF(cot: CotizacionReporte) {
     : null;
 
   const canvas = await html2canvas(body, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    width: 850,
-    height: alturaReal,
-    windowWidth: 850,
-    windowHeight: alturaReal,
-    backgroundColor: "#ffffff",
-    scrollY: 0,
-    scrollX: 0,
+    scale: 2, useCORS: true, allowTaint: true,
+    width: 850, height: alturaReal,
+    windowWidth: 850, windowHeight: alturaReal,
+    backgroundColor: "#ffffff", scrollY: 0, scrollX: 0,
   });
 
   document.body.removeChild(iframe);
@@ -717,14 +931,12 @@ export async function descargarPDF(cot: CotizacionReporte) {
     while (cursor < totalPx) {
       let nextCut = cursor + pageImgH;
       if (nextCut >= totalPx) break;
-
       if (signatureTop !== null) {
         const signatureTopPx = signatureTop * 2;
         if (nextCut > signatureTopPx && cursor < signatureTopPx) {
           nextCut = signatureTopPx - 10;
         }
       }
-
       cuts.push(nextCut);
       cursor = nextCut;
     }
@@ -735,7 +947,6 @@ export async function descargarPDF(cot: CotizacionReporte) {
 
     for (const cutY of allCuts) {
       if (page > 0) pdf.addPage();
-
       const sliceH     = cutY - srcY;
       const pageCanvas = document.createElement("canvas");
       pageCanvas.width  = canvas.width;
@@ -744,12 +955,7 @@ export async function descargarPDF(cot: CotizacionReporte) {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
       ctx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-
-      pdf.addImage(
-        pageCanvas.toDataURL("image/jpeg", 0.95),
-        "JPEG", 0, 0, pageW, sliceH * scale
-      );
-
+      pdf.addImage(pageCanvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, pageW, sliceH * scale);
       srcY = cutY;
       page++;
     }

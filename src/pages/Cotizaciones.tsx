@@ -10,9 +10,17 @@ type Item = {
 type Asesor = { _id: string; nombre: string; puesto: string; telefono: string; email: string };
 type Comentario = { _id: string; texto: string; autor: { _id: string; nombre: string; rol: string }; fecha: string };
 type ClienteOcasional = { nombre: string; direccion?: string; telefono?: string; contacto?: string };
+type CursoDC3 = {
+  modalidad: "teorico" | "practico" | "teorico-practico";
+  participantes: number;
+  precioPorPersona: number;
+  duracionHoras: number;
+  incluyeConstancia: boolean;
+  lugar?: string;
+};
 
 type Cotizacion = {
-  _id: string; folio: string; tipo: "servicio" | "renta" | "venta" | "refacciones";
+  _id: string; folio: string; tipo: "servicio" | "renta" | "venta" | "refacciones" | "curso";
   tipoPeriodo?: "semanal" | "mensual" | "anual";
   condiciones?: string;
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
@@ -31,6 +39,7 @@ type Cotizacion = {
   numeroFactura?: string;
   notas?: string; comentarios: Comentario[];
   equipoMarca?: string; equipoModelo?: string; equipoSerie?: string;
+  cursoDC3?: CursoDC3;
 };
 
 type Cliente = { _id: string; nombre: string };
@@ -50,6 +59,12 @@ type TipoServicio = {
 };
 type RefaccionCatalogo = { _id: string; nombre: string; numeroParte?: string; precio?: number; unidad?: string };
 
+const emptyCursoDC3: CursoDC3 = {
+  modalidad: "teorico-practico", participantes: 1,
+  precioPorPersona: 1900, duracionHoras: 4,
+  incluyeConstancia: true, lugar: "",
+};
+
 const emptyClienteOcasional: ClienteOcasional = { nombre: "", direccion: "", telefono: "", contacto: "" };
 const emptyForm: any = {
   folio: "", tipo: "servicio", cliente: "", esOcasional: false,
@@ -59,16 +74,19 @@ const emptyForm: any = {
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "activa", notas: "",
   equipoMarca: "", equipoModelo: "", equipoSerie: "",
+  cursoDC3: { ...emptyCursoDC3 },
 };
 const emptyItem: Item = { cantidad: 1, descripcion: "", precioUnitario: 0, total: 0, imagen: "", subconceptos: [] };
 const emptySubconcepto: SubConcepto = { descripcion: "", precio: 0 };
 
-const TIPO_BADGE: Record<string, string> = { servicio: "badge-amber", renta: "badge-blue", venta: "badge-green", refacciones: "badge-purple" };
+const TIPO_BADGE: Record<string, string> = {
+  servicio: "badge-amber", renta: "badge-blue", venta: "badge-green",
+  refacciones: "badge-purple", curso: "badge-red",
+};
 const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada: "badge-blue", cancelada: "badge-gray" };
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
-// ── Helpers de semana (martes a lunes) ──
 function getMartes(date: Date): Date {
   const d = new Date(date);
   d.setHours(12, 0, 0, 0);
@@ -189,6 +207,15 @@ function generarPlantillaCondiciones(tipo: string, tipoPeriodo?: string, vigenci
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("Las existencias son salvo previa venta.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
+  } else if (tipo === "curso") {
+    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
+    lineas.push("El curso incluye material didáctico y evaluación teórica y práctica.");
+    lineas.push("La calificación mínima aprobatoria es de 80%.");
+    lineas.push("Los participantes que no aprueben el examen teórico no podrán realizar la evaluación práctica.");
+    lineas.push("La constancia DC-3 ante la STPS se entrega únicamente a los participantes que aprueben ambas evaluaciones.");
+    lineas.push("El cliente deberá proporcionar: sala de juntas o salón, cañón proyector, hojas blancas y plumas.");
+    lineas.push("Para la evaluación práctica, el cliente deberá tener disponible un montacargas en buen estado.");
   } else {
     lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
     lineas.push("El servicio solo incluye lo señalado en esta cotización.");
@@ -199,6 +226,12 @@ function generarPlantillaCondiciones(tipo: string, tipoPeriodo?: string, vigenci
     lineas.push("Las existencias son salvo previa venta.");
   }
   return lineas.join("\n");
+}
+
+function recalcCurso(cursoDC3: CursoDC3) {
+  const subtotal = cursoDC3.participantes * cursoDC3.precioPorPersona;
+  const iva      = subtotal * 0.16;
+  return { subtotal, iva, total: subtotal + iva };
 }
 
 export default function Cotizaciones() {
@@ -228,7 +261,6 @@ export default function Cotizaciones() {
   const [uploadingIdx, setUploadingIdx]               = useState<number | null>(null);
   const [verTodosMontas, setVerTodosMontas]           = useState(false);
 
-  // ── Reporte semanal ──
   const [modalReporte, setModalReporte] = useState(false);
   const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
 
@@ -252,7 +284,6 @@ export default function Cotizaciones() {
     finally { setLoading(false); }
   }
 
-  // ── Lógica del reporte semanal ──
   function getCotizacionesSemana(): Cotizacion[] {
     const desde = semanaInicio;
     const hasta = getFinSemana(semanaInicio);
@@ -263,12 +294,8 @@ export default function Cotizaciones() {
   }
 
   type GrupoAsesor = {
-    nombre: string;
-    cotizaciones: Cotizacion[];
-    total: number;
-    facturadas: number;
-    activas: number;
-    canceladas: number;
+    nombre: string; cotizaciones: Cotizacion[];
+    total: number; facturadas: number; activas: number; canceladas: number;
   };
 
   function agruparPorAsesor(cots: Cotizacion[]): GrupoAsesor[] {
@@ -290,7 +317,7 @@ export default function Cotizaciones() {
   function openNew() {
     setEditing(null);
     setVerTodosMontas(false);
-    setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }] });
+    setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }], cursoDC3: { ...emptyCursoDC3 } });
     setModal(true);
   }
 
@@ -307,6 +334,7 @@ export default function Cotizaciones() {
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
       subtotal: c.subtotal, iva: c.iva, total: c.total, estatus: c.estatus, notas: c.notas ?? "",
       equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
+      cursoDC3: c.cursoDC3 ?? { ...emptyCursoDC3 },
     });
     setModal(true);
   }
@@ -323,6 +351,7 @@ export default function Cotizaciones() {
       items: c.items.map(i => ({ ...i, subconceptos: i.subconceptos ?? [] })),
       subtotal: c.subtotal, iva: c.iva, total: c.total, estatus: "activa", notas: c.notas ?? "",
       equipoMarca: c.equipoMarca ?? "", equipoModelo: c.equipoModelo ?? "", equipoSerie: c.equipoSerie ?? "",
+      cursoDC3: c.cursoDC3 ?? { ...emptyCursoDC3 },
     });
     setModal(true);
   }
@@ -462,6 +491,29 @@ export default function Cotizaciones() {
       } else {
         payload.clienteOcasional = null;
       }
+
+      // ── Curso: generar item automáticamente y guardar cursoDC3 ──
+      if (form.tipo === "curso" && form.cursoDC3) {
+        const dc3 = form.cursoDC3;
+        const modalidadLabel: Record<string, string> = {
+          "teorico": "Teórico", "practico": "Práctico", "teorico-practico": "Teórico-Práctico",
+        };
+        payload.items = [{
+          cantidad: dc3.participantes,
+          descripcion: `Curso ${modalidadLabel[dc3.modalidad] ?? dc3.modalidad} — Operador de Montacargas DC-3`,
+          precioUnitario: dc3.precioPorPersona,
+          total: dc3.participantes * dc3.precioPorPersona,
+          subconceptos: [],
+        }];
+        const totales = recalcCurso(dc3);
+        payload.subtotal = totales.subtotal;
+        payload.iva      = totales.iva;
+        payload.total    = totales.total;
+        payload.cursoDC3 = dc3;
+      } else {
+        payload.cursoDC3 = null;
+      }
+
       if (editing) {
         const { data } = await api.put(`/cotizaciones/${editing._id}`, payload);
         setCotizaciones(prev => prev.map(c => c._id === editing._id ? { ...c, ...data } : c));
@@ -517,6 +569,7 @@ export default function Cotizaciones() {
     return c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "—";
   }
   function precioBaseConcepto(c: Cotizacion): number | null {
+    if (c.tipo === "curso" && c.cursoDC3) return c.cursoDC3.precioPorPersona;
     if ((c.tipo === "renta" || c.tipo === "venta") && c.items.length > 0) return c.items[0].precioUnitario;
     return null;
   }
@@ -528,8 +581,7 @@ export default function Cotizaciones() {
   const montasDisponibles = verTodosMontas || !form.cliente || montasDelCliente.length === 0 ? montas : montasDelCliente;
   const montaOpts         = montasDisponibles.map(m => ({ _id: m._id, label: `${m.numeroEconomico} — ${m.marca} ${m.modelo}` }));
 
-  // ── Filtro corregido ──
-  const tiposFiltro = ["servicio", "renta", "venta", "refacciones"];
+  const tiposFiltro = ["servicio", "renta", "venta", "refacciones", "curso"];
   const filtered = cotizaciones.filter(c => {
     const matchSearch =
       c.folio.toLowerCase().includes(search.toLowerCase()) ||
@@ -559,18 +611,18 @@ export default function Cotizaciones() {
   const montaSeleccionada    = montas.find(m => m._id === form.montacargas);
   const mostrarAutocompletar = (form.tipo === "renta" || form.tipo === "venta") && !!form.montacargas;
   const esRefacciones        = form.tipo === "refacciones";
+  const esCurso              = form.tipo === "curso";
 
   function generarPlantilla() {
     setForm((p: any) => ({ ...p, condiciones: generarPlantillaCondiciones(form.tipo, form.tipoPeriodo) }));
   }
 
-  // ── Datos del reporte actual ──
   const cotsSemana  = getCotizacionesSemana();
   const grupos      = agruparPorAsesor(cotsSemana);
   const totalSemana = cotsSemana.reduce((a, c) => a + c.total, 0);
 
   const TIPO_COLOR: Record<string, string> = {
-    servicio: "#f59e0b", renta: "#3b82f6", venta: "#22c55e", refacciones: "#a855f7",
+    servicio: "#f59e0b", renta: "#3b82f6", venta: "#22c55e", refacciones: "#a855f7", curso: "#ef4444",
   };
   const ESTATUS_COLOR: Record<string, string> = {
     activa: "#22c55e", facturada: "#3b82f6", cancelada: "#6b7280",
@@ -595,6 +647,7 @@ export default function Cotizaciones() {
             <option value="renta">Renta</option>
             <option value="venta">Venta</option>
             <option value="refacciones">Refacciones</option>
+            <option value="curso">🎓 Curso DC-3</option>
           </select>
         </div>
 
@@ -643,7 +696,7 @@ export default function Cotizaciones() {
           <SearchableSelect value={form.asesor} onChange={id => setForm((p: any) => ({ ...p, asesor: id }))} options={asesorOpts} placeholder="Escribe para buscar asesor..." />
         </div>
 
-        {!esRefacciones && (
+        {!esRefacciones && !esCurso && (
           <div className="form-group">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
               <label className="form-label" style={{ margin: 0 }}>Montacargas</label>
@@ -660,7 +713,7 @@ export default function Cotizaciones() {
           </div>
         )}
 
-        {!esRefacciones && (
+        {!esRefacciones && !esCurso && (
           <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>🔧 Datos del equipo (opcionales — aparecen en el reporte)</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
@@ -681,12 +734,14 @@ export default function Cotizaciones() {
           </select>
         </div>
 
-        <div className="form-group span-2">
-          <label className="form-label">Descripción {esRefacciones ? "(opcional)" : "del servicio"}</label>
-          <textarea className="form-textarea" rows={3} value={form.descripcionServicio}
-            onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
-            placeholder={esRefacciones ? "Ej. Refacciones para mantenimiento" : "Ej. Mantenimiento correctivo a batería"} />
-        </div>
+        {!esCurso && (
+          <div className="form-group span-2">
+            <label className="form-label">Descripción {esRefacciones ? "(opcional)" : "del servicio"}</label>
+            <textarea className="form-textarea" rows={3} value={form.descripcionServicio}
+              onChange={e => setForm((p: any) => ({ ...p, descripcionServicio: e.target.value }))}
+              placeholder={esRefacciones ? "Ej. Refacciones para mantenimiento" : "Ej. Mantenimiento correctivo a batería"} />
+          </div>
+        )}
 
         {form.tipo === "servicio" && tiposServicio.length > 0 && (
           <div className="form-group span-2" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
@@ -726,6 +781,79 @@ export default function Cotizaciones() {
           </div>
         )}
 
+        {/* ── Bloque curso DC3 ── */}
+        {esCurso && (
+          <div className="form-group span-2" style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", padding: 14 }}>
+            <p style={{ fontSize: "0.72rem", color: "#ef4444", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>
+              🎓 Datos del Curso DC-3
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Modalidad</label>
+                <select className="form-select" value={form.cursoDC3?.modalidad ?? "teorico-practico"}
+                  onChange={e => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, modalidad: e.target.value } }))}>
+                  <option value="teorico">Teórico</option>
+                  <option value="practico">Práctico</option>
+                  <option value="teorico-practico">Teórico-Práctico</option>
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Duración (horas)</label>
+                <input className="form-input" type="number" min={1} value={form.cursoDC3?.duracionHoras ?? 4}
+                  onChange={e => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, duracionHoras: +e.target.value } }))} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Número de participantes</label>
+                <input className="form-input" type="number" min={1} value={form.cursoDC3?.participantes ?? 1}
+                  onChange={e => {
+                    const participantes = +e.target.value;
+                    setForm((p: any) => {
+                      const cursoDC3 = { ...p.cursoDC3, participantes };
+                      return { ...p, cursoDC3, ...recalcCurso(cursoDC3) };
+                    });
+                  }} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Precio por persona (sin IVA)</label>
+                <input className="form-input" type="number" min={0} value={form.cursoDC3?.precioPorPersona ?? 1900}
+                  onChange={e => {
+                    const precioPorPersona = +e.target.value;
+                    setForm((p: any) => {
+                      const cursoDC3 = { ...p.cursoDC3, precioPorPersona };
+                      return { ...p, cursoDC3, ...recalcCurso(cursoDC3) };
+                    });
+                  }} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Lugar del curso</label>
+                <input className="form-input" value={form.cursoDC3?.lugar ?? ""}
+                  onChange={e => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, lugar: e.target.value } }))}
+                  placeholder="Ej. Instalaciones del cliente" />
+              </div>
+              <div className="form-group" style={{ margin: 0, display: "flex", alignItems: "flex-end" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", paddingBottom: 6 }}>
+                  <input type="checkbox" checked={form.cursoDC3?.incluyeConstancia !== false}
+                    onChange={e => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, incluyeConstancia: e.target.checked } }))}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Incluye constancia DC-3</span>
+                </label>
+              </div>
+            </div>
+            <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface3)", borderRadius: "var(--radius-sm)", fontSize: "0.85rem" }}>
+              <span style={{ color: "var(--text-muted)" }}>
+                {form.cursoDC3?.participantes ?? 1} persona{(form.cursoDC3?.participantes ?? 1) !== 1 ? "s" : ""} ×{" "}
+                ${(form.cursoDC3?.precioPorPersona ?? 0).toLocaleString("es-MX")} =
+              </span>
+              <strong style={{ color: "var(--accent)", marginLeft: 8 }}>
+                ${((form.cursoDC3?.participantes ?? 1) * (form.cursoDC3?.precioPorPersona ?? 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} + IVA
+              </strong>
+              <span style={{ marginLeft: 16, color: "var(--green)", fontWeight: 700 }}>
+                = ${(((form.cursoDC3?.participantes ?? 1) * (form.cursoDC3?.precioPorPersona ?? 0)) * 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} total
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>📋 Condiciones comerciales</p>
@@ -739,72 +867,75 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>{esRefacciones ? "Refacciones" : "Conceptos"}</p>
-          <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar {esRefacciones ? "refacción" : "concepto"}</button>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {form.items.map((item: Item, i: number) => {
-            const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
-            return (
-              <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
-                {esRefacciones && refaccionesCatalogo.length > 0 && (
-                  <div style={{ padding: "8px 8px 0" }}>
-                    <select className="form-select" style={{ fontSize: "0.8rem", padding: "6px 10px" }} defaultValue=""
-                      onChange={e => { aplicarRefaccionCatalogo(i, e.target.value); e.target.value = ""; }}>
-                      <option value="">🔍 Buscar en catálogo de Almacén (opcional)...</option>
-                      {refaccionesCatalogo.map(r => <option key={r._id} value={r._id}>{r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""}{r.precio ? ` — $${r.precio.toLocaleString()}` : " — sin precio"}</option>)}
-                    </select>
-                  </div>
-                )}
-                <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
-                  <label style={{ cursor: "pointer" }}>
-                    {item.imagen ? (
-                      <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
-                    ) : (
-                      <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
-                        {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
-                      </div>
-                    )}
-                    <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
-                  </label>
-                  <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
-                  <textarea className="form-textarea" value={item.descripcion} onChange={e => updateItem(i, "descripcion", e.target.value)} placeholder={esRefacciones ? "Nombre de la refacción" : "Descripción del concepto"} rows={2} style={{ resize: "vertical", minHeight: 40 }} />
-                  <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} readOnly={tieneSubconceptos} title={tieneSubconceptos ? "Calculado desde subconceptos" : ""} />
-                  <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
-                  <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
-                </div>
-                {!esRefacciones && (
-                  <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Subconceptos {tieneSubconceptos ? `(${item.subconceptos?.length})` : ""}</p>
-                      <button className="btn btn-secondary btn-sm" style={{ fontSize: "0.7rem", padding: "3px 8px" }} onClick={() => addSubconcepto(i)}>+ Agregar subconcepto</button>
+      {/* ── Conceptos (se ocultan en curso, se generan automáticamente) ── */}
+      {!esCurso && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>{esRefacciones ? "Refacciones" : "Conceptos"}</p>
+            <button className="btn btn-secondary btn-sm" onClick={addItem}>+ Agregar {esRefacciones ? "refacción" : "concepto"}</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {form.items.map((item: Item, i: number) => {
+              const tieneSubconceptos = (item.subconceptos?.length ?? 0) > 0;
+              return (
+                <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
+                  {esRefacciones && refaccionesCatalogo.length > 0 && (
+                    <div style={{ padding: "8px 8px 0" }}>
+                      <select className="form-select" style={{ fontSize: "0.8rem", padding: "6px 10px" }} defaultValue=""
+                        onChange={e => { aplicarRefaccionCatalogo(i, e.target.value); e.target.value = ""; }}>
+                        <option value="">🔍 Buscar en catálogo de Almacén (opcional)...</option>
+                        {refaccionesCatalogo.map(r => <option key={r._id} value={r._id}>{r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""}{r.precio ? ` — $${r.precio.toLocaleString()}` : " — sin precio"}</option>)}
+                      </select>
                     </div>
-                    {tieneSubconceptos && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        {item.subconceptos!.map((sub, si) => (
-                          <div key={si} style={{ display: "grid", gridTemplateColumns: "1fr 120px 28px", gap: 6, alignItems: "center" }}>
-                            <input className="form-input" value={sub.descripcion} onChange={e => updateSubconcepto(i, si, "descripcion", e.target.value)} placeholder="Descripción del subconcepto" style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
-                            <input className="form-input" type="number" value={sub.precio} onChange={e => updateSubconcepto(i, si, "precio", +e.target.value)} placeholder="Precio" style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
-                            <button className="btn btn-danger btn-icon" style={{ padding: "4px 8px", fontSize: "0.75rem" }} onClick={() => removeSubconcepto(i, si)}>✕</button>
-                          </div>
-                        ))}
-                        <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>Suma: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente</p>
-                      </div>
-                    )}
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
+                    <label style={{ cursor: "pointer" }}>
+                      {item.imagen ? (
+                        <img src={item.imagen} alt="producto" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--border)", display: "block" }} />
+                      ) : (
+                        <div style={{ width: 48, height: 48, background: "var(--surface3)", borderRadius: 6, border: "1px dashed var(--border2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
+                          {uploadingIdx === i ? <div className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} /> : "📷"}
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) subirImagen(i, f); }} />
+                    </label>
+                    <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
+                    <textarea className="form-textarea" value={item.descripcion} onChange={e => updateItem(i, "descripcion", e.target.value)} placeholder={esRefacciones ? "Nombre de la refacción" : "Descripción del concepto"} rows={2} style={{ resize: "vertical", minHeight: 40 }} />
+                    <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} readOnly={tieneSubconceptos} title={tieneSubconceptos ? "Calculado desde subconceptos" : ""} />
+                    <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
+                    <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  {!esRefacciones && (
+                    <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px", background: "var(--surface3)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Subconceptos {tieneSubconceptos ? `(${item.subconceptos?.length})` : ""}</p>
+                        <button className="btn btn-secondary btn-sm" style={{ fontSize: "0.7rem", padding: "3px 8px" }} onClick={() => addSubconcepto(i)}>+ Agregar subconcepto</button>
+                      </div>
+                      {tieneSubconceptos && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {item.subconceptos!.map((sub, si) => (
+                            <div key={si} style={{ display: "grid", gridTemplateColumns: "1fr 120px 28px", gap: 6, alignItems: "center" }}>
+                              <input className="form-input" value={sub.descripcion} onChange={e => updateSubconcepto(i, si, "descripcion", e.target.value)} placeholder="Descripción del subconcepto" style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                              <input className="form-input" type="number" value={sub.precio} onChange={e => updateSubconcepto(i, si, "precio", +e.target.value)} placeholder="Precio" style={{ fontSize: "0.82rem", padding: "6px 10px" }} />
+                              <button className="btn btn-danger btn-icon" style={{ padding: "4px 8px", fontSize: "0.75rem" }} onClick={() => removeSubconcepto(i, si)}>✕</button>
+                            </div>
+                          ))}
+                          <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 2 }}>Suma: ${(item.subconceptos!.reduce((a, s) => a + s.precio, 0)).toLocaleString("es-MX", { minimumFractionDigits: 2 })} → Precio U. calculado automáticamente</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+            <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}><span>Total:</span><span>${form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+          </div>
         </div>
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-          <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-          <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}><span>Total:</span><span>${form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-        </div>
-      </div>
+      )}
 
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => { setModal(false); setEditing(null); }}>Cancelar</button>
@@ -863,6 +994,7 @@ export default function Cotizaciones() {
                   <option value="renta">📦 Renta</option>
                   <option value="venta">💰 Venta</option>
                   <option value="refacciones">🔩 Refacciones</option>
+                  <option value="curso">🎓 Curso DC-3</option>
                 </optgroup>
               </select>
               <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
@@ -887,7 +1019,11 @@ export default function Cotizaciones() {
                   return (
                     <tr key={c._id}>
                       <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{c.folio}</td>
-                      <td><span className={`badge ${TIPO_BADGE[c.tipo]}`}>{c.tipo}</span></td>
+                      <td>
+                        <span className={`badge ${TIPO_BADGE[c.tipo] ?? "badge-gray"}`}>
+                          {c.tipo === "curso" ? "🎓 curso" : c.tipo}
+                        </span>
+                      </td>
                       <td style={{ fontWeight: 600 }}>
                         {nombreCliente(c)}
                         {!c.cliente && c.clienteOcasional?.nombre && (
@@ -900,7 +1036,9 @@ export default function Cotizaciones() {
                         {precioBase !== null ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                             <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.92rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{c.tipo === "renta" ? "precio renta" : "precio venta"}</span>
+                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                              {c.tipo === "renta" ? "precio renta" : c.tipo === "venta" ? "precio venta" : c.tipo === "curso" ? `× ${c.cursoDC3?.participantes ?? 1} pers.` : ""}
+                            </span>
                           </div>
                         ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                       </td>
@@ -927,8 +1065,12 @@ export default function Cotizaciones() {
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Ver reporte">👁️</button>
-                          <button className="btn btn-primary btn-sm" onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional })} title="Descargar PDF">📥 PDF</button>
+                          <button className="btn btn-secondary btn-sm"
+                            onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}
+                            title="Ver reporte">👁️</button>
+                          <button className="btn btn-primary btn-sm"
+                            onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}
+                            title="Descargar PDF">📥 PDF</button>
                           <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
                           <button className="btn btn-secondary btn-sm" onClick={() => clonar(c)} title="Clonar" disabled={saving}>📋</button>
                           {c.estatus !== "facturada" && (
@@ -962,7 +1104,6 @@ export default function Cotizaciones() {
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
           <div className="modal" style={{ maxWidth: 960, width: "96vw", display: "flex", flexDirection: "column" }}>
             <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
-
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
               <div>
                 <h2 className="modal-title" style={{ marginBottom: 2 }}>📊 Reporte semanal de cotizaciones</h2>
@@ -970,13 +1111,8 @@ export default function Cotizaciones() {
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => { const d = new Date(semanaInicio); d.setDate(d.getDate() - 7); setSemanaInicio(d); }}>‹ Anterior</button>
-                <input
-                  type="week"
-                  className="form-input"
-                  style={{ width: "auto", padding: "5px 8px", fontSize: "0.82rem" }}
-                  value={toInputWeek(semanaInicio)}
-                  onChange={e => { if (e.target.value) setSemanaInicio(fromInputWeek(e.target.value)); }}
-                />
+                <input type="week" className="form-input" style={{ width: "auto", padding: "5px 8px", fontSize: "0.82rem" }}
+                  value={toInputWeek(semanaInicio)} onChange={e => { if (e.target.value) setSemanaInicio(fromInputWeek(e.target.value)); }} />
                 <button className="btn btn-secondary btn-sm"
                   onClick={() => { const d = new Date(semanaInicio); d.setDate(d.getDate() + 7); setSemanaInicio(d); }}
                   disabled={semanaInicio >= getMartes(new Date())}>Siguiente ›</button>
@@ -985,10 +1121,10 @@ export default function Cotizaciones() {
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               {[
-                { label: "Cotizaciones", val: cotsSemana.length, color: "var(--accent)", icon: "📄" },
-                { label: "Monto total", val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
-                { label: "Facturadas", val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6", icon: "🧾" },
-                { label: "Activas", val: cotsSemana.filter(c => c.estatus === "activa").length, color: "#22c55e", icon: "✅" },
+                { label: "Cotizaciones", val: cotsSemana.length,                                        color: "var(--accent)", icon: "📄" },
+                { label: "Monto total",  val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)",   icon: "💰" },
+                { label: "Facturadas",   val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6",       icon: "🧾" },
+                { label: "Activas",      val: cotsSemana.filter(c => c.estatus === "activa").length,    color: "#22c55e",       icon: "✅" },
               ].map(s => (
                 <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 12px", border: "1px solid var(--border)", textAlign: "center" }}>
                   <div style={{ fontSize: "1.2rem", marginBottom: 2 }}>{s.icon}</div>
@@ -1050,8 +1186,8 @@ export default function Cotizaciones() {
                             <tr key={c._id}>
                               <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.73rem" }}>{c.folio}</td>
                               <td>
-                                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: TIPO_COLOR[c.tipo], background: `${TIPO_COLOR[c.tipo]}1a`, padding: "2px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>
-                                  {c.tipo}
+                                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: TIPO_COLOR[c.tipo] ?? "#888", background: `${TIPO_COLOR[c.tipo] ?? "#888"}1a`, padding: "2px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>
+                                  {c.tipo === "curso" ? "🎓 curso" : c.tipo}
                                 </span>
                               </td>
                               <td style={{ fontWeight: 600, fontSize: "0.76rem" }}>
@@ -1062,15 +1198,19 @@ export default function Cotizaciones() {
                               </td>
                               <td style={{ whiteSpace: "nowrap", fontSize: "0.73rem", color: "var(--text-muted)" }}>{fmt(c.fecha)}</td>
                               <td style={{ fontSize: "0.73rem", color: "var(--text-muted)" }}>
-                                <span title={c.items[0]?.descripcion ?? "—"}>
-                                  {(c.items[0]?.descripcion ?? "—").slice(0, 50)}{(c.items[0]?.descripcion?.length ?? 0) > 50 ? "…" : ""}
+                                <span title={c.tipo === "curso" ? `Curso DC-3 — ${c.cursoDC3?.participantes ?? 1} participantes` : (c.items[0]?.descripcion ?? "—")}>
+                                  {c.tipo === "curso"
+                                    ? `Curso DC-3 — ${c.cursoDC3?.participantes ?? 1} participante${(c.cursoDC3?.participantes ?? 1) !== 1 ? "s" : ""}`
+                                    : (c.items[0]?.descripcion ?? "—").slice(0, 50) + ((c.items[0]?.descripcion?.length ?? 0) > 50 ? "…" : "")}
                                 </span>
                               </td>
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                                 {precioBase !== null ? (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
                                     <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.78rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-                                    <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{c.tipo === "renta" ? "renta" : "venta"}</span>
+                                    <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>
+                                      {c.tipo === "renta" ? "renta" : c.tipo === "venta" ? "venta" : c.tipo === "curso" ? "por persona" : ""}
+                                    </span>
                                   </div>
                                 ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                               </td>
@@ -1089,7 +1229,7 @@ export default function Cotizaciones() {
                               </td>
                               <td>
                                 <button className="btn btn-secondary btn-sm" style={{ padding: "3px 7px" }} title="Ver cotización"
-                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional })}>👁️</button>
+                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}>👁️</button>
                               </td>
                             </tr>
                           );
@@ -1141,7 +1281,7 @@ export default function Cotizaciones() {
             <button className="modal-close" onClick={() => setComentarioModal(null)}>✕</button>
             <h2 className="modal-title">Comentarios — {comentarioModal.folio}</h2>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span className={`badge ${TIPO_BADGE[comentarioModal.tipo]}`}>{comentarioModal.tipo}</span>
+              <span className={`badge ${TIPO_BADGE[comentarioModal.tipo] ?? "badge-gray"}`}>{comentarioModal.tipo}</span>
               <span className={`badge ${ESTATUS_BADGE[comentarioModal.estatus] ?? "badge-gray"}`}>{comentarioModal.estatus}</span>
             </div>
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>{nombreCliente(comentarioModal)}</p>
