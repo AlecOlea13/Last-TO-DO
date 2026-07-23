@@ -61,10 +61,20 @@ type SolicitudItem = {
   precioEstimado: number; notas: string;
 };
 
+type SolicitudCotizacion = {
+  _id: string; folio: string; tipo: string;
+  cliente?: { nombre: string };
+  clienteOcasional?: { nombre: string };
+  total: number; estatus: string;
+  items: { descripcion: string; total: number }[];
+  fecha: string;
+};
+
 type Solicitud = {
   _id: string; folio: string;
   solicitadoPor: { nombre: string; rol: string };
   liberadaPor?: { nombre: string };
+  cotizacion?: SolicitudCotizacion;
   items: SolicitudItem[];
   notas?: string;
   estatus: "sin_liberar" | "liberada" | "cancelada";
@@ -93,7 +103,6 @@ function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => v
   const [error, setError] = useState<string | null>(null);
   const [escaneando, setEscaneando] = useState(true);
   const yaEscaneado = useRef(false);
-
   const detener = useCallback(() => { readerRef.current?.reset(); }, []);
 
   useEffect(() => {
@@ -155,49 +164,27 @@ async function imprimirValeTermico(vale: Vale) {
     const BR   = "\n";
     const fila = (izq: string, der: string) => izq.substring(0, 22).padEnd(22) + der.substring(0, 10).padStart(10) + "\n";
     let d = "";
-    d += "\x1B\x40";
-    d += "\x1B\x61\x01";
-    d += "\x1B\x21\x30";
-    d += "PIPSA\n";
-    d += "\x1B\x21\x00";
-    d += "Montacargas de Guadalajara\n";
-    d += BR;
-    d += "\x1B\x21\x08";
-    d += "VALE DE SALIDA DE MATERIAL\n";
-    d += "\x1B\x21\x00";
-    d += LINE;
-    d += "\x1B\x61\x01";
-    d += "\x1B\x21\x10";
-    d += `${vale.folio}\n`;
-    d += "\x1B\x21\x00";
-    d += BR;
+    d += "\x1B\x40"; d += "\x1B\x61\x01"; d += "\x1B\x21\x30"; d += "PIPSA\n";
+    d += "\x1B\x21\x00"; d += "Montacargas de Guadalajara\n"; d += BR;
+    d += "\x1B\x21\x08"; d += "VALE DE SALIDA DE MATERIAL\n"; d += "\x1B\x21\x00"; d += LINE;
+    d += "\x1B\x61\x01"; d += "\x1B\x21\x10"; d += `${vale.folio}\n`; d += "\x1B\x21\x00"; d += BR;
     d += "\x1B\x61\x00";
     d += `Tecnico : ${vale.tecnico.nombre}\n`;
     d += `Fecha   : ${fecha}\n`;
     d += `Reg. por: ${vale.registradoPor?.nombre ?? "—"}\n`;
     if (vale.notas) { d += BR; d += `Notas: ${vale.notas}\n`; }
-    d += LINE;
-    d += "\x1B\x21\x08";
-    d += fila("DESCRIPCION", "CANT/UND");
-    d += "\x1B\x21\x00";
-    d += LINE;
+    d += LINE; d += "\x1B\x21\x08"; d += fila("DESCRIPCION", "CANT/UND"); d += "\x1B\x21\x00"; d += LINE;
     for (const item of vale.items) {
       const cant = `${item.cantidad} ${item.unidad}`;
       if (item.nombre.length <= 22) { d += fila(item.nombre, cant); }
       else { d += item.nombre.substring(0, 32) + "\n"; d += fila("", cant); }
       if (item.numeroParte) { d += `  Parte: ${item.numeroParte}\n`; }
     }
-    d += LINE;
-    d += BR;
-    d += "\x1B\x61\x01";
-    d += "Firma de recibido\n";
+    d += LINE; d += BR; d += "\x1B\x61\x01"; d += "Firma de recibido\n";
     d += BR; d += BR; d += BR;
-    d += "________________________________\n";
-    d += `${vale.tecnico.nombre}\n`;
-    d += BR; d += BR;
+    d += "________________________________\n"; d += `${vale.tecnico.nombre}\n`; d += BR; d += BR;
     d += "\x1D\x56\x42\x00";
-    const printData = [{ type: "raw", format: "plain", data: d, options: { language: "ESCPOS" } }];
-    await qz.print(config, printData);
+    await qz.print(config, [{ type: "raw", format: "plain", data: d, options: { language: "ESCPOS" } }]);
     await qz.websocket.disconnect();
   } catch (err: any) {
     console.error("Error imprimiendo vale:", err);
@@ -224,6 +211,7 @@ export default function Almacen() {
   const [tecnicos, setTecnicos]       = useState<Usuario[]>([]);
   const [vales, setVales]             = useState<Vale[]>([]);
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
+  const [cotizacionesDisp, setCotizacionesDisp] = useState<SolicitudCotizacion[]>([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
 
@@ -261,7 +249,9 @@ export default function Almacen() {
     { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }
   ]);
   const [solicitudNotas, setSolicitudNotas]   = useState("");
+  const [solicitudCotizId, setSolicitudCotizId] = useState("");
   const [savingSolicitud, setSavingSolicitud] = useState(false);
+  const [verCotizacion, setVerCotizacion]     = useState<SolicitudCotizacion | null>(null);
 
   const [saving, setSaving] = useState(false);
 
@@ -272,13 +262,14 @@ export default function Almacen() {
 
   async function load() {
     try {
-      const [r, o, t, u, s, v] = await Promise.all([
+      const [r, o, t, u, s, v, cots] = await Promise.all([
         api.get("/refacciones"),
         api.get("/ordenes-refaccion"),
         api.get("/tipos-servicio"),
         api.get("/refacciones-usadas"),
         api.get("/servicios"),
         api.get("/vales-salida"),
+        api.get("/cotizaciones").catch(() => ({ data: [] })),
       ]);
       setRefacciones(r.data);
       setOrdenes(o.data);
@@ -286,6 +277,11 @@ export default function Almacen() {
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
       setVales(v.data);
+      setCotizacionesDisp(
+        cots.data.filter((c: any) =>
+          c.estatus === "activa" && ["servicio", "refacciones"].includes(c.tipo)
+        )
+      );
     } catch (e) {
       console.error("Error cargando almacén:", e);
     }
@@ -391,9 +387,7 @@ export default function Almacen() {
     setSaving(true);
     try {
       const { data } = await api.post("/vales-salida", {
-        tecnicoId: valeTecnico,
-        notas: valeNotas || undefined,
-        items: valeItems,
+        tecnicoId: valeTecnico, notas: valeNotas || undefined, items: valeItems,
       });
       setVales(prev => [data, ...prev]);
       setRefacciones(prev => prev.map(r => {
@@ -502,11 +496,13 @@ export default function Almacen() {
       const { data } = await api.post("/solicitudes-compra", {
         items: solicitudItems.filter(i => i.nombre.trim()),
         notas: solicitudNotas,
+        cotizacionId: solicitudCotizId || undefined,
       });
       setSolicitudes(prev => [data, ...prev]);
       setSolicitudModal(false);
       setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
       setSolicitudNotas("");
+      setSolicitudCotizId("");
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
@@ -547,7 +543,8 @@ export default function Almacen() {
   const filteredSols   = solicitudes.filter(s =>
     s.folio.toLowerCase().includes(search.toLowerCase()) ||
     s.solicitadoPor?.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    s.items.some(i => i.nombre.toLowerCase().includes(search.toLowerCase()))
+    s.items.some(i => i.nombre.toLowerCase().includes(search.toLowerCase())) ||
+    (s.cotizacion?.folio ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
@@ -561,6 +558,8 @@ export default function Almacen() {
     color: tab === t ? "var(--accent)" : "var(--text-muted)",
     fontWeight: tab === t ? 700 : 400, fontSize: "0.88rem",
   });
+
+  const cotizSeleccionada = cotizacionesDisp.find(c => c._id === solicitudCotizId);
 
   return (
     <>
@@ -583,6 +582,7 @@ export default function Almacen() {
             <button className="btn btn-primary" onClick={() => {
               setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
               setSolicitudNotas("");
+              setSolicitudCotizId("");
               setSolicitudModal(true);
             }}>
               + Nueva solicitud
@@ -642,11 +642,11 @@ export default function Almacen() {
         <div className="table-card">
           <div className="table-card-header">
             <p className="table-card-title">
-              {tab === "inventario"   ? "Inventario de refacciones"          :
-               tab === "ordenes"      ? "Órdenes de refacciones"             :
-               tab === "usadas"       ? "Refacciones usadas / reemplazadas"  :
-               tab === "vales"        ? "Vales de salida de material"        :
-               tab === "solicitudes"  ? "Solicitudes de compra"              :
+              {tab === "inventario"  ? "Inventario de refacciones"         :
+               tab === "ordenes"     ? "Órdenes de refacciones"            :
+               tab === "usadas"      ? "Refacciones usadas / reemplazadas" :
+               tab === "vales"       ? "Vales de salida de material"       :
+               tab === "solicitudes" ? "Solicitudes de compra"             :
                "Tipos de servicio"}
             </p>
             <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -718,18 +718,14 @@ export default function Almacen() {
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                           {v.items.map((item, i) => (
-                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                              {item.cantidad}× {item.nombre}
-                            </span>
+                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{item.cantidad}× {item.nombre}</span>
                           ))}
                         </div>
                       </td>
                       <td style={{ fontSize: "0.82rem" }}>{fmtHora(v.createdAt)}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.registradoPor?.nombre ?? "—"}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.notas || "—"}</td>
-                      <td>
-                        <button className="btn btn-secondary btn-sm" onClick={() => imprimirValeTermico(v)} title="Imprimir vale">🖨️</button>
-                      </td>
+                      <td><button className="btn btn-secondary btn-sm" onClick={() => imprimirValeTermico(v)} title="Imprimir vale">🖨️</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -774,7 +770,7 @@ export default function Almacen() {
               <table>
                 <thead>
                   <tr>
-                    <th>Folio</th><th>Solicitado por</th><th>Artículos</th>
+                    <th>Folio</th><th>Solicitado por</th><th>Cotización</th><th>Artículos</th>
                     <th>Notas</th><th>Fecha</th><th>Estatus</th><th>Liberado por</th><th></th>
                   </tr>
                 </thead>
@@ -783,49 +779,59 @@ export default function Almacen() {
                     .filter(s => canVerSinLiberar || s.estatus === "liberada")
                     .map(s => (
                     <tr key={s._id}>
-                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>
-                        {s.folio}
-                      </td>
+                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>{s.folio}</td>
                       <td style={{ fontWeight: 600 }}>{s.solicitadoPor?.nombre ?? "—"}</td>
+                      <td>
+                        {s.cotizacion ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <button
+                              onClick={() => setVerCotizacion(s.cotizacion!)}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
+                            >
+                              <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: "0.82rem" }}>
+                                {s.cotizacion.folio}
+                              </span>
+                            </button>
+                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                              {s.cotizacion.cliente?.nombre ?? s.cotizacion.clienteOcasional?.nombre ?? "—"}
+                            </span>
+                            <span style={{ fontSize: "0.7rem", color: "var(--accent)" }}>
+                              ${s.cotizacion.total.toLocaleString()}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>
+                        )}
+                      </td>
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                           {s.items.map((item, i) => (
                             <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                               {item.cantidad}× {item.nombre} ({item.unidad})
                               {item.precioEstimado > 0 && (
-                                <span style={{ color: "var(--green)", marginLeft: 4 }}>
-                                  ~${item.precioEstimado.toLocaleString()}
-                                </span>
+                                <span style={{ color: "var(--green)", marginLeft: 4 }}>~${item.precioEstimado.toLocaleString()}</span>
                               )}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>
-                        {s.notas || "—"}
-                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>{s.notas || "—"}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{fmt(s.createdAt)}</td>
                       <td>
                         <span className={`badge ${
-                          s.estatus === "liberada"   ? "badge-green" :
-                          s.estatus === "cancelada"  ? "badge-gray"  : "badge-amber"
+                          s.estatus === "liberada"  ? "badge-green" :
+                          s.estatus === "cancelada" ? "badge-gray"  : "badge-amber"
                         }`}>
                           {s.estatus === "sin_liberar" ? "Sin liberar" :
                            s.estatus === "liberada"    ? "Liberada"    : "Cancelada"}
                         </span>
                       </td>
-                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                        {s.liberadaPor?.nombre ?? "—"}
-                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{s.liberadaPor?.nombre ?? "—"}</td>
                       <td>
                         {canLiberar && s.estatus === "sin_liberar" && (
                           <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-primary btn-sm" onClick={() => liberarSolicitud(s._id)}>
-                              ✅ Liberar
-                            </button>
-                            <button className="btn btn-danger btn-sm" onClick={() => cancelarSolicitud(s._id)}>
-                              Cancelar
-                            </button>
+                            <button className="btn btn-primary btn-sm" onClick={() => liberarSolicitud(s._id)}>✅ Liberar</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => cancelarSolicitud(s._id)}>Cancelar</button>
                           </div>
                         )}
                       </td>
@@ -1137,9 +1143,41 @@ export default function Almacen() {
       {/* ── Modal nueva solicitud de compra ── */}
       {solicitudModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSolicitudModal(false)}>
-          <div className="modal" style={{ maxWidth: 640 }}>
+          <div className="modal" style={{ maxWidth: 660 }}>
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
+
+            {/* Cotización relacionada */}
+            {cotizacionesDisp.length > 0 && (
+              <div className="form-group">
+                <label className="form-label">Cotización relacionada (opcional)</label>
+                <select className="form-select" value={solicitudCotizId}
+                  onChange={e => setSolicitudCotizId(e.target.value)}>
+                  <option value="">Sin cotización asociada</option>
+                  {cotizacionesDisp.map(c => (
+                    <option key={c._id} value={c._id}>
+                      {c.folio} — {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} ({c.tipo}) — ${c.total.toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+                {cotizSeleccionada && (
+                  <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span>
+                        <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span>
+                      </div>
+                      <span style={{ fontWeight: 700, color: "var(--accent)" }}>${cotizSeleccionada.total.toLocaleString()}</span>
+                    </div>
+                    {cotizSeleccionada.items?.[0] && (
+                      <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                        {cotizSeleccionada.items[0].descripcion.slice(0, 80)}{cotizSeleccionada.items[0].descripcion.length > 80 ? "…" : ""}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Notas generales (opcional)</label>
@@ -1159,11 +1197,9 @@ export default function Almacen() {
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {solicitudItems.map((item, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 100px 100px 32px", gap: 8, alignItems: "center", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                    <div>
-                      <input className="form-input" value={item.nombre}
-                        onChange={e => updateSolicitudItem(i, "nombre", e.target.value)}
-                        placeholder="Nombre del artículo..." style={{ padding: "6px 10px" }} />
-                    </div>
+                    <input className="form-input" value={item.nombre}
+                      onChange={e => updateSolicitudItem(i, "nombre", e.target.value)}
+                      placeholder="Nombre del artículo..." style={{ padding: "6px 10px" }} />
                     <input className="form-input" type="number" min={1} value={item.cantidad}
                       onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)}
                       style={{ padding: "6px 8px", textAlign: "center" }} />
@@ -1200,6 +1236,61 @@ export default function Almacen() {
                 disabled={savingSolicitud || !solicitudItems.some(i => i.nombre.trim())}>
                 {savingSolicitud ? "Enviando..." : "📤 Enviar solicitud"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal ver cotización enlazada ── */}
+      {verCotizacion && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerCotizacion(null)}>
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <button className="modal-close" onClick={() => setVerCotizacion(null)}>✕</button>
+            <h2 className="modal-title">📄 {verCotizacion.folio}</h2>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <span className={`badge ${
+                verCotizacion.tipo === "servicio"    ? "badge-amber"  :
+                verCotizacion.tipo === "refacciones" ? "badge-purple" : "badge-blue"
+              }`}>{verCotizacion.tipo}</span>
+              <span className={`badge ${verCotizacion.estatus === "activa" ? "badge-green" : "badge-gray"}`}>
+                {verCotizacion.estatus}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Cliente</span>
+                <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>
+                  {verCotizacion.cliente?.nombre ?? verCotizacion.clienteOcasional?.nombre ?? "—"}
+                </span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Fecha</span>
+                <span style={{ fontSize: "0.85rem" }}>{fmt(verCotizacion.fecha)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Total c/IVA</span>
+                <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.95rem" }}>
+                  ${verCotizacion.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div style={{ padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {verCotizacion.items.map((item, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.82rem" }}>
+                      <span style={{ color: "var(--text)", flex: 1 }}>
+                        {item.descripcion.slice(0, 60)}{item.descripcion.length > 60 ? "…" : ""}
+                      </span>
+                      <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: "var(--text-muted)" }}>
+                        ${item.total.toLocaleString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setVerCotizacion(null)}>Cerrar</button>
             </div>
           </div>
         </div>
