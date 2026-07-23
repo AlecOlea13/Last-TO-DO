@@ -192,8 +192,91 @@ async function imprimirValeTermico(vale: Vale) {
   }
 }
 
+// ── Searchable dropdown para cotizaciones ──
+function SearchableCotizacion({
+  value, onChange, options,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  options: SolicitudCotizacion[];
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef<HTMLDivElement>(null);
+  const selected          = options.find(c => c._id === value);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = options.filter(c =>
+    c.folio.toLowerCase().includes(query.toLowerCase()) ||
+    (c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "").toLowerCase().includes(query.toLowerCase())
+  );
+
+  function getLabel(c: SolicitudCotizacion) {
+    const cliente = c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente";
+    return `${c.folio} — ${cliente} (${c.tipo}) — $${c.total.toLocaleString()}`;
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          className="form-input"
+          value={open ? query : (selected ? getLabel(selected) : "")}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => { setOpen(true); setQuery(""); }}
+          placeholder="Buscar por folio o cliente..."
+        />
+        {value && (
+          <button
+            onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem" }}
+          >✕</button>
+        )}
+      </div>
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999,
+          background: "var(--surface)", border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+        }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+          ) : filtered.map(c => (
+            <div
+              key={c._id}
+              onClick={() => { onChange(c._id); setOpen(false); setQuery(""); }}
+              style={{
+                padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem",
+                background: c._id === value ? "rgba(245,158,11,0.1)" : "transparent",
+                color: c._id === value ? "var(--accent)" : "var(--text)",
+                borderBottom: "1px solid var(--border)",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}
+            >
+              <span style={{ fontWeight: 700, color: "var(--blue)", marginRight: 6 }}>{c.folio}</span>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo} · ${c.total.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Almacen() {
   const rol         = localStorage.getItem("rol") ?? "";
+  const userId      = localStorage.getItem("userId") ?? "";
   const canEdit     = ["developer", "gerencia"].includes(rol);
   const canAddRefac = ["developer", "gerencia", "almacen", "supervisor_almacen"].includes(rol);
   const canSurtir   = ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol);
@@ -201,6 +284,7 @@ export default function Almacen() {
   const canVerSolicitudes = ["developer", "gerencia", "oficina", "almacen", "supervisor_almacen"].includes(rol);
   const canLiberar        = ["developer", "gerencia"].includes(rol);
   const canVerSinLiberar  = ["developer", "gerencia"].includes(rol);
+  const esGerencia        = ["developer", "gerencia"].includes(rol);
 
   const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales" | "solicitudes">("inventario");
   const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
@@ -277,10 +361,27 @@ export default function Almacen() {
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
       setVales(v.data);
+
+      // Filtrar cotizaciones por asesor vinculado al usuario logueado
+      let asesorDelUsuario: string | null = null;
+      if (!esGerencia) {
+        try {
+          const { data: todosAsesores } = await api.get("/asesores");
+          const miAsesor = todosAsesores.find(
+            (a: any) => a.usuario?._id === userId || a.usuario === userId
+          );
+          if (miAsesor) asesorDelUsuario = miAsesor._id;
+        } catch {}
+      }
+
       setCotizacionesDisp(
-        cots.data.filter((c: any) =>
-          c.estatus === "activa" && ["servicio", "refacciones"].includes(c.tipo)
-        )
+        cots.data.filter((c: any) => {
+          if (c.estatus !== "activa") return false;
+          if (!["servicio", "refacciones"].includes(c.tipo)) return false;
+          if (esGerencia) return true;
+          if (asesorDelUsuario && c.asesor?._id === asesorDelUsuario) return true;
+          return false;
+        })
       );
     } catch (e) {
       console.error("Error cargando almacén:", e);
@@ -784,20 +885,14 @@ export default function Almacen() {
                       <td>
                         {s.cotizacion ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <button
-                              onClick={() => setVerCotizacion(s.cotizacion!)}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
-                            >
-                              <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: "0.82rem" }}>
-                                {s.cotizacion.folio}
-                              </span>
+                            <button onClick={() => setVerCotizacion(s.cotizacion!)}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                              <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: "0.82rem" }}>{s.cotizacion.folio}</span>
                             </button>
                             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
                               {s.cotizacion.cliente?.nombre ?? s.cotizacion.clienteOcasional?.nombre ?? "—"}
                             </span>
-                            <span style={{ fontSize: "0.7rem", color: "var(--accent)" }}>
-                              ${s.cotizacion.total.toLocaleString()}
-                            </span>
+                            <span style={{ fontSize: "0.7rem", color: "var(--accent)" }}>${s.cotizacion.total.toLocaleString()}</span>
                           </div>
                         ) : (
                           <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>
@@ -808,9 +903,7 @@ export default function Almacen() {
                           {s.items.map((item, i) => (
                             <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                               {item.cantidad}× {item.nombre} ({item.unidad})
-                              {item.precioEstimado > 0 && (
-                                <span style={{ color: "var(--green)", marginLeft: 4 }}>~${item.precioEstimado.toLocaleString()}</span>
-                              )}
+                              {item.precioEstimado > 0 && <span style={{ color: "var(--green)", marginLeft: 4 }}>~${item.precioEstimado.toLocaleString()}</span>}
                             </span>
                           ))}
                         </div>
@@ -818,12 +911,8 @@ export default function Almacen() {
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>{s.notas || "—"}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{fmt(s.createdAt)}</td>
                       <td>
-                        <span className={`badge ${
-                          s.estatus === "liberada"  ? "badge-green" :
-                          s.estatus === "cancelada" ? "badge-gray"  : "badge-amber"
-                        }`}>
-                          {s.estatus === "sin_liberar" ? "Sin liberar" :
-                           s.estatus === "liberada"    ? "Liberada"    : "Cancelada"}
+                        <span className={`badge ${s.estatus === "liberada" ? "badge-green" : s.estatus === "cancelada" ? "badge-gray" : "badge-amber"}`}>
+                          {s.estatus === "sin_liberar" ? "Sin liberar" : s.estatus === "liberada" ? "Liberada" : "Cancelada"}
                         </span>
                       </td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{s.liberadaPor?.nombre ?? "—"}</td>
@@ -1147,37 +1236,46 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
 
-            {/* Cotización relacionada */}
-            {cotizacionesDisp.length > 0 && (
-              <div className="form-group">
-                <label className="form-label">Cotización relacionada (opcional)</label>
-                <select className="form-select" value={solicitudCotizId}
-                  onChange={e => setSolicitudCotizId(e.target.value)}>
-                  <option value="">Sin cotización asociada</option>
-                  {cotizacionesDisp.map(c => (
-                    <option key={c._id} value={c._id}>
-                      {c.folio} — {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} ({c.tipo}) — ${c.total.toLocaleString()}
-                    </option>
-                  ))}
-                </select>
-                {cotizSeleccionada && (
-                  <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span>
-                        <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span>
-                      </div>
-                      <span style={{ fontWeight: 700, color: "var(--accent)" }}>${cotizSeleccionada.total.toLocaleString()}</span>
-                    </div>
-                    {cotizSeleccionada.items?.[0] && (
-                      <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                        {cotizSeleccionada.items[0].descripcion.slice(0, 80)}{cotizSeleccionada.items[0].descripcion.length > 80 ? "…" : ""}
-                      </p>
-                    )}
-                  </div>
+            {/* Cotización relacionada — searchable */}
+            <div className="form-group">
+              <label className="form-label">
+                Cotización relacionada (opcional)
+                {!esGerencia && cotizacionesDisp.length === 0 && (
+                  <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: 8, fontSize: "0.7rem" }}>
+                    — no tienes cotizaciones activas vinculadas a tu usuario
+                  </span>
                 )}
-              </div>
-            )}
+              </label>
+              {cotizacionesDisp.length > 0 ? (
+                <>
+                  <SearchableCotizacion
+                    value={solicitudCotizId}
+                    onChange={setSolicitudCotizId}
+                    options={cotizacionesDisp}
+                  />
+                  {cotizSeleccionada && (
+                    <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span>
+                          <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span>
+                        </div>
+                        <span style={{ fontWeight: 700, color: "var(--accent)" }}>${cotizSeleccionada.total.toLocaleString()}</span>
+                      </div>
+                      {cotizSeleccionada.items?.[0] && (
+                        <p style={{ margin: "4px 0 0", color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                          {cotizSeleccionada.items[0].descripcion.slice(0, 80)}{cotizSeleccionada.items[0].descripcion.length > 80 ? "…" : ""}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ padding: "10px 14px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                  {esGerencia ? "Sin cotizaciones activas de servicio o refacciones." : "Tu usuario no está vinculado a ningún asesor con cotizaciones activas."}
+                </div>
+              )}
+            </div>
 
             <div className="form-group">
               <label className="form-label">Notas generales (opcional)</label>
