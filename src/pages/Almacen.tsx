@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api";
 import { BrowserMultiFormatReader, NotFoundException } from "@zxing/library";
+import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
@@ -61,13 +62,25 @@ type SolicitudItem = {
   precioEstimado: number; notas: string;
 };
 
+// ── Type ampliado para poder usar generarReporte ──
 type SolicitudCotizacion = {
-  _id: string; folio: string; tipo: string;
-  cliente?: { nombre: string };
-  clienteOcasional?: { nombre: string };
-  total: number; estatus: string;
-  items: { descripcion: string; total: number }[];
-  fecha: string;
+  _id: string; folio: string; tipo: string; tipoPeriodo?: string;
+  cliente?: { _id?: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
+  clienteOcasional?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
+  montacargas?: {
+    _id?: string; numeroEconomico: string; marca: string; modelo: string;
+    capacidad?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
+    horquillas?: string; desplazadorLateral?: boolean; tipoLlantas?: string;
+    voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
+    equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
+  };
+  asesor?: { _id?: string; nombre: string; puesto: string; telefono: string; email: string };
+  total: number; subtotal: number; iva: number; estatus: string;
+  items: { descripcion: string; total: number; cantidad: number; precioUnitario: number; imagen?: string; subconceptos?: { descripcion: string; precio: number }[] }[];
+  fecha: string; lugar?: string; descripcionServicio?: string;
+  condiciones?: string; notas?: string;
+  equipoMarca?: string; equipoModelo?: string; equipoSerie?: string;
+  numeroFactura?: string;
 };
 
 type Solicitud = {
@@ -192,7 +205,6 @@ async function imprimirValeTermico(vale: Vale) {
   }
 }
 
-// ── Searchable dropdown para cotizaciones ──
 function SearchableCotizacion({
   value, onChange, options,
 }: {
@@ -327,7 +339,6 @@ export default function Almacen() {
   const [usadaForm, setUsadaForm]   = useState<any>(emptyUsada);
   const [uploadingUsada, setUploadingUsada] = useState(false);
 
-  // ── Solicitudes de compra ──
   const [solicitudModal, setSolicitudModal]   = useState(false);
   const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([
     { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }
@@ -362,7 +373,6 @@ export default function Almacen() {
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
       setVales(v.data);
 
-      // Filtrar cotizaciones por asesor vinculado al usuario logueado
       let asesorDelUsuario: string | null = null;
       if (!esGerencia) {
         try {
@@ -580,7 +590,6 @@ export default function Almacen() {
   }
   async function removeUsada(id: string) { if (!confirm("¿Eliminar este registro?")) return; await api.delete(`/refacciones-usadas/${id}`); setUsadas(prev => prev.filter(x => x._id !== id)); }
 
-  // ── Solicitudes de compra ──
   function addSolicitudItem() {
     setSolicitudItems(p => [...p, { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
   }
@@ -1236,7 +1245,6 @@ export default function Almacen() {
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
 
-            {/* Cotización relacionada — searchable */}
             <div className="form-group">
               <label className="form-label">
                 Cotización relacionada (opcional)
@@ -1339,7 +1347,7 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal ver cotización enlazada ── */}
+      {/* ── Modal ver cotización enlazada — con botón de reporte completo ── */}
       {verCotizacion && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerCotizacion(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1386,6 +1394,34 @@ export default function Almacen() {
                   ))}
                 </div>
               </div>
+
+              {/* Botones de reporte — solo si el backend devuelve los campos completos */}
+              {verCotizacion.subtotal !== undefined && (
+                <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                    onClick={() => generarReporte({
+                    ...verCotizacion,
+                    cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
+                    lugar: verCotizacion.lugar ?? "Zapopán, Jal",
+                  })}
+                  >
+                    👁️ Ver reporte
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={() => descargarPDF({
+                    ...verCotizacion,
+                    cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
+                    lugar: verCotizacion.lugar ?? "Zapopán, Jal",
+                  })}
+                  >
+                    📥 Descargar PDF
+                  </button>
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setVerCotizacion(null)}>Cerrar</button>

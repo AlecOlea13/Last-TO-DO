@@ -457,10 +457,20 @@ export default function CuentasCobrar() {
     return lunes;
   }
 
+  // ✅ FIX: usa fechaPago para cobradas, fechaEmision para pendientes
+  // ✅ FIX: T12:00:00 para evitar off-by-one por zona horaria UTC vs México
+  function getFechaReporte(c: CxC): Date | null {
+    const dateStr = c.estatus === "cobrada"
+      ? (c.fechaPago ?? c.fechaEmision)
+      : c.fechaEmision;
+    if (!dateStr) return null;
+    return new Date(dateStr.split("T")[0] + "T12:00:00");
+  }
+
   function filtrarPorPeriodo(c: CxC): boolean {
-    const dateStr = c.fechaEmision;
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
+    const d = getFechaReporte(c);
+    if (!d) return false;
+
     if (reportePeriodo === "semana") {
       const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
       const domingo = new Date(lunes);
@@ -509,8 +519,14 @@ export default function CuentasCobrar() {
   function generarReporte() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
     const datos = cxcs.filter(filtrarPorPeriodo);
+
+    // ✅ FIX: sort también por fecha de cobro/emisión según estatus
     const rows = [...datos]
-      .sort((a, b) => new Date(a.fechaEmision ?? 0).getTime() - new Date(b.fechaEmision ?? 0).getTime())
+      .sort((a, b) => {
+        const da = getFechaReporte(a)?.getTime() ?? 0;
+        const db = getFechaReporte(b)?.getTime() ?? 0;
+        return da - db;
+      })
       .map(c => `<tr>
         <td>${c.nombreReceptor ?? "—"}</td>
         <td>${c.folioFactura ?? "—"}</td>
@@ -855,7 +871,7 @@ export default function CuentasCobrar() {
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
               <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong>
               <br />
-              <span style={{ fontSize: "0.75rem" }}>Se abrirá una pestaña — usa el botón 🖨️ para imprimir o guardar como PDF.</span>
+              <span style={{ fontSize: "0.75rem" }}>Cobradas: filtradas por fecha de pago. Pendientes: por fecha de factura.</span>
             </div>
 
             <div className="modal-footer">
