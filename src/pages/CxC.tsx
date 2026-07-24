@@ -64,8 +64,8 @@ const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
 export default function CuentasCobrar() {
-  const rol          = localStorage.getItem("rol") ?? "";
-  const canDelete    = ["developer", "gerencia"].includes(rol);
+  const rol           = localStorage.getItem("rol") ?? "";
+  const canDelete     = ["developer", "gerencia"].includes(rol);
   const canVerTotales = ["developer", "gerencia"].includes(rol);
 
   const [cxcs, setCxcs]         = useState<CxC[]>([]);
@@ -83,28 +83,28 @@ export default function CuentasCobrar() {
   const [xmlError, setXmlError]   = useState("");
   const [detalle, setDetalle]     = useState<CxC | null>(null);
 
-  const [modalCobro, setModalCobro]       = useState<CxC | null>(null);
-  const [formCobro, setFormCobro]         = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
-  const [savingCobro, setSavingCobro]     = useState(false);
+  const [modalCobro, setModalCobro]     = useState<CxC | null>(null);
+  const [formCobro, setFormCobro]       = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
+  const [savingCobro, setSavingCobro]   = useState(false);
   const [uploadingComp, setUploadingComp] = useState(false);
 
   const [modalComent, setModalComent]   = useState<CxC | null>(null);
   const [comentarioEdit, setComentEdit] = useState("");
   const [savingComent, setSavingComent] = useState(false);
 
-  const [modalRep, setModalRep]         = useState(false);
-  const [parsingRep, setParsingRep]     = useState(false);
-  const [repError, setRepError]         = useState("");
-  const [pagosRep, setPagosRep]         = useState<PagoRep[]>([]);
-  const [fechaPagoRep, setFechaPagoRep] = useState(new Date().toISOString().split("T")[0]);
+  const [modalRep, setModalRep]           = useState(false);
+  const [parsingRep, setParsingRep]       = useState(false);
+  const [repError, setRepError]           = useState("");
+  const [pagosRep, setPagosRep]           = useState<PagoRep[]>([]);
+  const [fechaPagoRep, setFechaPagoRep]   = useState(new Date().toISOString().split("T")[0]);
   const [complementoRepUrl, setComplementoRepUrl] = useState("");
   const [uploadingRep, setUploadingRep]   = useState(false);
   const [procesandoRep, setProcesandoRep] = useState(false);
   const [resultadosRep, setResultadosRep] = useState<ResultadoRep[] | null>(null);
 
-  const [seleccionados, setSeleccionados]         = useState<Set<string>>(new Set());
-  const [modalCobMultiple, setModalCobMultiple]   = useState(false);
-  const [formCobMultiple, setFormCobMultiple]     = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
+  const [seleccionados, setSeleccionados]       = useState<Set<string>>(new Set());
+  const [modalCobMultiple, setModalCobMultiple] = useState(false);
+  const [formCobMultiple, setFormCobMultiple]   = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
   const [savingCobMultiple, setSavingCobMultiple] = useState(false);
   const [uploadingCobMult, setUploadingCobMult]   = useState(false);
 
@@ -116,9 +116,9 @@ export default function CuentasCobrar() {
   const [renovandoDesde, setRenovandoDesde]   = useState(false);
 
   // ── Modal Reportes ──
-  const [modalReportes, setModalReportes] = useState(false);
-  const [reportePeriodo, setReportePeriodo] = useState<"semana" | "mes" | "año" | "custom">("mes");
-  const [reporteMesDesde, setReporteMesDesde] = useState(() => {
+  const [modalReportes, setModalReportes]       = useState(false);
+  const [reportePeriodo, setReportePeriodo]     = useState<"semana" | "mes" | "año" | "custom">("mes");
+  const [reporteMesDesde, setReporteMesDesde]   = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
@@ -126,9 +126,9 @@ export default function CuentasCobrar() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [reporteAnio, setReporteAnio] = useState(() => new Date().getFullYear());
+  const [reporteAnio, setReporteAnio]     = useState(() => new Date().getFullYear());
   const [reporteSemana, setReporteSemana] = useState(() => {
-    const now = new Date();
+    const now   = new Date();
     const start = new Date(now.getFullYear(), 0, 1);
     return Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
   });
@@ -164,14 +164,14 @@ export default function CuentasCobrar() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
+        const text   = e.target?.result as string;
         const parser = new DOMParser();
-        const doc = parser.parseFromString(text, "application/xml");
-        const ns  = "http://www.sat.gob.mx/cfd/4";
-        const ns3 = "http://www.sat.gob.mx/cfd/3";
-        const cfdi = doc.querySelector("Comprobante") ??
-                     doc.getElementsByTagNameNS(ns,  "Comprobante")[0] ??
-                     doc.getElementsByTagNameNS(ns3, "Comprobante")[0];
+        const doc    = parser.parseFromString(text, "application/xml");
+        const ns     = "http://www.sat.gob.mx/cfd/4";
+        const ns3    = "http://www.sat.gob.mx/cfd/3";
+        const cfdi   = doc.querySelector("Comprobante") ??
+                       doc.getElementsByTagNameNS(ns,  "Comprobante")[0] ??
+                       doc.getElementsByTagNameNS(ns3, "Comprobante")[0];
         if (!cfdi) throw new Error("No se encontró el nodo Comprobante en el XML");
         const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
         const emisor   = cfdi.querySelector("Emisor")   ?? cfdi.getElementsByTagName("Emisor")[0];
@@ -230,9 +230,9 @@ export default function CuentasCobrar() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
+        const text   = e.target?.result as string;
         const parser = new DOMParser();
-        const doc = parser.parseFromString(text, "application/xml");
+        const doc    = parser.parseFromString(text, "application/xml");
         const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
         let doctos = Array.from(doc.getElementsByTagName("pago20:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("pago10:DoctoRelacionado"));
@@ -291,8 +291,9 @@ export default function CuentasCobrar() {
     setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
+  // ── FIX: extrae número económico con o sin espacio antes del # ──
   function extraerNumeroEconomico(descripcion: string): string | null {
-    const match = descripcion.match(/#(\d+)/);
+    const match = descripcion.match(/#\s*(\d+)/);
     return match ? match[1] : null;
   }
 
@@ -302,7 +303,7 @@ export default function CuentasCobrar() {
       julio: "07", agosto: "08", septiembre: "09", octubre: "10", noviembre: "11", diciembre: "12",
     };
     const patron = /al\s+(\d{1,2})\s+de\s+([a-záéíóú]+)\s+(?:de\s+)?(\d{4})/i;
-    const match = descripcion.match(patron);
+    const match  = descripcion.match(patron);
     if (match) {
       const [, dia, mes, anio] = match;
       const mesNum = meses[mes.toLowerCase()];
@@ -314,33 +315,41 @@ export default function CuentasCobrar() {
   async function saveCxc() {
     if (!formF.nombreReceptor && !formF.rfcReceptor) return;
     setSavingF(true);
+
+    // ── FIX: capturar formF antes de limpiarlo ──
+    const formSnapshot = { ...formF };
+    const conceptosSnapshot: Concepto[] = formF.conceptos ?? [];
+
     try {
       const { data } = await api.post("/cxc", formF);
       setCxcs(prev => [data, ...prev]);
       setModalXml(false);
       setFormF({});
 
-      const conceptosRenta = (formF.conceptos ?? []).filter(c => /renta/i.test(c.descripcion));
-      if (conceptosRenta.length > 0 && formF.rfcReceptor) {
+      const conceptosRenta = conceptosSnapshot.filter(c => /renta/i.test(c.descripcion));
+
+      if (conceptosRenta.length > 0 && formSnapshot.rfcReceptor) {
         try {
-          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: formF.rfcReceptor });
-          if (rentaData.rentas?.length > 0) {
-            rentaData.rentas.forEach((r: any) => {
-              console.log("RENTA:", JSON.stringify(r.montacargas));
-            });
-            conceptosRenta.forEach(c => {
-              console.log("CONCEPTO:", c.descripcion);
-              console.log("EXTRAIDO:", extraerNumeroEconomico(c.descripcion));
-            });
-          }
+          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: formSnapshot.rfcReceptor });
+
           if (rentaData.rentas?.length > 0) {
             const rentas: RentaDetectada[] = rentaData.rentas;
             const items: RenovacionItem[] = conceptosRenta.map(c => {
-              const numEco = extraerNumeroEconomico(c.descripcion);
+              const numEco   = extraerNumeroEconomico(c.descripcion);
               const fechaFin = extraerFechaFinDeConcepto(c.descripcion);
-              const rentaMatch = numEco
-              ? rentas.find(r => String(r.montacargas?.numeroEconomico) === String(numEco)) ?? null
-              : rentas.length === 1 ? rentas[0] : null;
+
+              // ── FIX: comparación robusta String() vs String() ──
+              let rentaMatch: RentaDetectada | null = null;
+              if (numEco) {
+                rentaMatch = rentas.find(r =>
+                  String(r.montacargas?.numeroEconomico).trim() === String(numEco).trim()
+                ) ?? null;
+              }
+              // Fallback: si solo hay una renta y no se extrajo número, usar esa
+              if (!rentaMatch && !numEco && rentas.length === 1) {
+                rentaMatch = rentas[0];
+              }
+
               return {
                 concepto:        c.descripcion,
                 numeroEconomico: numEco ?? "—",
@@ -353,7 +362,10 @@ export default function CuentasCobrar() {
             setRenovacionItems(items);
             setModalRentaDetectada({ clienteNombre: rentaData.clienteNombre, items });
           }
-        } catch {}
+        } catch (err) {
+          // ── FIX: ya no silenciamos errores ──
+          console.error("Error buscando rentas por RFC:", err);
+        }
       }
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
@@ -370,7 +382,7 @@ export default function CuentasCobrar() {
         await api.post(`/rentas/${item.renta!._id}/renovar`, {
           fechaFinNueva:      item.fechaFin,
           precioMensualNuevo: item.precioConcepto,
-          notas:              `Renovación desde factura ${formF.folioFactura ?? ""}`.trim(),
+          notas:              `Renovación desde factura ${renovacionItems[0]?.concepto?.slice(0, 30) ?? ""}`.trim(),
         });
       }
       setModalRentaDetectada(null);
@@ -432,7 +444,7 @@ export default function CuentasCobrar() {
   }
 
   function toggleTodos() {
-    const pendientes = paginados.filter(c => c.estatus !== "cobrada").map(c => c._id);
+    const pendientes    = paginados.filter(c => c.estatus !== "cobrada").map(c => c._id);
     const todosMarcados = pendientes.every(id => seleccionados.has(id));
     if (todosMarcados) {
       setSeleccionados(prev => { const next = new Set(prev); pendientes.forEach(id => next.delete(id)); return next; });
@@ -460,14 +472,12 @@ export default function CuentasCobrar() {
   // ── Reporte ──
   function getLunesDeSemana(semana: number, anio: number): Date {
     const enero1 = new Date(anio, 0, 1);
-    const lunes = new Date(enero1);
+    const lunes  = new Date(enero1);
     lunes.setDate(enero1.getDate() + (semana - 1) * 7 - enero1.getDay() + 1);
     lunes.setHours(0, 0, 0, 0);
     return lunes;
   }
 
-  // ✅ FIX: usa fechaPago para cobradas, fechaEmision para pendientes
-  // ✅ FIX: T12:00:00 para evitar off-by-one por zona horaria UTC vs México
   function getFechaReporte(c: CxC): Date | null {
     const dateStr = c.estatus === "cobrada"
       ? (c.fechaPago ?? c.fechaEmision)
@@ -479,9 +489,8 @@ export default function CuentasCobrar() {
   function filtrarPorPeriodo(c: CxC): boolean {
     const d = getFechaReporte(c);
     if (!d) return false;
-
     if (reportePeriodo === "semana") {
-      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
       const domingo = new Date(lunes);
       domingo.setDate(lunes.getDate() + 6);
       domingo.setHours(23, 59, 59, 999);
@@ -508,7 +517,7 @@ export default function CuentasCobrar() {
 
   function labelPeriodo(): string {
     if (reportePeriodo === "semana") {
-      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
       const domingo = new Date(lunes);
       domingo.setDate(lunes.getDate() + 6);
       const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
@@ -527,10 +536,8 @@ export default function CuentasCobrar() {
 
   function generarReporte() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-    const datos = cxcs.filter(filtrarPorPeriodo);
-
-    // ✅ FIX: sort también por fecha de cobro/emisión según estatus
-    const rows = [...datos]
+    const datos   = cxcs.filter(filtrarPorPeriodo);
+    const rows    = [...datos]
       .sort((a, b) => {
         const da = getFechaReporte(a)?.getTime() ?? 0;
         const db = getFechaReporte(b)?.getTime() ?? 0;
@@ -541,10 +548,10 @@ export default function CuentasCobrar() {
         <td>${c.folioFactura ?? "—"}</td>
         <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${fmtCorto(c.fechaEmision)}</td>
-        <td>${c.conceptos[0]?.descripcion?.slice(0,40) ?? "—"}</td>
+        <td>${c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}</td>
         <td>${fmtCorto(c.fechaPago)}</td>
-        <td style="text-align:center">${c.complementoPago ? '<a href="'+c.complementoPago+'">Ver</a>' : "—"}</td>
-        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$"+c.total.toLocaleString("es-MX",{minimumFractionDigits:2})}</td>
+        <td style="text-align:center">${c.complementoPago ? '<a href="' + c.complementoPago + '">Ver</a>' : "—"}</td>
+        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$" + c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
         <td>${c.comentarios ?? "—"}</td>
       </tr>`).join("");
 
@@ -576,7 +583,7 @@ export default function CuentasCobrar() {
   <div>
     <h1>Cuentas por Cobrar — ${subtitulo}</h1>
     <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX",{day:"2-digit",month:"long",year:"numeric"})}</p>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
   </div>
 </div>
 <table>
@@ -587,8 +594,8 @@ export default function CuentasCobrar() {
   <tbody>${rows}</tbody>
 </table>
 <div class="totales">
-  <div>Total pendiente: <strong style="color:#dc2626">$${pendiente.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
-  <div>Total cobrado: <strong style="color:#16a34a">$${cobrado.toLocaleString("es-MX",{minimumFractionDigits:2})}</strong></div>
+  <div>Total pendiente: <strong style="color:#dc2626">$${pendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
+  <div>Total cobrado: <strong style="color:#16a34a">$${cobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
 </div>
 </body></html>`;
 
@@ -606,9 +613,9 @@ export default function CuentasCobrar() {
       (c.rfcReceptor    ?? "").toLowerCase().includes(search.toLowerCase()) ||
       c.conceptos.some(co => co.descripcion.toLowerCase().includes(search.toLowerCase()));
     const matchEstatus = filtroEstatus === "todos" || c.estatus === filtroEstatus;
-    const fecha = c.fechaEmision ? new Date(c.fechaEmision) : null;
-    const matchDesde = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
-    const matchHasta = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
+    const fecha        = c.fechaEmision ? new Date(c.fechaEmision) : null;
+    const matchDesde   = !fechaDesde || (fecha && fecha >= new Date(fechaDesde));
+    const matchHasta   = !fechaHasta || (fecha && fecha <= new Date(fechaHasta + "T23:59:59"));
     return matchSearch && matchEstatus && matchDesde && matchHasta;
   });
 
@@ -818,11 +825,10 @@ export default function CuentasCobrar() {
           <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
             <h2 className="modal-title">🖨️ Generar reporte</h2>
-
             <div className="form-group" style={{ marginTop: 8 }}>
               <label className="form-label">Periodo</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                {([["semana","Semana"],["mes","Mes"],["año","Año"],["custom","Rango"]] as const).map(([val, label], i, arr) => (
+                {([["semana", "Semana"], ["mes", "Mes"], ["año", "Año"], ["custom", "Rango"]] as const).map(([val, label], i, arr) => (
                   <button key={val} onClick={() => setReportePeriodo(val as any)}
                     style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
                     {label}
@@ -830,59 +836,46 @@ export default function CuentasCobrar() {
                 ))}
               </div>
             </div>
-
             {reportePeriodo === "semana" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Semana del año</label>
-                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana}
-                    onChange={e => setReporteSemana(+e.target.value)} />
+                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana} onChange={e => setReporteSemana(+e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Año</label>
-                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
-                    onChange={e => setReporteAnio(+e.target.value)} />
+                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} />
                 </div>
               </div>
             )}
-
             {reportePeriodo === "mes" && (
               <div className="form-group">
                 <label className="form-label">Mes y año</label>
-                <input className="form-input" type="month" value={reporteMesDesde}
-                  onChange={e => setReporteMesDesde(e.target.value)} />
+                <input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} />
               </div>
             )}
-
             {reportePeriodo === "año" && (
               <div className="form-group">
                 <label className="form-label">Año</label>
-                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
-                  onChange={e => setReporteAnio(+e.target.value)} />
+                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} />
               </div>
             )}
-
             {reportePeriodo === "custom" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div className="form-group">
                   <label className="form-label">Desde</label>
-                  <input className="form-input" type="month" value={reporteMesDesde}
-                    onChange={e => setReporteMesDesde(e.target.value)} />
+                  <input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Hasta</label>
-                  <input className="form-input" type="month" value={reporteMesHasta}
-                    onChange={e => setReporteMesHasta(e.target.value)} />
+                  <input className="form-input" type="month" value={reporteMesHasta} onChange={e => setReporteMesHasta(e.target.value)} />
                 </div>
               </div>
             )}
-
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong>
-              <br />
+              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong><br />
               <span style={{ fontSize: "0.75rem" }}>Cobradas: filtradas por fecha de pago. Pendientes: por fecha de factura.</span>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={generarReporte}>📄 Ver reporte</button>
@@ -908,8 +901,7 @@ export default function CuentasCobrar() {
                   <span style={{ fontSize: "2.5rem" }}>{parsingRep ? "⏳" : "📂"}</span>
                   <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsingRep ? "Leyendo XML..." : "Arrastra o selecciona el XML del recibo de pago"}</p>
                   <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Complemento de Pago 1.0 o 2.0</p>
-                  <input type="file" accept=".xml" style={{ display: "none" }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) parseRepXML(f); }} />
+                  <input type="file" accept=".xml" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) parseRepXML(f); }} />
                 </label>
                 {repError && <p style={{ color: "var(--red)", fontSize: "0.85rem", marginTop: 10 }}>⚠ {repError}</p>}
                 {pagosRep.length > 0 && (
@@ -1005,8 +997,7 @@ export default function CuentasCobrar() {
               <span style={{ fontSize: "2.5rem" }}>{parsing ? "⏳" : "📂"}</span>
               <p style={{ fontWeight: 600, color: "var(--text)" }}>{parsing ? "Leyendo XML..." : "Arrastra o selecciona tu XML del SAT"}</p>
               <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>CFDI 3.3 o 4.0</p>
-              <input type="file" accept=".xml" style={{ display: "none" }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
+              <input type="file" accept=".xml" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) parseXML(f); }} />
             </label>
             {xmlError && <p style={{ color: "var(--red)", fontSize: "0.85rem" }}>⚠ {xmlError}</p>}
             {formF.nombreReceptor && !parsing && (
@@ -1021,8 +1012,8 @@ export default function CuentasCobrar() {
                     { label: "Fecha",              val: formF.fechaEmision ? new Date(formF.fechaEmision).toLocaleDateString("es-MX") : "" },
                     { label: "UUID",               val: (formF.uuid ?? "").slice(0, 20) + "..." },
                     { label: "Subtotal",           val: `$${(formF.subtotal ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "IVA",                val: `$${(formF.iva     ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
-                    { label: "Total",              val: `$${(formF.total   ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "IVA",                val: `$${(formF.iva ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
+                    { label: "Total",              val: `$${(formF.total ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` },
                     { label: "Conceptos",          val: `${formF.conceptos?.length ?? 0} concepto(s)` },
                   ].map(item => (
                     <div key={item.label}>
@@ -1064,15 +1055,15 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>UUID: {detalle.uuid ?? "—"}</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 8 }}>
               {[
-                { label: "No. Factura",    val: detalle.folioFactura },
-                { label: "Fecha emisión",  val: fmt(detalle.fechaEmision) },
-                { label: "Emisor",         val: detalle.nombreEmisor },
-                { label: "RFC Emisor",     val: detalle.rfcEmisor },
-                { label: "RFC Receptor",   val: detalle.rfcReceptor },
-                { label: "Estatus",        val: detalle.estatus === "cobrada" ? "✅ Cobrada" : "⏳ Pendiente" },
-                { label: "Fecha pago",     val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
-                { label: "Comentarios",    val: detalle.comentarios },
-                { label: "Notas",          val: detalle.notas },
+                { label: "No. Factura",  val: detalle.folioFactura },
+                { label: "Fecha emisión", val: fmt(detalle.fechaEmision) },
+                { label: "Emisor",       val: detalle.nombreEmisor },
+                { label: "RFC Emisor",   val: detalle.rfcEmisor },
+                { label: "RFC Receptor", val: detalle.rfcReceptor },
+                { label: "Estatus",      val: detalle.estatus === "cobrada" ? "✅ Cobrada" : "⏳ Pendiente" },
+                { label: "Fecha pago",   val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
+                { label: "Comentarios",  val: detalle.comentarios },
+                { label: "Notas",        val: detalle.notas },
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
@@ -1291,7 +1282,7 @@ export default function CuentasCobrar() {
                         disabled={!item.renta}
                         onChange={e => {
                           const next = [...renovacionItems];
-                          next[idx] = { ...next[idx], incluir: e.target.checked };
+                          next[idx]  = { ...next[idx], incluir: e.target.checked };
                           setRenovacionItems(next);
                         }}
                         style={{ width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }}
@@ -1325,7 +1316,7 @@ export default function CuentasCobrar() {
                         <input className="form-input" type="date" value={item.fechaFin}
                           onChange={e => {
                             const next = [...renovacionItems];
-                            next[idx] = { ...next[idx], fechaFin: e.target.value };
+                            next[idx]  = { ...next[idx], fechaFin: e.target.value };
                             setRenovacionItems(next);
                           }} />
                       </div>
@@ -1334,7 +1325,7 @@ export default function CuentasCobrar() {
                         <input className="form-input" type="number" value={item.precioConcepto}
                           onChange={e => {
                             const next = [...renovacionItems];
-                            next[idx] = { ...next[idx], precioConcepto: +e.target.value };
+                            next[idx]  = { ...next[idx], precioConcepto: +e.target.value };
                             setRenovacionItems(next);
                           }} />
                       </div>
