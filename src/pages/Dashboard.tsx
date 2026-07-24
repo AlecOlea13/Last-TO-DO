@@ -59,16 +59,16 @@ export default function Dashboard() {
     setTheme(prev => prev === "dark" ? "light" : "dark");
   }
 
-    async function loadStats() {
+  async function loadStats() {
     try {
-    const puedeVerFacturas = ["developer", "gerencia", "oficina"].includes(rol);
+      const puedeVerFacturas = ["developer", "gerencia", "oficina"].includes(rol);
 
-    const [montas, servicios, rentas, facturas] = await Promise.all([
-      api.get("/montacargas"),
-      api.get("/servicios"),
-      api.get("/rentas"),
-      puedeVerFacturas ? api.get("/facturas") : Promise.resolve({ data: [] }),
-    ]);
+      const [montas, servicios, rentas, facturas] = await Promise.all([
+        api.get("/montacargas"),
+        api.get("/servicios"),
+        api.get("/rentas"),
+        puedeVerFacturas ? api.get("/facturas") : Promise.resolve({ data: [] }),
+      ]);
       const montaList    = montas.data    ?? [];
       const servicioList = servicios.data ?? [];
       const rentaList    = rentas.data    ?? [];
@@ -78,7 +78,6 @@ export default function Dashboard() {
       const en7dias  = new Date(Date.now() + 7  * 24 * 60 * 60 * 1000);
       const en30dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-      // ── Stats ──
       setStats({
         disponibles:        montaList.filter((m: any) => m.estatus === "disponible").length,
         rentados:           montaList.filter((m: any) => m.estatus === "rentado").length,
@@ -88,10 +87,9 @@ export default function Dashboard() {
         facturasPendientes: facturaList.filter((f: any) => !f.pagado && new Date(f.fechaVencimiento) < hoy).length,
       });
 
-      // ── Alertas dinámicas por rol ──
       const nuevasAlertas: Alerta[] = [];
 
-      // Técnico y todos: servicios abiertos
+      // Servicios abiertos
       const serviciosAbiertos = servicioList.filter((s: any) => s.estatus !== "cerrado");
       if (serviciosAbiertos.length > 0) {
         const urgentes = serviciosAbiertos.filter((s: any) => {
@@ -117,7 +115,7 @@ export default function Dashboard() {
         }
       }
 
-      // Montacargas en taller/mantenimiento: todos
+      // Montacargas en taller
       const enTaller = montaList.filter((m: any) => m.estatus === "taller" || m.estatus === "mantenimiento");
       if (enTaller.length > 0) {
         nuevasAlertas.push({
@@ -129,7 +127,7 @@ export default function Dashboard() {
         });
       }
 
-      // Mantenimiento vencido en montacargas
+      // Mantenimiento vencido
       const mantVencido = montaList.filter((m: any) => m.proximoMantenimiento && new Date(m.proximoMantenimiento) < hoy);
       if (mantVencido.length > 0) {
         nuevasAlertas.push({
@@ -137,6 +135,26 @@ export default function Dashboard() {
           tipo: "critico",
           icon: "⚙️",
           mensaje: `${mantVencido.length} equipo${mantVencido.length > 1 ? "s" : ""} con mantenimiento vencido.`,
+          ruta: "/dashboard/montacargas",
+        });
+      }
+
+      // ── NUEVO: equipos rentados próximos a mantenimiento mensual ──
+      const rentadosConServicio = montaList.filter((m: any) =>
+        m.estatus === "rentado" && m.fechaUltimoServicio
+      );
+      const proximosMantenimiento = rentadosConServicio.filter((m: any) => {
+        const ultimo = new Date(m.fechaUltimoServicio);
+        const proximoMes = new Date(ultimo);
+        proximoMes.setMonth(proximoMes.getMonth() + 1);
+        return proximoMes <= en30dias;
+      });
+      if (proximosMantenimiento.length > 0) {
+        nuevasAlertas.push({
+          id: "mant-mensual",
+          tipo: "advertencia",
+          icon: "🔩",
+          mensaje: `${proximosMantenimiento.length} equipo${proximosMantenimiento.length > 1 ? "s" : ""} rentado${proximosMantenimiento.length > 1 ? "s" : ""} próximo${proximosMantenimiento.length > 1 ? "s" : ""} a mantenimiento mensual.`,
           ruta: "/dashboard/montacargas",
         });
       }
@@ -176,7 +194,6 @@ export default function Dashboard() {
           });
         }
 
-        // Facturas vencidas
         const factVencidas = facturaList.filter((f: any) => !f.pagado && new Date(f.fechaVencimiento) < hoy);
         if (factVencidas.length > 0) {
           nuevasAlertas.push({
@@ -202,24 +219,24 @@ export default function Dashboard() {
   }
 
   const allNav = [
-  { to: "/dashboard",             icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-  { to: "/dashboard/montacargas", icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-  { to: "/dashboard/servicios",   icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-  { to: "/dashboard/almacen",     icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-  { to: "/dashboard/clientes",    icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/rentas",      icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina","supervisor_almacen"] },
-  { to: "/dashboard/cotizaciones",icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/gastos",      icon: "🧾", label: "Gastos",       roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/asesores",    icon: "👤", label: "Asesores",     roles: ["developer"] },
-  { to: "/dashboard/usuarios",    icon: "👥", label: "Usuarios",     roles: ["developer"] },
-  { to: "/dashboard/cxc",         icon: "💰", label: "CxC",          roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/proveedores", icon: "🏭", label: "Proveedores",  roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/portales",    icon: "🔑", label: "Portales",     roles: ["developer","gerencia","oficina"] },
-  { to: "/dashboard/flota",       icon: "🚗", label: "Flota",        roles: ["developer","gerencia","oficina"], permiso: "flota" },
-];
+    { to: "/dashboard",              icon: "📊", label: "Dashboard",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/montacargas",  icon: "🏗️",  label: "Montacargas", roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/servicios",    icon: "🔧", label: "Servicios",    roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/almacen",      icon: "📦", label: "Almacén",      roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/clientes",     icon: "🏢", label: "Clientes",     roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/rentas",       icon: "📋", label: "Rentas",       roles: ["developer","gerencia","oficina","supervisor_almacen"] },
+    { to: "/dashboard/cotizaciones", icon: "📄", label: "Cotizaciones", roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/gastos",       icon: "🧾", label: "Gastos",       roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/asesores",     icon: "👤", label: "Asesores",     roles: ["developer"] },
+    { to: "/dashboard/usuarios",     icon: "👥", label: "Usuarios",     roles: ["developer"] },
+    { to: "/dashboard/cxc",          icon: "💰", label: "CxC",          roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/proveedores",  icon: "🏭", label: "Proveedores",  roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/portales",     icon: "🔑", label: "Portales",     roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/flota",        icon: "🚗", label: "Flota",        roles: ["developer","gerencia","oficina"], permiso: "flota" },
+  ];
 
-  const permisos = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
-  const navItems = allNav.filter(item => {
+  const permisos  = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
+  const navItems  = allNav.filter(item => {
     if (!item.roles.includes(rol)) return false;
     if (item.permiso && !permisos.includes(item.permiso) && !["developer", "gerencia"].includes(rol)) return false;
     return true;
@@ -227,21 +244,15 @@ export default function Dashboard() {
   const isDashboard = location.pathname === "/dashboard";
 
   const ALERTA_STYLE: Record<string, { border: string; bg: string; color: string }> = {
-    critico:      { border: "var(--red)",    bg: "rgba(239,68,68,0.08)",   color: "var(--red)" },
-    advertencia:  { border: "var(--accent)", bg: "rgba(245,158,11,0.08)",  color: "var(--accent)" },
-    info:         { border: "var(--blue)",   bg: "rgba(59,130,246,0.08)",  color: "var(--blue)" },
+    critico:     { border: "var(--red)",    bg: "rgba(239,68,68,0.08)",  color: "var(--red)" },
+    advertencia: { border: "var(--accent)", bg: "rgba(245,158,11,0.08)", color: "var(--accent)" },
+    info:        { border: "var(--blue)",   bg: "rgba(59,130,246,0.08)", color: "var(--blue)" },
   };
 
   return (
     <div className="dash-root">
+      <div className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`} onClick={() => setSidebarOpen(false)} />
 
-      {/* ── Overlay móvil ── */}
-      <div
-        className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`}
-        onClick={() => setSidebarOpen(false)}
-      />
-
-      {/* ── Topbar móvil ── */}
       <div className="mobile-topbar">
         <span className="mobile-topbar-brand">🏗️ Control Pipsa</span>
         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(p => !p)}>
@@ -259,9 +270,7 @@ export default function Dashboard() {
         </div>
 
         <div className="sidebar-user">
-          <div className="sidebar-avatar-placeholder">
-            {nombre?.[0]?.toUpperCase() ?? "?"}
-          </div>
+          <div className="sidebar-avatar-placeholder">{nombre?.[0]?.toUpperCase() ?? "?"}</div>
           <div>
             <p className="sidebar-user-name">{nombre}</p>
             <p className="sidebar-user-role">{ROL_LABEL[rol] ?? rol}</p>
@@ -270,12 +279,9 @@ export default function Dashboard() {
 
         <p className="nav-section-label">Menú</p>
         {navItems.map(item => (
-          <Link
-            key={item.to}
-            to={item.to}
+          <Link key={item.to} to={item.to}
             className={`nav-item ${location.pathname === item.to ? "active" : ""}`}
-            onClick={() => setSidebarOpen(false)}
-          >
+            onClick={() => setSidebarOpen(false)}>
             <span className="nav-icon">{item.icon}</span>
             {item.label}
           </Link>
@@ -306,32 +312,17 @@ export default function Dashboard() {
             </div>
 
             <div className="page-content">
-
-              {/* ── Alertas ── */}
               {alertas.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
                   {alertas.map(a => {
                     const s = ALERTA_STYLE[a.tipo];
                     return (
-                      <div
-                        key={a.id}
-                        onClick={() => { navigate(a.ruta); setSidebarOpen(false); }}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 14,
-                          padding: "14px 18px",
-                          borderRadius: "var(--radius)",
-                          border: `1.5px solid ${s.border}`,
-                          background: s.bg,
-                          cursor: "pointer",
-                          transition: "opacity 0.15s",
-                        }}
+                      <div key={a.id} onClick={() => { navigate(a.ruta); setSidebarOpen(false); }}
+                        style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderRadius: "var(--radius)", border: `1.5px solid ${s.border}`, background: s.bg, cursor: "pointer", transition: "opacity 0.15s" }}
                         onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                      >
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
                         <span style={{ fontSize: "1.3rem" }}>{a.icon}</span>
-                        <span style={{ fontSize: "0.88rem", color: "var(--text)", fontWeight: 500, flex: 1 }}>
-                          {a.mensaje}
-                        </span>
+                        <span style={{ fontSize: "0.88rem", color: "var(--text)", fontWeight: 500, flex: 1 }}>{a.mensaje}</span>
                         <span style={{ fontSize: "0.75rem", color: s.color, fontWeight: 700, textTransform: "uppercase" }}>
                           {a.tipo === "critico" ? "⚠ Urgente" : a.tipo === "advertencia" ? "Atención" : "Info"}
                         </span>
@@ -343,19 +334,12 @@ export default function Dashboard() {
               )}
 
               {alertas.length === 0 && (
-                <div style={{
-                  padding: "14px 18px", borderRadius: "var(--radius)",
-                  border: "1.5px solid var(--green)", background: "rgba(34,197,94,0.08)",
-                  display: "flex", alignItems: "center", gap: 12, marginBottom: 24,
-                }}>
+                <div style={{ padding: "14px 18px", borderRadius: "var(--radius)", border: "1.5px solid var(--green)", background: "rgba(34,197,94,0.08)", display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
                   <span style={{ fontSize: "1.3rem" }}>✅</span>
-                  <span style={{ fontSize: "0.88rem", color: "var(--text)", fontWeight: 500 }}>
-                    Todo en orden, no hay alertas pendientes.
-                  </span>
+                  <span style={{ fontSize: "0.88rem", color: "var(--text)", fontWeight: 500 }}>Todo en orden, no hay alertas pendientes.</span>
                 </div>
               )}
 
-              {/* ── Stats ── */}
               <div className="stats-grid">
                 <div className="stat-card" onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
                   <span className="stat-card-icon">✅</span>
@@ -395,27 +379,16 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* ── Accesos rápidos ── */}
               <div className="table-card">
                 <div className="table-card-header">
                   <p className="table-card-title">Accesos rápidos</p>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 1 }}>
                   {navItems.filter(i => i.to !== "/dashboard").map(item => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 12,
-                        padding: "16px 20px",
-                        borderBottom: "1px solid var(--border)",
-                        textDecoration: "none", color: "var(--text)",
-                        fontSize: "0.88rem", fontWeight: 500,
-                        transition: "background 0.15s",
-                      }}
+                    <Link key={item.to} to={item.to}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--border)", textDecoration: "none", color: "var(--text)", fontSize: "0.88rem", fontWeight: 500, transition: "background 0.15s" }}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                    >
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                       <span style={{ fontSize: "1.3rem" }}>{item.icon}</span>
                       {item.label}
                       <span style={{ marginLeft: "auto", color: "var(--text-muted)", fontSize: "0.8rem" }}>→</span>

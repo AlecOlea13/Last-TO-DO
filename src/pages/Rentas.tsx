@@ -48,35 +48,32 @@ const PERIODO_LABEL: Record<string, string> = {
 };
 
 export default function Rentas() {
-  const rol              = localStorage.getItem("rol") ?? "";
-  const canEditRenta     = ["developer", "gerencia"].includes(rol);
-  const canCreateRenta   = ["developer", "gerencia", "oficina"].includes(rol);
-  const soloVerRentas    = rol === "supervisor_almacen";
+  const rol            = localStorage.getItem("rol") ?? "";
+  const canEditRenta   = ["developer", "gerencia"].includes(rol);
+  const canCreateRenta = ["developer", "gerencia", "oficina"].includes(rol);
+  const soloVerRentas  = rol === "supervisor_almacen";
 
-  const [rentas, setRentas]         = useState<Renta[]>([]);
-  const [clientes, setClientes]     = useState<Cliente[]>([]);
-  const [montas, setMontas]         = useState<Montacargas[]>([]);
+  const [rentas, setRentas]           = useState<Renta[]>([]);
+  const [clientes, setClientes]       = useState<Cliente[]>([]);
+  const [montas, setMontas]           = useState<Montacargas[]>([]);
   const [todosMontas, setTodosMontas] = useState<Montacargas[]>([]);
-  const [asesores, setAsesores]     = useState<Asesor[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState("");
-  const [filtro, setFiltro]         = useState("todos");
+  const [asesores, setAsesores]       = useState<Asesor[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState("");
+  const [filtro, setFiltro]           = useState("todos");
   const [filtroAsesor, setFiltroAsesor] = useState("todos");
-  const [modal, setModal]           = useState(false);
-  const [form, setForm]             = useState<any>(emptyForm);
-  const [saving, setSaving]         = useState(false);
+  const [modal, setModal]             = useState(false);
+  const [form, setForm]               = useState<any>(emptyForm);
+  const [saving, setSaving]           = useState(false);
 
-  // ── Editar renta (solo developer/gerencia) ──
-  const [modalEditar, setModalEditar] = useState<Renta | null>(null);
-  const [formEditar, setFormEditar]   = useState<any>(emptyForm);
-  const [savingEditar, setSavingEditar] = useState(false);
+  const [modalEditar, setModalEditar]     = useState<Renta | null>(null);
+  const [formEditar, setFormEditar]       = useState<any>(emptyForm);
+  const [savingEditar, setSavingEditar]   = useState(false);
 
-  // ── Renovación ──
-  const [modalRenovar, setModalRenovar] = useState<Renta | null>(null);
-  const [formRenovar, setFormRenovar]   = useState({ fechaFinNueva: "", precioMensualNuevo: 0, notas: "" });
+  const [modalRenovar, setModalRenovar]   = useState<Renta | null>(null);
+  const [formRenovar, setFormRenovar]     = useState({ fechaFinNueva: "", precioMensualNuevo: 0, notas: "" });
   const [savingRenovar, setSavingRenovar] = useState(false);
 
-  // ── Historial de renovaciones ──
   const [modalHistorial, setModalHistorial] = useState<Renta | null>(null);
 
   useEffect(() => { load(); }, []);
@@ -170,11 +167,7 @@ export default function Rentas() {
 
   function abrirModalRenovar(renta: Renta) {
     setModalRenovar(renta);
-    setFormRenovar({
-      fechaFinNueva: "",
-      precioMensualNuevo: renta.precioMensual,
-      notas: "",
-    });
+    setFormRenovar({ fechaFinNueva: "", precioMensualNuevo: renta.precioMensual, notas: "" });
   }
 
   async function renovar() {
@@ -270,9 +263,17 @@ export default function Rentas() {
             <table>
               <thead>
                 <tr>
-                  <th>Cliente</th><th>Equipo</th><th>Asesor</th><th>Inicio</th><th>Fin</th>
-                  <th>Periodo</th><th>Precio</th><th>Flete</th><th>Depósito</th>
-                  <th>Días restantes</th><th>Estatus</th>
+                  <th>Cliente</th>
+                  <th>Equipo</th>
+                  <th>Asesor</th>
+                  <th>Inicio</th>
+                  <th>Fin</th>
+                  <th>Periodo</th>
+                  {!soloVerRentas && <th>Precio</th>}
+                  {!soloVerRentas && <th>Flete</th>}
+                  {!soloVerRentas && <th>Depósito</th>}
+                  <th>Días restantes</th>
+                  <th>Estatus</th>
                   {!soloVerRentas && <th></th>}
                 </tr>
               </thead>
@@ -290,15 +291,12 @@ export default function Rentas() {
                       <td>{fmt(r.fechaInicio)}</td>
                       <td>{fmt(r.fechaFin)}</td>
                       <td style={{ textTransform: "capitalize" }}>{r.tipoPeriodo ?? "mensual"}</td>
-                      <td>${r.precioMensual.toLocaleString()}</td>
-                      <td>{r.flete ? `$${r.flete.toLocaleString()}` : "—"}</td>
-                      <td>{r.deposito ? `$${r.deposito.toLocaleString()}` : "—"}</td>
+                      {!soloVerRentas && <td>${r.precioMensual.toLocaleString()}</td>}
+                      {!soloVerRentas && <td>{r.flete ? `$${r.flete.toLocaleString()}` : "—"}</td>}
+                      {!soloVerRentas && <td>{r.deposito ? `$${r.deposito.toLocaleString()}` : "—"}</td>}
                       <td>
                         {dias !== null ? (
-                          <span style={{
-                            color: dias <= 7 ? "var(--red)" : dias <= 30 ? "var(--accent)" : "var(--green)",
-                            fontWeight: 600,
-                          }}>
+                          <span style={{ color: dias <= 7 ? "var(--red)" : dias <= 30 ? "var(--accent)" : "var(--green)", fontWeight: 600 }}>
                             {dias > 0 ? `${dias} días` : "Vencida"}
                           </span>
                         ) : "—"}
@@ -306,14 +304,8 @@ export default function Rentas() {
                       <td>
                         <span className={`badge ${ESTATUS_BADGE[r.estatus]}`}>{r.estatus}</span>
                         {(r.renovaciones?.length ?? 0) > 0 && (
-                          <button
-                            onClick={() => setModalHistorial(r)}
-                            title="Ver historial de renovaciones"
-                            style={{
-                              marginLeft: 6, fontSize: "0.68rem", fontWeight: 700,
-                              color: "var(--blue)", background: "rgba(59,130,246,0.1)",
-                              border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer",
-                            }}>
+                          <button onClick={() => setModalHistorial(r)} title="Ver historial de renovaciones"
+                            style={{ marginLeft: 6, fontSize: "0.68rem", fontWeight: 700, color: "var(--blue)", background: "rgba(59,130,246,0.1)", border: "none", borderRadius: 4, padding: "2px 6px", cursor: "pointer" }}>
                             🔄 {r.renovaciones!.length}
                           </button>
                         )}
@@ -322,9 +314,7 @@ export default function Rentas() {
                         <td>
                           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {canEditRenta && (
-                              <button className="btn btn-secondary btn-sm" onClick={() => abrirModalEditar(r)}>
-                                ✏️
-                              </button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => abrirModalEditar(r)}>✏️</button>
                             )}
                             {r.estatus !== "terminada" && (
                               <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
@@ -356,63 +346,40 @@ export default function Rentas() {
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Cliente *</label>
-                <select className="form-select" value={form.cliente}
-                  onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
+                <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
                   <option value="">Selecciona cliente...</option>
                   {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
                 </select>
               </div>
-
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
-                <select className="form-select" value={form.montacargas}
-                  onChange={e => handleMontaChange(e.target.value)}>
+                <select className="form-select" value={form.montacargas} onChange={e => handleMontaChange(e.target.value)}>
                   <option value="">Selecciona equipo...</option>
-                  {montas.map(m => (
-                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>
-                  ))}
+                  {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
                 </select>
               </div>
-
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Asesor</label>
-                <select className="form-select" value={form.asesor}
-                  onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
+                <select className="form-select" value={form.asesor} onChange={e => setForm((p: any) => ({ ...p, asesor: e.target.value }))}>
                   <option value="">Sin asesor</option>
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
               </div>
-
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Tipo de periodo *</label>
                 <div style={{ display: "flex", gap: 10 }}>
                   {(["semanal", "mensual", "anual"] as const).map(tipo => (
-                    <button key={tipo} type="button"
-                      onClick={() => handlePeriodoChange(tipo)}
-                      style={{
-                        flex: 1, padding: "10px", borderRadius: 8, border: "2px solid",
-                        borderColor: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)",
-                        background: form.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)",
-                        color: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)",
-                        fontWeight: form.tipoPeriodo === tipo ? 700 : 400,
-                        cursor: "pointer", transition: "all 0.15s",
-                      }}>
+                    <button key={tipo} type="button" onClick={() => handlePeriodoChange(tipo)}
+                      style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", borderColor: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)", background: form.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)", color: form.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)", fontWeight: form.tipoPeriodo === tipo ? 700 : 400, cursor: "pointer", transition: "all 0.15s" }}>
                       {PERIODO_LABEL[tipo]}
                     </button>
                   ))}
                 </div>
               </div>
-
               {montaSeleccionada && (
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <div style={{
-                    background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
-                    borderRadius: "var(--radius-sm)", padding: "10px 14px",
-                    display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center",
-                  }}>
-                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
-                      ⚡ Precios del equipo
-                    </span>
+                  <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>⚡ Precios del equipo</span>
                     {[
                       { label: "Semanal", val: montaSeleccionada.costoSemana, key: "semanal" },
                       { label: "Mensual", val: montaSeleccionada.costoMes,    key: "mensual" },
@@ -420,10 +387,7 @@ export default function Rentas() {
                     ].map(p => (
                       <div key={p.key} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                         <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{p.label}</span>
-                        <span style={{
-                          fontWeight: 700, fontSize: "0.9rem",
-                          color: form.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)",
-                        }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.9rem", color: form.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)" }}>
                           {p.val ? `$${p.val.toLocaleString()}` : "—"}
                         </span>
                       </div>
@@ -431,121 +395,81 @@ export default function Rentas() {
                   </div>
                 </div>
               )}
-
               <div className="form-group">
                 <label className="form-label">Fecha inicio *</label>
-                <input className="form-input" type="date" value={form.fechaInicio}
-                  onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaInicio} onChange={e => setForm((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha fin</label>
-                <input className="form-input" type="date" value={form.fechaFin}
-                  onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))} />
+                <input className="form-input" type="date" value={form.fechaFin} onChange={e => setForm((p: any) => ({ ...p, fechaFin: e.target.value }))} />
               </div>
-
               <div className="form-group">
                 <label className="form-label">{precioLabel} *</label>
-                <input className="form-input" type="number" value={form.precioMensual}
-                  onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.precioMensual} onChange={e => setForm((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Flete</label>
-                <input className="form-input" type="number" value={form.flete}
-                  onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.flete} onChange={e => setForm((p: any) => ({ ...p, flete: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Depósito</label>
-                <input className="form-input" type="number" value={form.deposito}
-                  onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))} />
+                <input className="form-input" type="number" value={form.deposito} onChange={e => setForm((p: any) => ({ ...p, deposito: +e.target.value }))} />
               </div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>
-                {saving ? "Guardando..." : "Guardar"}
-              </button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal editar renta (solo developer/gerencia) ── */}
+      {/* ── Modal editar renta ── */}
       {modalEditar && canEditRenta && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalEditar(null); }}>
           <div className="modal">
             <button className="modal-close" onClick={() => setModalEditar(null)}>✕</button>
             <h2 className="modal-title">✏️ Editar renta</h2>
-            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
-              Solo gerencia y developer pueden editar una renta directamente.
-            </p>
-
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>Solo gerencia y developer pueden editar una renta directamente.</p>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Cliente *</label>
-                <select className="form-select" value={formEditar.cliente}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, cliente: e.target.value }))}>
+                <select className="form-select" value={formEditar.cliente} onChange={e => setFormEditar((p: any) => ({ ...p, cliente: e.target.value }))}>
                   <option value="">Selecciona cliente...</option>
                   {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
                 </select>
               </div>
-
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
                 <select className="form-select" value={formEditar.montacargas}
-                  onChange={e => {
-                    setFormEditar((p: any) => ({ ...p, montacargas: e.target.value }));
-                    aplicarPrecioAutomatico(e.target.value, formEditar.tipoPeriodo, setFormEditar);
-                  }}>
+                  onChange={e => { setFormEditar((p: any) => ({ ...p, montacargas: e.target.value })); aplicarPrecioAutomatico(e.target.value, formEditar.tipoPeriodo, setFormEditar); }}>
                   <option value="">Selecciona equipo...</option>
-                  {montasParaEditar.map(m => (
-                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>
-                  ))}
+                  {montasParaEditar.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca} {m.modelo}</option>)}
                 </select>
               </div>
-
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Asesor</label>
-                <select className="form-select" value={formEditar.asesor}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, asesor: e.target.value }))}>
+                <select className="form-select" value={formEditar.asesor} onChange={e => setFormEditar((p: any) => ({ ...p, asesor: e.target.value }))}>
                   <option value="">Sin asesor</option>
                   {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
                 </select>
               </div>
-
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Tipo de periodo *</label>
                 <div style={{ display: "flex", gap: 10 }}>
                   {(["semanal", "mensual", "anual"] as const).map(tipo => (
                     <button key={tipo} type="button"
-                      onClick={() => {
-                        setFormEditar((p: any) => ({ ...p, tipoPeriodo: tipo }));
-                        if (formEditar.montacargas) aplicarPrecioAutomatico(formEditar.montacargas, tipo, setFormEditar);
-                      }}
-                      style={{
-                        flex: 1, padding: "10px", borderRadius: 8, border: "2px solid",
-                        borderColor: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)",
-                        background: formEditar.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)",
-                        color: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)",
-                        fontWeight: formEditar.tipoPeriodo === tipo ? 700 : 400,
-                        cursor: "pointer", transition: "all 0.15s",
-                      }}>
+                      onClick={() => { setFormEditar((p: any) => ({ ...p, tipoPeriodo: tipo })); if (formEditar.montacargas) aplicarPrecioAutomatico(formEditar.montacargas, tipo, setFormEditar); }}
+                      style={{ flex: 1, padding: "10px", borderRadius: 8, border: "2px solid", borderColor: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--border)", background: formEditar.tipoPeriodo === tipo ? "rgba(255,180,0,0.12)" : "var(--input-bg)", color: formEditar.tipoPeriodo === tipo ? "var(--accent)" : "var(--text-muted)", fontWeight: formEditar.tipoPeriodo === tipo ? 700 : 400, cursor: "pointer", transition: "all 0.15s" }}>
                       {PERIODO_LABEL[tipo]}
                     </button>
                   ))}
                 </div>
               </div>
-
               {montaSeleccionadaEditar && (
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <div style={{
-                    background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
-                    borderRadius: "var(--radius-sm)", padding: "10px 14px",
-                    display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center",
-                  }}>
-                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>
-                      ⚡ Precios del equipo
-                    </span>
+                  <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: "10px 14px", display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>⚡ Precios del equipo</span>
                     {[
                       { label: "Semanal", val: montaSeleccionadaEditar.costoSemana, key: "semanal" },
                       { label: "Mensual", val: montaSeleccionadaEditar.costoMes,    key: "mensual" },
@@ -553,10 +477,7 @@ export default function Rentas() {
                     ].map(p => (
                       <div key={p.key} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                         <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{p.label}</span>
-                        <span style={{
-                          fontWeight: 700, fontSize: "0.9rem",
-                          color: formEditar.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)",
-                        }}>
+                        <span style={{ fontWeight: 700, fontSize: "0.9rem", color: formEditar.tipoPeriodo === p.key ? "var(--accent)" : "var(--text)" }}>
                           {p.val ? `$${p.val.toLocaleString()}` : "—"}
                         </span>
                       </div>
@@ -564,50 +485,38 @@ export default function Rentas() {
                   </div>
                 </div>
               )}
-
               <div className="form-group">
                 <label className="form-label">Fecha inicio *</label>
-                <input className="form-input" type="date" value={formEditar.fechaInicio}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
+                <input className="form-input" type="date" value={formEditar.fechaInicio} onChange={e => setFormEditar((p: any) => ({ ...p, fechaInicio: e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha fin</label>
-                <input className="form-input" type="date" value={formEditar.fechaFin}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, fechaFin: e.target.value }))} />
+                <input className="form-input" type="date" value={formEditar.fechaFin} onChange={e => setFormEditar((p: any) => ({ ...p, fechaFin: e.target.value }))} />
               </div>
-
               <div className="form-group">
                 <label className="form-label">{precioLabelEditar} *</label>
-                <input className="form-input" type="number" value={formEditar.precioMensual}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
+                <input className="form-input" type="number" value={formEditar.precioMensual} onChange={e => setFormEditar((p: any) => ({ ...p, precioMensual: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Flete</label>
-                <input className="form-input" type="number" value={formEditar.flete}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, flete: +e.target.value }))} />
+                <input className="form-input" type="number" value={formEditar.flete} onChange={e => setFormEditar((p: any) => ({ ...p, flete: +e.target.value }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Depósito</label>
-                <input className="form-input" type="number" value={formEditar.deposito}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, deposito: +e.target.value }))} />
+                <input className="form-input" type="number" value={formEditar.deposito} onChange={e => setFormEditar((p: any) => ({ ...p, deposito: +e.target.value }))} />
               </div>
-
               <div className="form-group">
                 <label className="form-label">Estatus</label>
-                <select className="form-select" value={formEditar.estatus}
-                  onChange={e => setFormEditar((p: any) => ({ ...p, estatus: e.target.value }))}>
+                <select className="form-select" value={formEditar.estatus} onChange={e => setFormEditar((p: any) => ({ ...p, estatus: e.target.value }))}>
                   <option value="activa">Activa</option>
                   <option value="vencida">Vencida</option>
                   <option value="terminada">Terminada</option>
                 </select>
               </div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalEditar(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={guardarEdicion} disabled={savingEditar}>
-                {savingEditar ? "Guardando..." : "Guardar cambios"}
-              </button>
+              <button className="btn btn-primary" onClick={guardarEdicion} disabled={savingEditar}>{savingEditar ? "Guardando..." : "Guardar cambios"}</button>
             </div>
           </div>
         </div>
@@ -626,30 +535,23 @@ export default function Rentas() {
               Fecha fin actual: <strong style={{ color: "var(--text)" }}>{fmt(modalRenovar.fechaFin)}</strong> —{" "}
               Precio actual: <strong style={{ color: "var(--text)" }}>${modalRenovar.precioMensual.toLocaleString()}</strong>
             </p>
-
             <div className="form-grid">
               <div className="form-group span-2">
                 <label className="form-label">Nueva fecha de fin *</label>
-                <input className="form-input" type="date" value={formRenovar.fechaFinNueva}
-                  onChange={e => setFormRenovar(p => ({ ...p, fechaFinNueva: e.target.value }))} />
+                <input className="form-input" type="date" value={formRenovar.fechaFinNueva} onChange={e => setFormRenovar(p => ({ ...p, fechaFinNueva: e.target.value }))} />
               </div>
               <div className="form-group span-2">
                 <label className="form-label">Nuevo precio ({modalRenovar.tipoPeriodo ?? "mensual"}) *</label>
-                <input className="form-input" type="number" value={formRenovar.precioMensualNuevo}
-                  onChange={e => setFormRenovar(p => ({ ...p, precioMensualNuevo: +e.target.value }))} />
+                <input className="form-input" type="number" value={formRenovar.precioMensualNuevo} onChange={e => setFormRenovar(p => ({ ...p, precioMensualNuevo: +e.target.value }))} />
               </div>
               <div className="form-group span-2">
                 <label className="form-label">Notas (opcional)</label>
-                <textarea className="form-textarea" rows={2} value={formRenovar.notas}
-                  onChange={e => setFormRenovar(p => ({ ...p, notas: e.target.value }))}
-                  placeholder="Ej. Renovación anual acordada por correo" />
+                <textarea className="form-textarea" rows={2} value={formRenovar.notas} onChange={e => setFormRenovar(p => ({ ...p, notas: e.target.value }))} placeholder="Ej. Renovación anual acordada por correo" />
               </div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalRenovar(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={renovar} disabled={savingRenovar || !formRenovar.fechaFinNueva || !formRenovar.precioMensualNuevo}
-                style={{ background: "var(--blue)", color: "#fff" }}>
+              <button className="btn btn-primary" onClick={renovar} disabled={savingRenovar || !formRenovar.fechaFinNueva || !formRenovar.precioMensualNuevo} style={{ background: "var(--blue)", color: "#fff" }}>
                 {savingRenovar ? "Renovando..." : "✅ Confirmar renovación"}
               </button>
             </div>
@@ -675,9 +577,11 @@ export default function Rentas() {
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
                     <span>Fecha fin: {fmt(rv.fechaFinAnterior)} → <strong>{fmt(rv.fechaFinNueva)}</strong></span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginTop: 2 }}>
-                    <span>Precio: ${rv.precioMensualAnterior.toLocaleString()} → <strong>${rv.precioMensualNuevo.toLocaleString()}</strong></span>
-                  </div>
+                  {!soloVerRentas && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginTop: 2 }}>
+                      <span>Precio: ${rv.precioMensualAnterior.toLocaleString()} → <strong>${rv.precioMensualNuevo.toLocaleString()}</strong></span>
+                    </div>
+                  )}
                   {rv.notas && <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 6 }}>📝 {rv.notas}</p>}
                 </div>
               ))}

@@ -107,12 +107,7 @@ function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas
   }
 
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 4,
-      fontFamily: "var(--font-head)", fontWeight: 700, fontSize: "0.78rem",
-      color: "var(--accent)", background: "rgba(245,158,11,0.1)",
-      padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap",
-    }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "var(--font-head)", fontWeight: 700, fontSize: "0.78rem", color: "var(--accent)", background: "rgba(245,158,11,0.1)", padding: "3px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>
       ⏱️ {texto}
     </span>
   );
@@ -144,11 +139,7 @@ function VistaTecnicoMovil({
   return (
     <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
       {activo && (
-        <div style={{
-          background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)",
-          border: `2px solid ${activo.estatus === "pausado" ? "var(--border)" : "var(--accent)"}`,
-          borderRadius: 16, padding: 20,
-        }}>
+        <div style={{ background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)", border: `2px solid ${activo.estatus === "pausado" ? "var(--border)" : "var(--accent)"}`, borderRadius: 16, padding: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
             <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: activo.estatus === "pausado" ? "var(--text-muted)" : "var(--accent)" }}>
               {activo.estatus === "pausado" ? "⏸️ En pausa" : "🔧 En proceso"}
@@ -158,13 +149,9 @@ function VistaTecnicoMovil({
           <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>
             #{activo.montacargas?.numeroEconomico} {activo.montacargas?.marca}
           </div>
-          <div style={{ fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: 4 }}>
-            {activo.cliente?.nombre ?? "Sin cliente"}
-          </div>
+          <div style={{ fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: 4 }}>{activo.cliente?.nombre ?? "Sin cliente"}</div>
           {activo.problema && (
-            <div style={{ fontSize: "0.85rem", color: "var(--text)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
-              {activo.problema}
-            </div>
+            <div style={{ fontSize: "0.85rem", color: "var(--text)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>{activo.problema}</div>
           )}
           {activo.estatus === "pausado" && pausaActiva && (
             <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
@@ -177,32 +164,24 @@ function VistaTecnicoMovil({
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
             {activo.estatus === "en_proceso" && (
               <>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onPausar(activo)} disabled={pausandoId === activo._id}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onPausar(activo)} disabled={pausandoId === activo._id}>
                   {pausandoId === activo._id ? "..." : "⏸️ Pausar servicio"}
                 </button>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onCerrar(activo)}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onCerrar(activo)}>
                   ✅ Terminar servicio
                 </button>
               </>
             )}
             {activo.estatus === "pausado" && (
               <>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "1.5px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.15)", color: "var(--green)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onReanudar(activo)} disabled={reanudandoId === activo._id}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "1.5px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.15)", color: "var(--green)", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onReanudar(activo)} disabled={reanudandoId === activo._id}>
                   {reanudandoId === activo._id ? "..." : "▶️ Reanudar servicio"}
                 </button>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => onCerrar(activo)}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => onCerrar(activo)}>
                   ✅ Terminar servicio
                 </button>
               </>
@@ -213,41 +192,24 @@ function VistaTecnicoMovil({
 
       {pendientes.length > 0 && (
         <div>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>
-            Servicios pendientes
-          </p>
+          <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>Servicios pendientes</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {pendientes.map(s => (
-              <div key={s._id} style={{
-                background: "var(--surface)", border: "1.5px solid var(--border)",
-                borderRadius: 14, padding: 16, opacity: activo ? 0.6 : 1,
-              }}>
+              <div key={s._id} style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: 16, opacity: activo ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-head)" }}>{s.folio}</span>
                   <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{fmt(s.fechaReporte)}</span>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)", marginBottom: 2 }}>
-                  #{s.montacargas?.numeroEconomico} {s.montacargas?.marca}
-                </div>
-                <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: s.problema ? 8 : 0 }}>
-                  {s.cliente?.nombre ?? "Sin cliente"}
-                </div>
-                {s.problema && (
-                  <div style={{ fontSize: "0.82rem", color: "var(--text)", marginBottom: 12 }}>
-                    {s.problema}
-                  </div>
-                )}
+                <div style={{ fontWeight: 700, fontSize: "1.05rem", color: "var(--text)", marginBottom: 2 }}>#{s.montacargas?.numeroEconomico} {s.montacargas?.marca}</div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: s.problema ? 8 : 0 }}>{s.cliente?.nombre ?? "Sin cliente"}</div>
+                {s.problema && <div style={{ fontSize: "0.82rem", color: "var(--text)", marginBottom: 12 }}>{s.problema}</div>}
                 {!activo ? (
-                  <button
-                    style={{ width: "100%", padding: "14px", borderRadius: 10, border: "1.5px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.15)", color: "var(--blue)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}
-                    onClick={() => onIniciarConfirm(s)} disabled={iniciandoId === s._id}
-                  >
+                  <button style={{ width: "100%", padding: "14px", borderRadius: 10, border: "1.5px solid rgba(59,130,246,0.3)", background: "rgba(59,130,246,0.15)", color: "var(--blue)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}
+                    onClick={() => onIniciarConfirm(s)} disabled={iniciandoId === s._id}>
                     {iniciandoId === s._id ? "Iniciando..." : "▶️ Iniciar este servicio"}
                   </button>
                 ) : (
-                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: "8px 0" }}>
-                    🔒 Termina el servicio activo primero
-                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: "8px 0" }}>🔒 Termina el servicio activo primero</div>
                 )}
               </div>
             ))}
@@ -296,6 +258,17 @@ export default function Servicios() {
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
 
+  // ── Reporte de servicios ──
+  const [modalReporte, setModalReporte]                 = useState(false);
+  const [reportePeriodo, setReportePeriodo]             = useState<"semana" | "mes" | "custom">("mes");
+  const [reporteMes, setReporteMes]                     = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [reporteDesde, setReporteDesde]                 = useState("");
+  const [reporteHasta, setReporteHasta]                 = useState("");
+  const [reporteFiltroTecnico, setReporteFiltroTecnico] = useState("todos");
+
   useEffect(() => { load(); }, []);
 
   useEffect(() => {
@@ -321,16 +294,11 @@ export default function Servicios() {
         }
       }
     }
-    function onVisibilityChange() {
-      if (document.visibilityState === "visible") checkRecordatorio();
-    }
+    function onVisibilityChange() { if (document.visibilityState === "visible") checkRecordatorio(); }
     const intervalo = setInterval(checkRecordatorio, 60 * 1000);
     document.addEventListener("visibilitychange", onVisibilityChange);
     checkRecordatorio();
-    return () => {
-      clearInterval(intervalo);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
+    return () => { clearInterval(intervalo); document.removeEventListener("visibilitychange", onVisibilityChange); };
   }, [rol, servicios]);
 
   async function load() {
@@ -388,9 +356,7 @@ export default function Servicios() {
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 6000 })
       );
       return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   async function iniciar(s: Servicio) {
@@ -436,10 +402,7 @@ export default function Servicios() {
     setSaving(true);
     try {
       const ubicacion = await obtenerUbicacion();
-      await api.post(`/servicios/${cerrarModal._id}/cerrar`, {
-        ...cerrarForm,
-        ...(ubicacion ? { ubicacion } : {}),
-      });
+      await api.post(`/servicios/${cerrarModal._id}/cerrar`, { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) });
       load();
       setCerrarModal(null);
     } catch (e: any) {
@@ -471,17 +434,176 @@ export default function Servicios() {
         horometro:       s.horometro,
         horometroCierre: s.horometroCierre,
       } : undefined,
-      tipoServicio: s.tipoServicio?.nombre,
-      tecnico:      s.tecnicoAsignado?.nombre,
-      problema:     s.problema,
-      notasCierre:  s.notasCierre,
-      refacciones:  s.ordenRefaccion?.items
-        ?.filter(i => i.cantidadSurtida > 0)
-        .map(i => ({ cantidad: i.cantidadSurtida, descripcion: i.refaccion.nombre, precio: undefined })) ?? [],
+      tipoServicio:     s.tipoServicio?.nombre,
+      tecnico:          s.tecnicoAsignado?.nombre,
+      problema:         s.problema,
+      notasCierre:      s.notasCierre,
+      refacciones:      s.ordenRefaccion?.items?.filter(i => i.cantidadSurtida > 0).map(i => ({ cantidad: i.cantidadSurtida, descripcion: i.refaccion.nombre, precio: undefined })) ?? [],
       costoRefacciones: s.costoRefacciones,
       costoManoObra:    s.costoManoObra,
       observaciones:    s.notasCierre,
     };
+  }
+
+  // ── Reporte ──
+  function filtrarPorPeriodoReporte(s: Servicio): boolean {
+    const fecha = s.fechaReporte ? new Date(s.fechaReporte.split("T")[0] + "T12:00:00") : null;
+    if (!fecha) return false;
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMes.split("-").map(Number);
+      return fecha.getFullYear() === y && fecha.getMonth() === m - 1;
+    }
+    if (reportePeriodo === "semana") {
+      const hoy    = new Date();
+      const lunes  = new Date(hoy);
+      lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+      lunes.setHours(0, 0, 0, 0);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      domingo.setHours(23, 59, 59, 999);
+      return fecha >= lunes && fecha <= domingo;
+    }
+    if (reportePeriodo === "custom") {
+      if (reporteDesde && fecha < new Date(reporteDesde + "T00:00:00")) return false;
+      if (reporteHasta && fecha > new Date(reporteHasta + "T23:59:59")) return false;
+      return true;
+    }
+    return true;
+  }
+
+  function generarReporteServicios() {
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const datos = servicios
+      .filter(s => s.estatus === "cerrado")
+      .filter(filtrarPorPeriodoReporte)
+      .filter(s => reporteFiltroTecnico === "todos" || s.tecnicoAsignado?._id === reporteFiltroTecnico);
+
+    const porTecnico = new Map<string, { nombre: string; servicios: Servicio[] }>();
+    for (const s of datos) {
+      const key    = s.tecnicoAsignado?._id ?? "__sin__";
+      const nombre = s.tecnicoAsignado?.nombre ?? "Sin técnico";
+      if (!porTecnico.has(key)) porTecnico.set(key, { nombre, servicios: [] });
+      porTecnico.get(key)!.servicios.push(s);
+    }
+
+    const porEquipo = new Map<string, { eco: string; marca: string; count: number }>();
+    for (const s of datos) {
+      const key = s.montacargas?._id ?? "__sin__";
+      if (!porEquipo.has(key)) {
+        porEquipo.set(key, { eco: s.montacargas?.numeroEconomico ?? "—", marca: s.montacargas?.marca ?? "—", count: 0 });
+      }
+      porEquipo.get(key)!.count++;
+    }
+
+    const labelPeriodo = reportePeriodo === "mes"
+      ? new Date(reporteMes + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" })
+      : reportePeriodo === "semana" ? "Semana actual"
+      : `${reporteDesde ?? "—"} al ${reporteHasta ?? "—"}`;
+
+    const totalCostoRef  = datos.reduce((a, s) => a + (s.costoRefacciones ?? 0), 0);
+    const totalCostoMano = datos.reduce((a, s) => a + (s.costoManoObra    ?? 0), 0);
+
+    function fmtCorto(date?: string) {
+      if (!date) return "—";
+      const [y, m, d] = date.split("T")[0].split("-");
+      return `${d}/${m}/${String(y).slice(2)}`;
+    }
+
+    const rowsTecnico = [...porTecnico.values()]
+      .sort((a, b) => b.servicios.length - a.servicios.length)
+      .map(g => `<tr>
+        <td>${g.nombre}</td>
+        <td style="text-align:center">${g.servicios.length}</td>
+        <td style="text-align:right">$${g.servicios.reduce((a, s) => a + (s.costoManoObra ?? 0), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right">$${g.servicios.reduce((a, s) => a + (s.costoRefacciones ?? 0), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      </tr>`).join("");
+
+    const rowsEquipo = [...porEquipo.values()]
+      .sort((a, b) => b.count - a.count)
+      .map(e => `<tr>
+        <td>${e.eco}</td>
+        <td>${e.marca}</td>
+        <td style="text-align:center">${e.count}</td>
+      </tr>`).join("");
+
+    const rowsDetalle = datos
+      .sort((a, b) => new Date(a.fechaReporte).getTime() - new Date(b.fechaReporte).getTime())
+      .map(s => `<tr>
+        <td>${s.folio ?? "—"}</td>
+        <td>${fmtCorto(s.fechaReporte)}</td>
+        <td>${s.montacargas?.numeroEconomico ?? "—"} ${s.montacargas?.marca ?? ""}</td>
+        <td>${s.cliente?.nombre ?? "—"}</td>
+        <td>${s.tipoServicio?.nombre ?? "—"}</td>
+        <td>${s.tecnicoAsignado?.nombre ?? "—"}</td>
+        <td style="text-align:right">${s.costoRefacciones ? "$" + s.costoRefacciones.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
+        <td style="text-align:right">${s.costoManoObra ? "$" + s.costoManoObra.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Reporte de Servicios — ${labelPeriodo}</title>
+<style>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px;max-width:900px;margin:auto; }
+  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
+  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
+  h1 { font-size:13pt;font-weight:900; }
+  h2 { font-size:10pt;font-weight:700;margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px; }
+  p.sub { font-size:8.5pt;color:#555; }
+  table { width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:6px; }
+  thead { background:#222;color:#fff; }
+  thead th { padding:5px 8px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; }
+  td { padding:4px 8px;border-bottom:1px solid #ddd; }
+  .resumen-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px; }
+  .resumen-box { border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center; }
+  .resumen-box .val { font-size:18pt;font-weight:900;color:#222; }
+  .resumen-box .lbl { font-size:7.5pt;color:#666;text-transform:uppercase;margin-top:2px; }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
+  @media print { .print-btn { display:none; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Pipsa" />
+  <div>
+    <h1>Reporte de Servicios — ${labelPeriodo.charAt(0).toUpperCase() + labelPeriodo.slice(1)}</h1>
+    <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+    <p class="sub">Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+  </div>
+</div>
+<div class="resumen-grid">
+  <div class="resumen-box"><div class="val">${datos.length}</div><div class="lbl">Servicios cerrados</div></div>
+  <div class="resumen-box"><div class="val">${porTecnico.size}</div><div class="lbl">Técnicos activos</div></div>
+  <div class="resumen-box"><div class="val">$${totalCostoMano.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Mano de obra</div></div>
+  <div class="resumen-box"><div class="val">$${totalCostoRef.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Refacciones</div></div>
+</div>
+<h2>Por técnico</h2>
+<table>
+  <thead><tr><th>Técnico</th><th style="text-align:center">Servicios</th><th style="text-align:right">Mano de obra</th><th style="text-align:right">Refacciones</th></tr></thead>
+  <tbody>${rowsTecnico || '<tr><td colspan="4" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody>
+</table>
+<h2>Por equipo</h2>
+<table>
+  <thead><tr><th>No. Económico</th><th>Marca</th><th style="text-align:center">Servicios</th></tr></thead>
+  <tbody>${rowsEquipo || '<tr><td colspan="3" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody>
+</table>
+<h2>Detalle de servicios</h2>
+<table>
+  <thead><tr>
+    <th>Folio</th><th>Fecha</th><th>Equipo</th><th>Cliente</th>
+    <th>Tipo</th><th>Técnico</th><th style="text-align:right">Refacciones</th><th style="text-align:right">Mano de obra</th>
+  </tr></thead>
+  <tbody>${rowsDetalle || '<tr><td colspan="8" style="text-align:center;color:#aaa">Sin servicios en este período</td></tr>'}</tbody>
+</table>
+<div style="text-align:right;margin-top:8px;font-size:9pt;">
+  <strong>Total: $${(totalCostoRef + totalCostoMano).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>
+</div>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setModalReporte(false);
   }
 
   const filtered = servicios.filter(s => {
@@ -498,9 +620,7 @@ export default function Servicios() {
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
-    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", {
-      day: "2-digit", month: "short", year: "numeric"
-    });
+    return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
   function FotoUpload({ label, fotoKey, tipo }: { label: string; fotoKey: string; tipo: "hoja" | "equipo" | "refacciones" }) {
@@ -509,16 +629,10 @@ export default function Servicios() {
     return (
       <div>
         <label className="form-label">{label}</label>
-        <div
-          onClick={() => ref.current?.click()}
-          style={{
-            border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)",
-            padding: 12, textAlign: "center", cursor: "pointer",
-            background: "var(--surface2)", transition: "border-color .15s",
-          }}
+        <div onClick={() => ref.current?.click()}
+          style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)", transition: "border-color .15s" }}
           onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
-        >
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
           {url ? (
             <img src={url} alt={label} style={{ width: "100%", maxHeight: 140, objectFit: "cover", borderRadius: 6 }} />
           ) : uploadingFoto === tipo ? (
@@ -527,10 +641,8 @@ export default function Servicios() {
             <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-muted)" }}>📷 Toca para tomar o subir foto</p>
           )}
         </div>
-        <input
-          ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo); }}
-        />
+        <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo); }} />
       </div>
     );
   }
@@ -547,21 +659,12 @@ export default function Servicios() {
         </div>
 
         {mostrarRecordatorio && (
-          <div style={{
-            margin: "0 16px 12px",
-            background: "rgba(245,158,11,0.15)",
-            border: "2px solid var(--accent)",
-            borderRadius: 14, padding: "16px 20px",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-          }}>
+          <div style={{ margin: "0 16px 12px", background: "rgba(245,158,11,0.15)", border: "2px solid var(--accent)", borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: "1rem", color: "var(--accent)", marginBottom: 2 }}>⏱️ Recordatorio</div>
               <div style={{ fontSize: "0.88rem", color: "var(--text)" }}>Recuerda terminar el servicio en la app cuando lo hayas completado.</div>
             </div>
-            <button onClick={() => setMostrarRecordatorio(false)}
-              style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--text-muted)", padding: "4px 8px", flexShrink: 0 }}>
-              ✕
-            </button>
+            <button onClick={() => setMostrarRecordatorio(false)} style={{ background: "none", border: "none", fontSize: "1.4rem", cursor: "pointer", color: "var(--text-muted)", padding: "4px 8px", flexShrink: 0 }}>✕</button>
           </div>
         )}
 
@@ -591,26 +694,17 @@ export default function Servicios() {
                 </div>
                 <div style={{ fontSize: "0.9rem" }}>{confirmarIniciarModal.cliente?.nombre}</div>
                 {confirmarIniciarModal.problema && (
-                  <div style={{ fontSize: "0.85rem", marginTop: 8, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>
-                    {confirmarIniciarModal.problema}
-                  </div>
+                  <div style={{ fontSize: "0.85rem", marginTop: 8, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>{confirmarIniciarModal.problema}</div>
                 )}
               </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginBottom: 12 }}>
-                📍 Se registrará tu ubicación al iniciar
-              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginBottom: 12 }}>📍 Se registrará tu ubicación al iniciar</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={() => iniciar(confirmarIniciarModal)}
-                  disabled={iniciandoId === confirmarIniciarModal._id}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => iniciar(confirmarIniciarModal)} disabled={iniciandoId === confirmarIniciarModal._id}>
                   {iniciandoId === confirmarIniciarModal._id ? "Iniciando..." : "✅ Sí, iniciar"}
                 </button>
-                <button
-                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setConfirmarIniciarModal(null)}
-                >
+                <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setConfirmarIniciarModal(null)}>
                   Cancelar
                 </button>
               </div>
@@ -628,22 +722,15 @@ export default function Servicios() {
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: "1rem" }}>¿Por qué pausas el servicio?</label>
-                <textarea className="form-textarea" rows={4} value={razonPausa}
-                  onChange={e => setRazonPausa(e.target.value)}
-                  placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
-                  style={{ fontSize: "1rem" }} autoFocus />
+                <textarea className="form-textarea" rows={4} value={razonPausa} onChange={e => setRazonPausa(e.target.value)} placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..." style={{ fontSize: "1rem" }} autoFocus />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
-                  onClick={pausar} disabled={!razonPausa.trim() || pausandoId === pausarModal._id}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
+                  onClick={pausar} disabled={!razonPausa.trim() || pausandoId === pausarModal._id}>
                   {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
                 </button>
-                <button
-                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setPausarModal(null)}
-                >
+                <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setPausarModal(null)}>
                   Cancelar
                 </button>
               </div>
@@ -664,9 +751,7 @@ export default function Servicios() {
                   ⏱️ Tiempo activo: <Cronometro horaInicio={cerrarModal.horaInicio} pausas={cerrarModal.pausas} />
                 </p>
               )}
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>
-                📍 Se registrará tu ubicación al confirmar el cierre
-              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label">Horómetro al cierre</label>
@@ -687,27 +772,17 @@ export default function Servicios() {
                   <label className="form-label">Notas / trabajos realizados</label>
                   <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} style={{ fontSize: "1rem" }} />
                 </div>
-                <div className="form-group">
-                  <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
-                </div>
-                <div className="form-group">
-                  <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
-                </div>
-                <div className="form-group">
-                  <FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" />
-                </div>
+                <div className="form-group"><FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" /></div>
+                <div className="form-group"><FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" /></div>
+                <div className="form-group"><FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" /></div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-                <button
-                  style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
-                  onClick={cerrar} disabled={saving}
-                >
+                <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
+                  onClick={cerrar} disabled={saving}>
                   {saving ? "Cerrando..." : "✅ Confirmar cierre"}
                 </button>
-                <button
-                  style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setCerrarModal(null)}
-                >
+                <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setCerrarModal(null)}>
                   Cancelar
                 </button>
               </div>
@@ -718,7 +793,7 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista normal (gerencia / developer / oficina / supervisor_almacen) ──
+  // ── Vista normal ──
   return (
     <>
       <div className="page-header">
@@ -726,11 +801,14 @@ export default function Servicios() {
           <h1 className="page-title">Servicios</h1>
           <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} tickets abiertos</p>
         </div>
-        {canCreate && (
-          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
-            + Nuevo servicio
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          {["developer", "gerencia", "oficina"].includes(rol) && (
+            <button className="btn btn-secondary" onClick={() => setModalReporte(true)}>📊 Reporte</button>
+          )}
+          {canCreate && (
+            <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nuevo servicio</button>
+          )}
+        </div>
       </div>
 
       <div className="page-content">
@@ -799,11 +877,7 @@ export default function Servicios() {
                       </td>
                       <td>
                         {soloVer ? (
-                          <span className={`badge ${
-                            s.estatus === "abierto"    ? "badge-red"   :
-                            s.estatus === "en_proceso" ? "badge-amber" :
-                            s.estatus === "pausado"    ? "badge-gray"  : "badge-gray"
-                          }`}>
+                          <span className={`badge ${s.estatus === "abierto" ? "badge-red" : s.estatus === "en_proceso" ? "badge-amber" : "badge-gray"}`}>
                             {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
                           </span>
                         ) : (
@@ -823,16 +897,12 @@ export default function Servicios() {
                           {s.ubicacionInicio && (
                             <a className="btn btn-secondary btn-sm"
                               href={"https://www.google.com/maps?q=" + s.ubicacionInicio.lat + "," + s.ubicacionInicio.lng}
-                              target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>
-                              📍
-                            </a>
+                              target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>📍</a>
                           )}
                           {s.ubicacionCierre && (
                             <a className="btn btn-secondary btn-sm"
                               href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng}
-                              target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>
-                              🏁
-                            </a>
+                              target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>🏁</a>
                           )}
                           {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
@@ -868,6 +938,67 @@ export default function Servicios() {
           )}
         </div>
       </div>
+
+      {/* ── Modal reporte de servicios ── */}
+      {modalReporte && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
+          <div className="modal" style={{ maxWidth: 480 }}>
+            <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
+            <h2 className="modal-title">📊 Reporte de servicios</h2>
+
+            <div className="form-group" style={{ marginTop: 8 }}>
+              <label className="form-label">Período</label>
+              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {([["semana", "Esta semana"], ["mes", "Mes"], ["custom", "Rango"]] as const).map(([val, label], i, arr) => (
+                  <button key={val} onClick={() => setReportePeriodo(val)}
+                    style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {reportePeriodo === "mes" && (
+              <div className="form-group">
+                <label className="form-label">Mes y año</label>
+                <input className="form-input" type="month" value={reporteMes} onChange={e => setReporteMes(e.target.value)} />
+              </div>
+            )}
+
+            {reportePeriodo === "custom" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Desde</label>
+                  <input className="form-input" type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Hasta</label>
+                  <input className="form-input" type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">Filtrar por técnico</label>
+              <select className="form-select" value={reporteFiltroTecnico} onChange={e => setReporteFiltroTecnico(e.target.value)}>
+                <option value="todos">Todos los técnicos</option>
+                {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
+              </select>
+            </div>
+
+            <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              Se incluyen solo servicios <strong style={{ color: "var(--text)" }}>cerrados</strong> en el período seleccionado.
+              <br />
+              <span style={{ fontSize: "0.75rem" }}>El reporte se abre en una nueva pestaña — usa 🖨️ para imprimir o guardar PDF.</span>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={generarReporteServicios}>📄 Ver reporte</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal nuevo servicio ── */}
       {modal && (
@@ -940,7 +1071,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal pausar (desktop) ── */}
+      {/* ── Modal pausar ── */}
       {pausarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
           <div className="modal" style={{ maxWidth: 440 }}>
@@ -951,10 +1082,7 @@ export default function Servicios() {
             </p>
             <div className="form-group">
               <label className="form-label">Razón de la pausa *</label>
-              <textarea className="form-textarea" rows={3} value={razonPausa}
-                onChange={e => setRazonPausa(e.target.value)}
-                placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..."
-                autoFocus />
+              <textarea className="form-textarea" rows={3} value={razonPausa} onChange={e => setRazonPausa(e.target.value)} placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..." autoFocus />
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setPausarModal(null)}>Cancelar</button>
@@ -966,7 +1094,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal cerrar (desktop) ── */}
+      {/* ── Modal cerrar ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1010,15 +1138,9 @@ export default function Servicios() {
                 <label className="form-label">Notas de cierre / trabajos realizados</label>
                 <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
               </div>
-              <div className="form-group">
-                <FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" />
-              </div>
-              <div className="form-group">
-                <FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" />
-              </div>
-              <div className="form-group">
-                <FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" />
-              </div>
+              <div className="form-group"><FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" /></div>
+              <div className="form-group"><FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" /></div>
+              <div className="form-group"><FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" /></div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
