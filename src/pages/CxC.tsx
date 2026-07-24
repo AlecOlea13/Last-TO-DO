@@ -325,16 +325,16 @@ export default function CuentasCobrar() {
         try {
           const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: formF.rfcReceptor });
           //ojito con borrar el console log
-          console.log("RENTAS:", rentaData.rentas.map((r: any) => r.montacargas?.numeroEconomico));
-          console.log("EXTRAIDOS:", conceptosRenta.map(c => extraerNumeroEconomico(c.descripcion)));
+          // console.log("RENTAS:", rentaData.rentas.map((r: any) => r.montacargas?.numeroEconomico));
+          // console.log("EXTRAIDOS:", conceptosRenta.map(c => extraerNumeroEconomico(c.descripcion)));
           if (rentaData.rentas?.length > 0) {
             const rentas: RentaDetectada[] = rentaData.rentas;
             const items: RenovacionItem[] = conceptosRenta.map(c => {
               const numEco = extraerNumeroEconomico(c.descripcion);
               const fechaFin = extraerFechaFinDeConcepto(c.descripcion);
               const rentaMatch = numEco
-                ? rentas.find(r => r.montacargas?.numeroEconomico === numEco) ?? null
-                : rentas.length === 1 ? rentas[0] : null;
+              ? rentas.find(r => String(r.montacargas?.numeroEconomico) === String(numEco)) ?? null
+              : rentas.length === 1 ? rentas[0] : null;
               return {
                 concepto:        c.descripcion,
                 numeroEconomico: numEco ?? "—",
