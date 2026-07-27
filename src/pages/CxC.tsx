@@ -63,6 +63,17 @@ const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
+// ── Namespaces CFDI fuera del componente ──
+const CFDI_NS4 = "http://www.sat.gob.mx/cfd/4";
+const CFDI_NS3 = "http://www.sat.gob.mx/cfd/3";
+
+function getByTag(root: Document | Element, tag: string): Element[] {
+  let nodes = Array.from(root.getElementsByTagNameNS(CFDI_NS4, tag));
+  if (nodes.length === 0) nodes = Array.from(root.getElementsByTagNameNS(CFDI_NS3, tag));
+  if (nodes.length === 0) nodes = Array.from(root.getElementsByTagName(tag));
+  return nodes;
+}
+
 export default function CuentasCobrar() {
   const rol           = localStorage.getItem("rol") ?? "";
   const canDelete     = ["developer", "gerencia"].includes(rol);
@@ -115,10 +126,9 @@ export default function CuentasCobrar() {
   const [renovacionItems, setRenovacionItems] = useState<RenovacionItem[]>([]);
   const [renovandoDesde, setRenovandoDesde]   = useState(false);
 
-  // ── Modal Reportes ──
-  const [modalReportes, setModalReportes]       = useState(false);
-  const [reportePeriodo, setReportePeriodo]     = useState<"semana" | "mes" | "año" | "custom">("mes");
-  const [reporteMesDesde, setReporteMesDesde]   = useState(() => {
+  const [modalReportes, setModalReportes]     = useState(false);
+  const [reportePeriodo, setReportePeriodo]   = useState<"semana" | "mes" | "año" | "custom">("mes");
+  const [reporteMesDesde, setReporteMesDesde] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
@@ -158,6 +168,7 @@ export default function CuentasCobrar() {
 
   const hayFiltros = filtroEstatus !== "todos" || fechaDesde !== "" || fechaHasta !== "";
 
+  // ── parseXML limpio sin namespaces duplicados ──
   function parseXML(file: File) {
     setParsing(true);
     setXmlError("");
@@ -167,48 +178,42 @@ export default function CuentasCobrar() {
         const text   = e.target?.result as string;
         const parser = new DOMParser();
         const doc    = parser.parseFromString(text, "application/xml");
-        const ns     = "http://www.sat.gob.mx/cfd/4";
-        const ns3    = "http://www.sat.gob.mx/cfd/3";
-        const cfdi   = doc.querySelector("Comprobante") ??
-                       doc.getElementsByTagNameNS(ns,  "Comprobante")[0] ??
-                       doc.getElementsByTagNameNS(ns3, "Comprobante")[0];
+
+        const cfdi = getByTag(doc, "Comprobante")[0] ?? null;
         if (!cfdi) throw new Error("No se encontró el nodo Comprobante en el XML");
+
         const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
-        const emisor   = cfdi.querySelector("Emisor")   ?? cfdi.getElementsByTagName("Emisor")[0];
-        const receptor = cfdi.querySelector("Receptor") ?? cfdi.getElementsByTagName("Receptor")[0];
-        const timbre   = cfdi.querySelector("TimbreFiscalDigital") ?? cfdi.getElementsByTagName("TimbreFiscalDigital")[0];
-        const conceptosNodes = Array.from(
-          cfdi.querySelectorAll("Concepto").length > 0
-            ? cfdi.querySelectorAll("Concepto")
-            : cfdi.getElementsByTagName("Concepto")
-        );
+
+        const emisor   = getByTag(cfdi, "Emisor")[0]   ?? null;
+        const receptor = getByTag(cfdi, "Receptor")[0] ?? null;
+        const timbre   = getByTag(doc,  "TimbreFiscalDigital")[0] ?? null;
+
+        const conceptosNodes = getByTag(cfdi, "Concepto");
         const conceptos: Concepto[] = conceptosNodes.map(c => ({
-          descripcion:   getAttr(c, "Descripcion")   || getAttr(c, "descripcion"),
+          descripcion:   getAttr(c, "Descripcion") || getAttr(c, "descripcion"),
           cantidad:      parseFloat(getAttr(c, "Cantidad")      || "1"),
           valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || "0"),
           importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
+
         let iva = 0;
-        const traslados = Array.from(
-          cfdi.querySelectorAll("Traslado").length > 0
-            ? cfdi.querySelectorAll("Traslado")
-            : cfdi.getElementsByTagName("Traslado")
-        );
+        const traslados = getByTag(cfdi, "Traslado");
         traslados.forEach(t => {
           const imp = parseFloat(getAttr(t, "Importe") || "0");
           if (!isNaN(imp)) iva += imp;
         });
+
         setFormF({
-          uuid:           getAttr(timbre, "UUID")     || getAttr(timbre, "uuid"),
-          folioFactura:   getAttr(cfdi, "Folio")      || getAttr(cfdi, "folio") || "",
-          fechaEmision:   getAttr(cfdi, "Fecha")      || getAttr(cfdi, "fecha"),
+          uuid:           getAttr(timbre,   "UUID")   || getAttr(timbre,   "uuid"),
+          folioFactura:   getAttr(cfdi,     "Folio")  || getAttr(cfdi,     "folio") || "",
+          fechaEmision:   getAttr(cfdi,     "Fecha")  || getAttr(cfdi,     "fecha"),
           rfcEmisor:      getAttr(emisor,   "Rfc")    || getAttr(emisor,   "rfc"),
           nombreEmisor:   getAttr(emisor,   "Nombre") || getAttr(emisor,   "nombre"),
           rfcReceptor:    getAttr(receptor, "Rfc")    || getAttr(receptor, "rfc"),
           nombreReceptor: getAttr(receptor, "Nombre") || getAttr(receptor, "nombre"),
           subtotal:  parseFloat(getAttr(cfdi, "SubTotal") || "0"),
           iva:       iva || parseFloat(getAttr(cfdi, "Iva") || "0"),
-          total:     parseFloat(getAttr(cfdi, "Total") || "0"),
+          total:     parseFloat(getAttr(cfdi, "Total")    || "0"),
           moneda:    getAttr(cfdi, "Moneda") || "MXN",
           conceptos,
         });
@@ -291,7 +296,6 @@ export default function CuentasCobrar() {
     setFechaPagoRep(new Date().toISOString().split("T")[0]);
   }
 
-  // ── FIX: extrae número económico con o sin espacio antes del # ──
   function extraerNumeroEconomico(descripcion: string): string | null {
     const match = descripcion.match(/#\s*(\d+)/);
     return match ? match[1] : null;
@@ -316,8 +320,7 @@ export default function CuentasCobrar() {
     if (!formF.nombreReceptor && !formF.rfcReceptor) return;
     setSavingF(true);
 
-    // ── FIX: capturar formF antes de limpiarlo ──
-    const formSnapshot = { ...formF };
+    const rfcReceptor         = formF.rfcReceptor ?? "";
     const conceptosSnapshot: Concepto[] = formF.conceptos ?? [];
 
     try {
@@ -328,28 +331,23 @@ export default function CuentasCobrar() {
 
       const conceptosRenta = conceptosSnapshot.filter(c => /renta/i.test(c.descripcion));
 
-      if (conceptosRenta.length > 0 && formSnapshot.rfcReceptor) {
+      if (conceptosRenta.length > 0 && rfcReceptor) {
         try {
-          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: formSnapshot.rfcReceptor });
-
+          const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: rfcReceptor });
           if (rentaData.rentas?.length > 0) {
             const rentas: RentaDetectada[] = rentaData.rentas;
             const items: RenovacionItem[] = conceptosRenta.map(c => {
               const numEco   = extraerNumeroEconomico(c.descripcion);
               const fechaFin = extraerFechaFinDeConcepto(c.descripcion);
-
-              // ── FIX: comparación robusta String() vs String() ──
               let rentaMatch: RentaDetectada | null = null;
               if (numEco) {
                 rentaMatch = rentas.find(r =>
                   String(r.montacargas?.numeroEconomico).trim() === String(numEco).trim()
                 ) ?? null;
               }
-              // Fallback: si solo hay una renta y no se extrajo número, usar esa
               if (!rentaMatch && !numEco && rentas.length === 1) {
                 rentaMatch = rentas[0];
               }
-
               return {
                 concepto:        c.descripcion,
                 numeroEconomico: numEco ?? "—",
@@ -363,7 +361,6 @@ export default function CuentasCobrar() {
             setModalRentaDetectada({ clienteNombre: rentaData.clienteNombre, items });
           }
         } catch (err) {
-          // ── FIX: ya no silenciamos errores ──
           console.error("Error buscando rentas por RFC:", err);
         }
       }
@@ -382,7 +379,7 @@ export default function CuentasCobrar() {
         await api.post(`/rentas/${item.renta!._id}/renovar`, {
           fechaFinNueva:      item.fechaFin,
           precioMensualNuevo: item.precioConcepto,
-          notas:              `Renovación desde factura ${renovacionItems[0]?.concepto?.slice(0, 30) ?? ""}`.trim(),
+          notas:              `Renovación desde factura`.trim(),
         });
       }
       setModalRentaDetectada(null);
@@ -469,7 +466,6 @@ export default function CuentasCobrar() {
     }
   }
 
-  // ── Reporte ──
   function getLunesDeSemana(semana: number, anio: number): Date {
     const enero1 = new Date(anio, 0, 1);
     const lunes  = new Date(enero1);
@@ -479,9 +475,7 @@ export default function CuentasCobrar() {
   }
 
   function getFechaReporte(c: CxC): Date | null {
-    const dateStr = c.estatus === "cobrada"
-      ? (c.fechaPago ?? c.fechaEmision)
-      : c.fechaEmision;
+    const dateStr = c.estatus === "cobrada" ? (c.fechaPago ?? c.fechaEmision) : c.fechaEmision;
     if (!dateStr) return null;
     return new Date(dateStr.split("T")[0] + "T12:00:00");
   }
@@ -538,11 +532,7 @@ export default function CuentasCobrar() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
     const datos   = cxcs.filter(filtrarPorPeriodo);
     const rows    = [...datos]
-      .sort((a, b) => {
-        const da = getFechaReporte(a)?.getTime() ?? 0;
-        const db = getFechaReporte(b)?.getTime() ?? 0;
-        return da - db;
-      })
+      .sort((a, b) => (getFechaReporte(a)?.getTime() ?? 0) - (getFechaReporte(b)?.getTime() ?? 0))
       .map(c => `<tr>
         <td>${c.nombreReceptor ?? "—"}</td>
         <td>${c.folioFactura ?? "—"}</td>
@@ -621,7 +611,6 @@ export default function CuentasCobrar() {
 
   const totalPaginas = Math.ceil(filtered.length / POR_PAGINA);
   const paginados    = filtered.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
-
   const totalPendiente = cxcs.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + c.total, 0);
   const totalCobrado   = cxcs.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
 
@@ -714,10 +703,8 @@ export default function CuentasCobrar() {
                 <option value="pendiente">Pendientes</option>
                 <option value="cobrada">Cobradas</option>
               </select>
-              <input className="form-input" type="date" value={fechaDesde}
-                onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
-              <input className="form-input" type="date" value={fechaHasta}
-                onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
+              <input className="form-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
+              <input className="form-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
               {hayFiltros && (
                 <button className="btn btn-secondary btn-sm" onClick={() => { setFiltroEstatus("todos"); setFechaDesde(""); setFechaHasta(""); }}>✕ Limpiar</button>
               )}
@@ -744,12 +731,8 @@ export default function CuentasCobrar() {
                   <tr>
                     <th style={{ width: 36, textAlign: "center" }}>
                       <input type="checkbox"
-                        checked={
-                          paginados.filter(c => c.estatus !== "cobrada").length > 0 &&
-                          paginados.filter(c => c.estatus !== "cobrada").every(c => seleccionados.has(c._id))
-                        }
-                        onChange={toggleTodos}
-                      />
+                        checked={paginados.filter(c => c.estatus !== "cobrada").length > 0 && paginados.filter(c => c.estatus !== "cobrada").every(c => seleccionados.has(c._id))}
+                        onChange={toggleTodos} />
                     </th>
                     <th style={{ minWidth: 120 }}>Cliente</th>
                     <th style={{ minWidth: 80 }}>No. Factura</th>
@@ -798,8 +781,7 @@ export default function CuentasCobrar() {
                       <td>
                         <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(c)}>👁️</button>
-                          <button className="btn btn-secondary btn-sm"
-                            onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
                           {c.estatus !== "cobrada" && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
                               onClick={() => { setModalCobro(c); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); }}>
@@ -1055,15 +1037,15 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>UUID: {detalle.uuid ?? "—"}</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 8 }}>
               {[
-                { label: "No. Factura",  val: detalle.folioFactura },
+                { label: "No. Factura",   val: detalle.folioFactura },
                 { label: "Fecha emisión", val: fmt(detalle.fechaEmision) },
-                { label: "Emisor",       val: detalle.nombreEmisor },
-                { label: "RFC Emisor",   val: detalle.rfcEmisor },
-                { label: "RFC Receptor", val: detalle.rfcReceptor },
-                { label: "Estatus",      val: detalle.estatus === "cobrada" ? "✅ Cobrada" : "⏳ Pendiente" },
-                { label: "Fecha pago",   val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
-                { label: "Comentarios",  val: detalle.comentarios },
-                { label: "Notas",        val: detalle.notas },
+                { label: "Emisor",        val: detalle.nombreEmisor },
+                { label: "RFC Emisor",    val: detalle.rfcEmisor },
+                { label: "RFC Receptor",  val: detalle.rfcReceptor },
+                { label: "Estatus",       val: detalle.estatus === "cobrada" ? "✅ Cobrada" : "⏳ Pendiente" },
+                { label: "Fecha pago",    val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
+                { label: "Comentarios",   val: detalle.comentarios },
+                { label: "Notas",         val: detalle.notas },
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
