@@ -57,12 +57,13 @@ type Vale = {
   createdAt: string;
 };
 
+// ── FIX: precioUnitario separado para calcular precioEstimado automáticamente ──
 type SolicitudItem = {
   nombre: string; cantidad: number; unidad: string;
+  precioUnitario: number;
   precioEstimado: number; notas: string;
 };
 
-// ── Type ampliado para poder usar generarReporte ──
 type SolicitudCotizacion = {
   _id: string; folio: string; tipo: string; tipoPeriodo?: string;
   cliente?: { _id?: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
@@ -109,6 +110,10 @@ const CONDICION_BADGE: Record<string, string> = {
   desgastada: "badge-amber", rota: "badge-red", quemada: "badge-red",
   corroida: "badge-gray", otro: "badge-blue",
 };
+
+const emptySolicitudItem = (): SolicitudItem => ({
+  nombre: "", cantidad: 1, unidad: "pieza", precioUnitario: 0, precioEstimado: 0, notas: ""
+});
 
 function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -340,9 +345,7 @@ export default function Almacen() {
   const [uploadingUsada, setUploadingUsada] = useState(false);
 
   const [solicitudModal, setSolicitudModal]   = useState(false);
-  const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([
-    { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }
-  ]);
+  const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([emptySolicitudItem()]);
   const [solicitudNotas, setSolicitudNotas]   = useState("");
   const [solicitudCotizId, setSolicitudCotizId] = useState("");
   const [savingSolicitud, setSavingSolicitud] = useState(false);
@@ -591,14 +594,23 @@ export default function Almacen() {
   async function removeUsada(id: string) { if (!confirm("¿Eliminar este registro?")) return; await api.delete(`/refacciones-usadas/${id}`); setUsadas(prev => prev.filter(x => x._id !== id)); }
 
   function addSolicitudItem() {
-    setSolicitudItems(p => [...p, { nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+    setSolicitudItems(p => [...p, emptySolicitudItem()]);
   }
   function removeSolicitudItem(i: number) {
     setSolicitudItems(p => p.filter((_, idx) => idx !== i));
   }
+  // ── FIX: calcular precioEstimado = cantidad × precioUnitario automáticamente ──
   function updateSolicitudItem(i: number, field: string, val: any) {
-    setSolicitudItems(p => p.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
+    setSolicitudItems(p => p.map((item, idx) => {
+      if (idx !== i) return item;
+      const updated = { ...item, [field]: val };
+      if (field === "cantidad" || field === "precioUnitario") {
+        updated.precioEstimado = updated.cantidad * updated.precioUnitario;
+      }
+      return updated;
+    }));
   }
+
   async function guardarSolicitud() {
     if (!solicitudItems.some(i => i.nombre.trim())) return;
     setSavingSolicitud(true);
@@ -610,7 +622,7 @@ export default function Almacen() {
       });
       setSolicitudes(prev => [data, ...prev]);
       setSolicitudModal(false);
-      setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+      setSolicitudItems([emptySolicitudItem()]);
       setSolicitudNotas("");
       setSolicitudCotizId("");
     } catch (e: any) {
@@ -671,6 +683,9 @@ export default function Almacen() {
 
   const cotizSeleccionada = cotizacionesDisp.find(c => c._id === solicitudCotizId);
 
+  // ── Total estimado de la solicitud ──
+  const totalSolicitud = solicitudItems.reduce((sum, i) => sum + i.precioEstimado, 0);
+
   return (
     <>
       <div className="page-header">
@@ -690,7 +705,7 @@ export default function Almacen() {
           {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
           {canVerSolicitudes && tab === "solicitudes" && (
             <button className="btn btn-primary" onClick={() => {
-              setSolicitudItems([{ nombre: "", cantidad: 1, unidad: "pieza", precioEstimado: 0, notas: "" }]);
+              setSolicitudItems([emptySolicitudItem()]);
               setSolicitudNotas("");
               setSolicitudCotizId("");
               setSolicitudModal(true);
@@ -912,7 +927,11 @@ export default function Almacen() {
                           {s.items.map((item, i) => (
                             <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
                               {item.cantidad}× {item.nombre} ({item.unidad})
-                              {item.precioEstimado > 0 && <span style={{ color: "var(--green)", marginLeft: 4 }}>~${item.precioEstimado.toLocaleString()}</span>}
+                              {item.precioEstimado > 0 && (
+                                <span style={{ color: "var(--green)", marginLeft: 4 }}>
+                                  ~${item.precioEstimado.toLocaleString()}
+                                </span>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -1300,12 +1319,22 @@ export default function Almacen() {
                 <button className="btn btn-secondary btn-sm" onClick={addSolicitudItem}>+ Agregar artículo</button>
               </div>
 
+              {/* ── Encabezados de columnas ── */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 90px 90px 90px 32px", gap: 8, padding: "0 12px", marginBottom: 4 }}>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Artículo</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "center" }}>Cant.</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Unidad</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>$ c/u</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>Total</span>
+                <span />
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {solicitudItems.map((item, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 100px 100px 32px", gap: 8, alignItems: "center", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 90px 90px 90px 32px", gap: 8, alignItems: "center", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
                     <input className="form-input" value={item.nombre}
                       onChange={e => updateSolicitudItem(i, "nombre", e.target.value)}
-                      placeholder="Nombre del artículo..." style={{ padding: "6px 10px" }} />
+                      placeholder="Nombre..." style={{ padding: "6px 10px" }} />
                     <input className="form-input" type="number" min={1} value={item.cantidad}
                       onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)}
                       style={{ padding: "6px 8px", textAlign: "center" }} />
@@ -1319,9 +1348,14 @@ export default function Almacen() {
                       <option value="metro">Metro</option>
                       <option value="kg">Kg</option>
                     </select>
-                    <input className="form-input" type="number" min={0} value={item.precioEstimado}
-                      onChange={e => updateSolicitudItem(i, "precioEstimado", +e.target.value)}
-                      placeholder="$ estimado" style={{ padding: "6px 8px", textAlign: "right" }} />
+                    {/* ── FIX: precio unitario ── */}
+                    <input className="form-input" type="number" min={0} value={item.precioUnitario}
+                      onChange={e => updateSolicitudItem(i, "precioUnitario", +e.target.value)}
+                      placeholder="0" style={{ padding: "6px 8px", textAlign: "right" }} />
+                    {/* ── Total calculado automáticamente ── */}
+                    <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: item.precioEstimado > 0 ? "var(--green)" : "var(--text-muted)" }}>
+                      {item.precioEstimado > 0 ? `$${item.precioEstimado.toLocaleString("es-MX")}` : "—"}
+                    </div>
                     <button onClick={() => removeSolicitudItem(i)}
                       disabled={solicitudItems.length === 1}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>
@@ -1330,6 +1364,16 @@ export default function Almacen() {
                   </div>
                 ))}
               </div>
+
+              {/* ── Total general ── */}
+              {totalSolicitud > 0 && (
+                <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "var(--radius-sm)" }}>
+                  <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Total estimado:</span>
+                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--green)" }}>
+                    ${totalSolicitud.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
 
               <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
                 💡 La solicitud quedará <strong style={{ color: "var(--accent)" }}>Sin liberar</strong> hasta que gerencia o developer la apruebe.
@@ -1347,7 +1391,7 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal ver cotización enlazada — con botón de reporte completo ── */}
+      {/* ── Modal ver cotización enlazada ── */}
       {verCotizacion && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerCotizacion(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1394,30 +1438,22 @@ export default function Almacen() {
                   ))}
                 </div>
               </div>
-
-              {/* Botones de reporte — solo si el backend devuelve los campos completos */}
               {verCotizacion.subtotal !== undefined && (
                 <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ flex: 1 }}
+                  <button className="btn btn-secondary" style={{ flex: 1 }}
                     onClick={() => generarReporte({
-                    ...verCotizacion,
-                    cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
-                    lugar: verCotizacion.lugar ?? "Zapopán, Jal",
-                  })}
-                  >
+                      ...verCotizacion,
+                      cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
+                      lugar: verCotizacion.lugar ?? "Zapopán, Jal",
+                    })}>
                     👁️ Ver reporte
                   </button>
-                  <button
-                    className="btn btn-primary"
-                    style={{ flex: 1 }}
+                  <button className="btn btn-primary" style={{ flex: 1 }}
                     onClick={() => descargarPDF({
-                    ...verCotizacion,
-                    cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
-                    lugar: verCotizacion.lugar ?? "Zapopán, Jal",
-                  })}
-                  >
+                      ...verCotizacion,
+                      cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
+                      lugar: verCotizacion.lugar ?? "Zapopán, Jal",
+                    })}>
                     📥 Descargar PDF
                   </button>
                 </div>
