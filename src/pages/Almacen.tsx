@@ -934,6 +934,11 @@ export default function Almacen() {
                               )}
                             </span>
                           ))}
+                          {s.items.reduce((sum, i) => sum + (i.precioEstimado ?? 0), 0) > 0 && (
+                            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--green)", borderTop: "1px solid var(--border)", paddingTop: 4, marginTop: 2 }}>
+                              Total: ${s.items.reduce((sum, i) => sum + (i.precioEstimado ?? 0), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>{s.notas || "—"}</td>
