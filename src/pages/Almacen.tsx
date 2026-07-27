@@ -175,6 +175,10 @@ async function imprimirValeTermico(vale: Vale) {
   const qz = (window as any).qz;
   if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
   try {
+     // ── FIX: deshabilitar verificación de certificado para uso local ──
+    qz.security.setCertificatePromise((resolve: any) => resolve(""));
+    qz.security.setSignatureAlgorithm("SHA512");
+    qz.security.setSignaturePromise((_toSign: any) => (resolve: any) => resolve(""));
     await qz.websocket.connect();
     const config = qz.configs.create("GHIA GTP801");
     const fecha = new Date(vale.createdAt).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
