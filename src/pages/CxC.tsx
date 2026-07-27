@@ -334,6 +334,13 @@ export default function CuentasCobrar() {
       if (conceptosRenta.length > 0 && rfcReceptor) {
         try {
           const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: rfcReceptor });
+          // AGREGAR ESTO TEMPORALMENTE:
+          alert(
+            "Rentas: " + rentaData.rentas.length + "\n" +
+            "numEco BD: [" + rentaData.rentas[0]?.montacargas?.numeroEconomico + "]\n" +
+            "Concepto: [" + conceptosRenta[0]?.descripcion + "]\n" +
+            "Extraído: [" + extraerNumeroEconomico(conceptosRenta[0]?.descripcion ?? "") + "]"
+          );
           if (rentaData.rentas?.length > 0) {
             const rentas: RentaDetectada[] = rentaData.rentas;
             const items: RenovacionItem[] = conceptosRenta.map(c => {
