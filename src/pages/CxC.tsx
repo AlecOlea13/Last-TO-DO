@@ -349,8 +349,8 @@ export default function CuentasCobrar() {
               let rentaMatch: RentaDetectada | null = null;
               if (numEco) {
                 rentaMatch = rentas.find(r =>
-                  String(r.montacargas?.numeroEconomico).trim() === String(numEco).trim()
-                ) ?? null;
+                String(r.montacargas?.numeroEconomico).replace("#", "").trim() === String(numEco).trim()
+              ) ?? null;
               }
               if (!rentaMatch && !numEco && rentas.length === 1) {
                 rentaMatch = rentas[0];
