@@ -8,6 +8,14 @@ type Concepto = {
   importe: number;
 };
 
+type PagoHistorial = {
+  _id: string;
+  monto: number;
+  fechaPago: string;
+  complementoPago?: string;
+  comentarios?: string;
+};
+
 type CxC = {
   _id: string;
   uuid?: string;
@@ -22,11 +30,13 @@ type CxC = {
   iva: number;
   total: number;
   moneda?: string;
-  estatus?: "pendiente" | "cobrada";
+  estatus?: "pendiente" | "parcial" | "cobrada" | "cancelada";
+  montoPagado?: number;
   fechaPago?: string;
   complementoPago?: string;
   comentarios?: string;
   notas?: string;
+  pagos?: PagoHistorial[];
 };
 
 type PagoRep = { uuid: string; montoPagado: number };
@@ -63,7 +73,6 @@ const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 const POR_PAGINA     = 70;
 
-// ── Namespaces CFDI fuera del componente ──
 const CFDI_NS4 = "http://www.sat.gob.mx/cfd/4";
 const CFDI_NS3 = "http://www.sat.gob.mx/cfd/3";
 
@@ -77,6 +86,7 @@ function getByTag(root: Document | Element, tag: string): Element[] {
 export default function CuentasCobrar() {
   const rol           = localStorage.getItem("rol") ?? "";
   const canDelete     = ["developer", "gerencia"].includes(rol);
+  const canCancel     = ["developer", "gerencia"].includes(rol);
   const canVerTotales = ["developer", "gerencia"].includes(rol);
 
   const [cxcs, setCxcs]         = useState<CxC[]>([]);
@@ -94,9 +104,15 @@ export default function CuentasCobrar() {
   const [xmlError, setXmlError]   = useState("");
   const [detalle, setDetalle]     = useState<CxC | null>(null);
 
-  const [modalCobro, setModalCobro]     = useState<CxC | null>(null);
-  const [formCobro, setFormCobro]       = useState({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
-  const [savingCobro, setSavingCobro]   = useState(false);
+  const [modalCobro, setModalCobro] = useState<CxC | null>(null);
+  const [formCobro, setFormCobro]   = useState({
+    fechaPago: new Date().toISOString().split("T")[0],
+    complementoPago: "",
+    comentarios: "",
+    montoParcial: "",
+    esParcial: false,
+  });
+  const [savingCobro, setSavingCobro]     = useState(false);
   const [uploadingComp, setUploadingComp] = useState(false);
 
   const [modalComent, setModalComent]   = useState<CxC | null>(null);
@@ -168,7 +184,6 @@ export default function CuentasCobrar() {
 
   const hayFiltros = filtroEstatus !== "todos" || fechaDesde !== "" || fechaHasta !== "";
 
-  // ── parseXML limpio sin namespaces duplicados ──
   function parseXML(file: File) {
     setParsing(true);
     setXmlError("");
@@ -178,16 +193,12 @@ export default function CuentasCobrar() {
         const text   = e.target?.result as string;
         const parser = new DOMParser();
         const doc    = parser.parseFromString(text, "application/xml");
-
-        const cfdi = getByTag(doc, "Comprobante")[0] ?? null;
+        const cfdi   = getByTag(doc, "Comprobante")[0] ?? null;
         if (!cfdi) throw new Error("No se encontró el nodo Comprobante en el XML");
-
-        const getAttr = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
-
+        const getAttr  = (node: Element | null | undefined, attr: string) => node?.getAttribute(attr) ?? "";
         const emisor   = getByTag(cfdi, "Emisor")[0]   ?? null;
         const receptor = getByTag(cfdi, "Receptor")[0] ?? null;
         const timbre   = getByTag(doc,  "TimbreFiscalDigital")[0] ?? null;
-
         const conceptosNodes = getByTag(cfdi, "Concepto");
         const conceptos: Concepto[] = conceptosNodes.map(c => ({
           descripcion:   getAttr(c, "Descripcion") || getAttr(c, "descripcion"),
@@ -195,14 +206,11 @@ export default function CuentasCobrar() {
           valorUnitario: parseFloat(getAttr(c, "ValorUnitario") || "0"),
           importe:       parseFloat(getAttr(c, "Importe")       || "0"),
         }));
-
         let iva = 0;
-        const traslados = getByTag(cfdi, "Traslado");
-        traslados.forEach(t => {
+        getByTag(cfdi, "Traslado").forEach(t => {
           const imp = parseFloat(getAttr(t, "Importe") || "0");
           if (!isNaN(imp)) iva += imp;
         });
-
         setFormF({
           uuid:           getAttr(timbre,   "UUID")   || getAttr(timbre,   "uuid"),
           folioFactura:   getAttr(cfdi,     "Folio")  || getAttr(cfdi,     "folio") || "",
@@ -242,7 +250,7 @@ export default function CuentasCobrar() {
         let doctos = Array.from(doc.getElementsByTagName("pago20:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("pago10:DoctoRelacionado"));
         if (doctos.length === 0) doctos = Array.from(doc.getElementsByTagName("DoctoRelacionado"));
-        if (doctos.length === 0) throw new Error("No se encontraron documentos relacionados (DoctoRelacionado) en el XML. ¿Es un Recibo Electrónico de Pago (REP)?");
+        if (doctos.length === 0) throw new Error("No se encontraron documentos relacionados en el XML.");
         const pagos: PagoRep[] = doctos.map(d => ({
           uuid:        getAttr(d, "IdDocumento"),
           montoPagado: parseFloat(getAttr(d, "ImpPagado") || "0"),
@@ -319,28 +327,17 @@ export default function CuentasCobrar() {
   async function saveCxc() {
     if (!formF.nombreReceptor && !formF.rfcReceptor) return;
     setSavingF(true);
-
-    const rfcReceptor         = formF.rfcReceptor ?? "";
+    const rfcReceptor        = formF.rfcReceptor ?? "";
     const conceptosSnapshot: Concepto[] = formF.conceptos ?? [];
-
     try {
       const { data } = await api.post("/cxc", formF);
       setCxcs(prev => [data, ...prev]);
       setModalXml(false);
       setFormF({});
-
       const conceptosRenta = conceptosSnapshot.filter(c => /renta/i.test(c.descripcion));
-
       if (conceptosRenta.length > 0 && rfcReceptor) {
         try {
           const { data: rentaData } = await api.post("/rentas/buscar-por-rfc", { rfc: rfcReceptor });
-          // AGREGAR ESTO TEMPORALMENTE:
-          alert(
-            "Rentas: " + rentaData.rentas.length + "\n" +
-            "numEco BD: [" + rentaData.rentas[0]?.montacargas?.numeroEconomico + "]\n" +
-            "Concepto: [" + conceptosRenta[0]?.descripcion + "]\n" +
-            "Extraído: [" + extraerNumeroEconomico(conceptosRenta[0]?.descripcion ?? "") + "]"
-          );
           if (rentaData.rentas?.length > 0) {
             const rentas: RentaDetectada[] = rentaData.rentas;
             const items: RenovacionItem[] = conceptosRenta.map(c => {
@@ -349,12 +346,10 @@ export default function CuentasCobrar() {
               let rentaMatch: RentaDetectada | null = null;
               if (numEco) {
                 rentaMatch = rentas.find(r =>
-                String(r.montacargas?.numeroEconomico).replace("#", "").trim() === String(numEco).trim()
-              ) ?? null;
+                  String(r.montacargas?.numeroEconomico).replace("#", "").trim() === String(numEco).trim()
+                ) ?? null;
               }
-              if (!rentaMatch && !numEco && rentas.length === 1) {
-                rentaMatch = rentas[0];
-              }
+              if (!rentaMatch && !numEco && rentas.length === 1) rentaMatch = rentas[0];
               return {
                 concepto:        c.descripcion,
                 numeroEconomico: numEco ?? "—",
@@ -386,7 +381,7 @@ export default function CuentasCobrar() {
         await api.post(`/rentas/${item.renta!._id}/renovar`, {
           fechaFinNueva:      item.fechaFin,
           precioMensualNuevo: item.precioConcepto,
-          notas:              `Renovación desde factura`.trim(),
+          notas:              "Renovación desde factura",
         });
       }
       setModalRentaDetectada(null);
@@ -405,6 +400,16 @@ export default function CuentasCobrar() {
     setCxcs(prev => prev.filter(c => c._id !== id));
   }
 
+  async function cancelarCxc(id: string) {
+    if (!confirm("¿Cancelar esta factura? No aparecerá en pendientes.")) return;
+    try {
+      const { data } = await api.post(`/cxc/${id}/cancelar`);
+      setCxcs(prev => prev.map(c => c._id === id ? { ...c, ...data } : c));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+  }
+
   async function subirArchivo(file: File): Promise<string> {
     setUploadingComp(true);
     const fd = new FormData();
@@ -420,11 +425,21 @@ export default function CuentasCobrar() {
     if (!modalCobro) return;
     setSavingCobro(true);
     try {
-      const { data } = await api.post(`/cxc/${modalCobro._id}/cobrar`, formCobro);
+      const payload: any = {
+        fechaPago:      formCobro.fechaPago,
+        complementoPago: formCobro.complementoPago || null,
+        comentarios:    formCobro.comentarios,
+      };
+      if (formCobro.esParcial && formCobro.montoParcial) {
+        payload.montoParcial = Number(formCobro.montoParcial);
+      }
+      const { data } = await api.post(`/cxc/${modalCobro._id}/cobrar`, payload);
       setCxcs(prev => prev.map(c => c._id === modalCobro._id ? { ...c, ...data } : c));
       setModalCobro(null);
-      setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" });
-    } catch {}
+      setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false });
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
     finally { setSavingCobro(false); }
   }
 
@@ -448,7 +463,7 @@ export default function CuentasCobrar() {
   }
 
   function toggleTodos() {
-    const pendientes    = paginados.filter(c => c.estatus !== "cobrada").map(c => c._id);
+    const pendientes    = paginados.filter(c => c.estatus !== "cobrada" && c.estatus !== "cancelada").map(c => c._id);
     const todosMarcados = pendientes.every(id => seleccionados.has(id));
     if (todosMarcados) {
       setSeleccionados(prev => { const next = new Set(prev); pendientes.forEach(id => next.delete(id)); return next; });
@@ -537,22 +552,25 @@ export default function CuentasCobrar() {
 
   function generarReporte() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-    const datos   = cxcs.filter(filtrarPorPeriodo);
+    const datos   = cxcs.filter(filtrarPorPeriodo).filter(c => c.estatus !== "cancelada");
     const rows    = [...datos]
       .sort((a, b) => (getFechaReporte(a)?.getTime() ?? 0) - (getFechaReporte(b)?.getTime() ?? 0))
-      .map(c => `<tr>
-        <td>${c.nombreReceptor ?? "—"}</td>
-        <td>${c.folioFactura ?? "—"}</td>
-        <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-        <td>${fmtCorto(c.fechaEmision)}</td>
-        <td>${c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}</td>
-        <td>${fmtCorto(c.fechaPago)}</td>
-        <td style="text-align:center">${c.complementoPago ? '<a href="' + c.complementoPago + '">Ver</a>' : "—"}</td>
-        <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : "#dc2626"}">${c.estatus === "cobrada" ? "$0.00" : "$" + c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-        <td>${c.comentarios ?? "—"}</td>
-      </tr>`).join("");
+      .map(c => {
+        const pendiente = c.total - (c.montoPagado ?? 0);
+        return `<tr>
+          <td>${c.nombreReceptor ?? "—"}</td>
+          <td>${c.folioFactura ?? "—"}</td>
+          <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td>${fmtCorto(c.fechaEmision)}</td>
+          <td>${c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}</td>
+          <td>${fmtCorto(c.fechaPago)}</td>
+          <td style="text-align:center">${c.complementoPago ? '<a href="' + c.complementoPago + '">Ver</a>' : "—"}</td>
+          <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : c.estatus === "parcial" ? "#f59e0b" : "#dc2626"}">$${pendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td>${c.comentarios ?? "—"}</td>
+        </tr>`;
+      }).join("");
 
-    const pendiente = datos.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + c.total, 0);
+    const pendiente = datos.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + (c.total - (c.montoPagado ?? 0)), 0);
     const cobrado   = datos.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
     const subtitulo = labelPeriodo();
 
@@ -618,8 +636,18 @@ export default function CuentasCobrar() {
 
   const totalPaginas = Math.ceil(filtered.length / POR_PAGINA);
   const paginados    = filtered.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
-  const totalPendiente = cxcs.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + c.total, 0);
+  const totalPendiente = cxcs.filter(c => c.estatus === "pendiente" || c.estatus === "parcial").reduce((a, c) => a + (c.total - (c.montoPagado ?? 0)), 0);
   const totalCobrado   = cxcs.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
+
+  // ── Helper: color y label de estatus ──
+  function estatusBadge(estatus?: string) {
+    switch (estatus) {
+      case "cobrada":   return { color: "var(--green)",  label: "Cobrada" };
+      case "parcial":   return { color: "var(--accent)", label: "Parcial" };
+      case "cancelada": return { color: "var(--text-muted)", label: "Cancelada" };
+      default:          return { color: "var(--red)",    label: "Pendiente" };
+    }
+  }
 
   function Paginador({ total, pag, set }: { total: number; pag: number; set: (p: number) => void }) {
     if (total <= 1) return null;
@@ -651,12 +679,15 @@ export default function CuentasCobrar() {
     );
   }
 
+  // ── Saldo pendiente de una CxC ──
+  const saldoPendiente = (c: CxC) => c.total - (c.montoPagado ?? 0);
+
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Cuentas por Cobrar</h1>
-          <p className="page-subtitle">{cxcs.length} facturas · {cxcs.filter(c => c.estatus !== "cobrada").length} pendientes</p>
+          <p className="page-subtitle">{cxcs.length} facturas · {cxcs.filter(c => c.estatus === "pendiente" || c.estatus === "parcial").length} pendientes</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {seleccionados.size > 0 && (
@@ -708,7 +739,9 @@ export default function CuentasCobrar() {
                 value={filtroEstatus} onChange={e => setFiltroEstatus(e.target.value)}>
                 <option value="todos">Todas</option>
                 <option value="pendiente">Pendientes</option>
+                <option value="parcial">Parciales</option>
                 <option value="cobrada">Cobradas</option>
+                <option value="cancelada">Canceladas</option>
               </select>
               <input className="form-input" type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} style={{ width: "auto" }} title="Desde" />
               <input className="form-input" type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} style={{ width: "auto" }} title="Hasta" />
@@ -738,7 +771,7 @@ export default function CuentasCobrar() {
                   <tr>
                     <th style={{ width: 36, textAlign: "center" }}>
                       <input type="checkbox"
-                        checked={paginados.filter(c => c.estatus !== "cobrada").length > 0 && paginados.filter(c => c.estatus !== "cobrada").every(c => seleccionados.has(c._id))}
+                        checked={paginados.filter(c => c.estatus !== "cobrada" && c.estatus !== "cancelada").length > 0 && paginados.filter(c => c.estatus !== "cobrada" && c.estatus !== "cancelada").every(c => seleccionados.has(c._id))}
                         onChange={toggleTodos} />
                     </th>
                     <th style={{ minWidth: 120 }}>Cliente</th>
@@ -748,58 +781,87 @@ export default function CuentasCobrar() {
                     <th style={{ minWidth: 160 }}>Concepto</th>
                     <th style={{ minWidth: 90 }}>Fecha pago</th>
                     <th style={{ minWidth: 80 }}>Compl.</th>
-                    <th style={{ minWidth: 100 }}>Pendiente</th>
+                    <th style={{ minWidth: 110 }}>Pendiente</th>
+                    <th style={{ minWidth: 80 }}>Estatus</th>
                     <th style={{ minWidth: 120 }}>Comentarios</th>
                     <th style={{ minWidth: 110 }}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginados.map(c => (
-                    <tr key={c._id}>
-                      <td style={{ textAlign: "center" }}>
-                        {c.estatus !== "cobrada" && (
-                          <input type="checkbox" checked={seleccionados.has(c._id)} onChange={() => toggleSeleccion(c._id)} />
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
-                      <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
-                      <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                      <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaEmision)}</td>
-                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                        {c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}
-                        {(c.conceptos[0]?.descripcion?.length ?? 0) > 40 ? "..." : ""}
-                      </td>
-                      <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaPago)}</td>
-                      <td style={{ textAlign: "center" }}>
-                        {c.complementoPago
-                          ? <a href={c.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
-                          : <span style={{ color: "var(--text-muted)" }}>—</span>}
-                      </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {c.estatus === "cobrada"
-                          ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.78rem" }}>$0.00</span>
-                          : <span style={{ color: "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>}
-                      </td>
-                      <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                        {c.comentarios
-                          ? <span title={c.comentarios}>{c.comentarios.slice(0, 25)}{c.comentarios.length > 25 ? "..." : ""}</span>
-                          : "—"}
-                      </td>
-                      <td>
-                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(c)}>👁️</button>
-                          <button className="btn btn-secondary btn-sm" onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
-                          {c.estatus !== "cobrada" && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                              onClick={() => { setModalCobro(c); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); }}>
-                              💳
-                            </button>
+                  {paginados.map(c => {
+                    const badge   = estatusBadge(c.estatus);
+                    const saldo   = saldoPendiente(c);
+                    const esCancelada = c.estatus === "cancelada";
+                    return (
+                      <tr key={c._id} style={{ opacity: esCancelada ? 0.5 : 1 }}>
+                        <td style={{ textAlign: "center" }}>
+                          {c.estatus !== "cobrada" && c.estatus !== "cancelada" && (
+                            <input type="checkbox" checked={seleccionados.has(c._id)} onChange={() => toggleSeleccion(c._id)} />
                           )}
-                          {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteCxc(c._id)}>🗑️</button>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td style={{ fontWeight: 600, fontSize: "0.78rem" }}>{c.nombreReceptor ?? "—"}</td>
+                        <td style={{ fontFamily: "monospace", fontSize: "0.75rem" }}>{c.folioFactura ?? "—"}</td>
+                        <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                        <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaEmision)}</td>
+                        <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          {c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}
+                          {(c.conceptos[0]?.descripcion?.length ?? 0) > 40 ? "..." : ""}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaPago)}</td>
+                        <td style={{ textAlign: "center" }}>
+                          {c.complementoPago
+                            ? <a href={c.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
+                            : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {c.estatus === "cobrada"
+                            ? <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "0.78rem" }}>$0.00</span>
+                            : c.estatus === "cancelada"
+                            ? <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>—</span>
+                            : (
+                              <span style={{ color: saldo < c.total ? "var(--accent)" : "var(--red)", fontWeight: 700, fontSize: "0.78rem" }}>
+                                ${saldo.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                                {c.estatus === "parcial" && (
+                                  <span style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginLeft: 4 }}>
+                                    (pagado ${(c.montoPagado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 0 })})
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                        </td>
+                        <td>
+                          <span style={{ fontSize: "0.72rem", fontWeight: 700, color: badge.color }}>{badge.label}</span>
+                        </td>
+                        <td style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          {c.comentarios
+                            ? <span title={c.comentarios}>{c.comentarios.slice(0, 25)}{c.comentarios.length > 25 ? "..." : ""}</span>
+                            : "—"}
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => setDetalle(c)}>👁️</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
+                            {c.estatus !== "cobrada" && c.estatus !== "cancelada" && (
+                              <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                                onClick={() => {
+                                  setModalCobro(c);
+                                  setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false });
+                                }}>
+                                💳
+                              </button>
+                            )}
+                            {canCancel && c.estatus !== "cancelada" && c.estatus !== "cobrada" && (
+                              <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)" }}
+                                onClick={() => cancelarCxc(c._id)} title="Cancelar factura">
+                                🚫
+                              </button>
+                            )}
+                            {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteCxc(c._id)}>🗑️</button>}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <Paginador total={totalPaginas} pag={pagina} set={setPagina} />
@@ -827,38 +889,20 @@ export default function CuentasCobrar() {
             </div>
             {reportePeriodo === "semana" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Semana del año</label>
-                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana} onChange={e => setReporteSemana(+e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Año</label>
-                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Semana del año</label><input className="form-input" type="number" min={1} max={53} value={reporteSemana} onChange={e => setReporteSemana(+e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
               </div>
             )}
             {reportePeriodo === "mes" && (
-              <div className="form-group">
-                <label className="form-label">Mes y año</label>
-                <input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} />
-              </div>
+              <div className="form-group"><label className="form-label">Mes y año</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
             )}
             {reportePeriodo === "año" && (
-              <div className="form-group">
-                <label className="form-label">Año</label>
-                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} />
-              </div>
+              <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
             )}
             {reportePeriodo === "custom" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Desde</label>
-                  <input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hasta</label>
-                  <input className="form-input" type="month" value={reporteMesHasta} onChange={e => setReporteMesHasta(e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Desde</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Hasta</label><input className="form-input" type="month" value={reporteMesHasta} onChange={e => setReporteMesHasta(e.target.value)} /></div>
               </div>
             )}
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
@@ -1049,7 +1093,9 @@ export default function CuentasCobrar() {
                 { label: "Emisor",        val: detalle.nombreEmisor },
                 { label: "RFC Emisor",    val: detalle.rfcEmisor },
                 { label: "RFC Receptor",  val: detalle.rfcReceptor },
-                { label: "Estatus",       val: detalle.estatus === "cobrada" ? "✅ Cobrada" : "⏳ Pendiente" },
+                { label: "Estatus",       val: estatusBadge(detalle.estatus).label },
+                { label: "Monto pagado",  val: detalle.montoPagado ? `$${detalle.montoPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                { label: "Saldo pendiente", val: detalle.estatus !== "cobrada" && detalle.estatus !== "cancelada" ? `$${saldoPendiente(detalle).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                 { label: "Fecha pago",    val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
                 { label: "Comentarios",   val: detalle.comentarios },
                 { label: "Notas",         val: detalle.notas },
@@ -1066,6 +1112,27 @@ export default function CuentasCobrar() {
                 📎 Ver complemento de pago
               </a>
             )}
+
+            {/* ── Historial de pagos ── */}
+            {detalle.pagos && detalle.pagos.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Historial de pagos</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {detalle.pagos.map((p, i) => (
+                    <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "8px 12px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                      <div>
+                        <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--green)" }}>${p.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{fmt(p.fechaPago)}{p.comentarios ? ` · ${p.comentarios}` : ""}</p>
+                      </div>
+                      {p.complementoPago && (
+                        <a href={p.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {detalle.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
@@ -1095,9 +1162,13 @@ export default function CuentasCobrar() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-              {detalle.estatus !== "cobrada" && (
+              {detalle.estatus !== "cobrada" && detalle.estatus !== "cancelada" && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
-                  onClick={() => { setDetalle(null); setModalCobro(detalle); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "" }); }}>
+                  onClick={() => {
+                    setDetalle(null);
+                    setModalCobro(detalle);
+                    setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false });
+                  }}>
                   💳 Registrar cobro
                 </button>
               )}
@@ -1106,17 +1177,62 @@ export default function CuentasCobrar() {
         </div>
       )}
 
-      {/* ── Modal registrar cobro ── */}
+      {/* ── Modal registrar cobro (con pago parcial) ── */}
       {modalCobro && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalCobro(null); }}>
-          <div className="modal" style={{ maxWidth: 440 }}>
+          <div className="modal" style={{ maxWidth: 460 }}>
             <button className="modal-close" onClick={() => setModalCobro(null)}>✕</button>
             <h2 className="modal-title">Registrar cobro</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              {modalCobro.nombreReceptor} — {modalCobro.folioFactura ?? "—"} —{" "}
-              <strong style={{ color: "var(--green)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>
+              {modalCobro.nombreReceptor} — {modalCobro.folioFactura ?? "—"}
             </p>
+
+            {/* Resumen de saldo */}
+            <div style={{ display: "flex", gap: 16, marginTop: 10, marginBottom: 4, padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+              <div>
+                <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Total factura</p>
+                <p style={{ fontWeight: 700, color: "var(--text)" }}>${modalCobro.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+              {(modalCobro.montoPagado ?? 0) > 0 && (
+                <div>
+                  <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Ya pagado</p>
+                  <p style={{ fontWeight: 700, color: "var(--accent)" }}>${(modalCobro.montoPagado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                </div>
+              )}
+              <div>
+                <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Saldo pendiente</p>
+                <p style={{ fontWeight: 700, color: "var(--red)" }}>${saldoPendiente(modalCobro).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+              </div>
+            </div>
+
             <div className="form-grid" style={{ marginTop: 12 }}>
+              {/* Toggle pago parcial */}
+              <div className="form-group span-2">
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={formCobro.esParcial}
+                    onChange={e => setFormCobro(p => ({ ...p, esParcial: e.target.checked, montoParcial: "" }))}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Registrar pago parcial</span>
+                </label>
+              </div>
+
+              {formCobro.esParcial && (
+                <div className="form-group span-2">
+                  <label className="form-label">Monto a registrar *</label>
+                  <input className="form-input" type="number" min={1} max={saldoPendiente(modalCobro)}
+                    value={formCobro.montoParcial}
+                    onChange={e => setFormCobro(p => ({ ...p, montoParcial: e.target.value }))}
+                    placeholder={`Máx. $${saldoPendiente(modalCobro).toLocaleString("es-MX")}`} />
+                  {formCobro.montoParcial && Number(formCobro.montoParcial) > 0 && (
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+                      Quedarán pendientes: <strong style={{ color: "var(--accent)" }}>
+                        ${(saldoPendiente(modalCobro) - Number(formCobro.montoParcial)).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="form-group span-2">
                 <label className="form-label">Fecha de cobro *</label>
                 <input className="form-input" type="date" value={formCobro.fechaPago}
@@ -1146,9 +1262,10 @@ export default function CuentasCobrar() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalCobro(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={registrarCobro} disabled={savingCobro || uploadingComp}
+              <button className="btn btn-primary" onClick={registrarCobro}
+                disabled={savingCobro || uploadingComp || (formCobro.esParcial && !formCobro.montoParcial)}
                 style={{ background: "var(--green)", color: "#fff" }}>
-                {savingCobro ? "Registrando..." : "✅ Confirmar cobro"}
+                {savingCobro ? "Registrando..." : formCobro.esParcial ? "💳 Registrar pago parcial" : "✅ Confirmar cobro total"}
               </button>
             </div>
           </div>
@@ -1193,12 +1310,12 @@ export default function CuentasCobrar() {
               {cxcs.filter(c => seleccionados.has(c._id)).map(c => (
                 <div key={c._id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.82rem" }}>
                   <span style={{ fontWeight: 600 }}>{c.nombreReceptor ?? "—"} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>· {c.folioFactura ?? "sin folio"}</span></span>
-                  <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                  <span style={{ fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${saldoPendiente(c).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                 </div>
               ))}
             </div>
             <div style={{ fontWeight: 700, textAlign: "right", fontSize: "0.9rem", marginBottom: 16, color: "var(--green)" }}>
-              Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + c.total, 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              Total: ${cxcs.filter(c => seleccionados.has(c._id)).reduce((a, c) => a + saldoPendiente(c), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
             </div>
             <div className="form-grid">
               <div className="form-group span-2">
