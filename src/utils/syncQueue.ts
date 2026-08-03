@@ -75,11 +75,20 @@ export async function sincronizarCola(
       await procesarAccion(accion);
       await eliminarAccion(accion.id);
       ok++;
-      onProgreso?.(acciones.length - ok - errores);
-    } catch (err) {
-      console.error(`Error sincronizando acción ${accion.tipo}:`, err);
-      errores++;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      // ── Si ya fue procesado o no existe, eliminar igual para no quedar atascado ──
+      if (status === 404 || status === 409 || status === 400) {
+        console.warn(`Acción ${accion.tipo} descartada (status ${status}), eliminando de cola`);
+        await eliminarAccion(accion.id);
+        await eliminarFotosPorAccion(accion.id);
+        ok++; // contar como procesada para no inflar errores
+      } else {
+        console.error(`Error sincronizando acción ${accion.tipo}:`, err);
+        errores++;
+      }
     }
+    onProgreso?.(acciones.length - ok - errores);
   }
 
   return { ok, errores };

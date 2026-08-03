@@ -82,6 +82,34 @@ function nanoid() {
 // ── Botón micrófono reutilizable ──
 function BtnMic({ onResult, style }: { onResult: (t: string) => void; style?: React.CSSProperties }) {
   const { escuchando, iniciar, detener } = useSpeechRecognition(onResult);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const on  = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+
+  if (!isOnline) {
+    return (
+      <button
+        type="button"
+        disabled
+        title="El micrófono requiere internet"
+        style={{
+          background: "var(--surface2)", border: "1.5px solid var(--border)",
+          borderRadius: 8, padding: "8px 12px", cursor: "not-allowed",
+          fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, opacity: 0.4,
+          ...style,
+        }}
+      >
+        🎙️
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
