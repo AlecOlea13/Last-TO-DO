@@ -57,7 +57,6 @@ type Vale = {
   createdAt: string;
 };
 
-// ── FIX: precioUnitario separado para calcular precioEstimado automáticamente ──
 type SolicitudItem = {
   nombre: string; cantidad: number; unidad: string;
   precioUnitario: number;
@@ -175,7 +174,6 @@ async function imprimirValeTermico(vale: Vale) {
   const qz = (window as any).qz;
   if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
   try {
-     // ── FIX: deshabilitar verificación de certificado para uso local ──
     qz.security.setCertificatePromise((resolve: any) => resolve(""));
     qz.security.setSignatureAlgorithm("SHA512");
     qz.security.setSignaturePromise((_toSign: any) => (resolve: any) => resolve(""));
@@ -262,31 +260,74 @@ function SearchableCotizacion({
         )}
       </div>
       {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999,
-          background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
-        }}>
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
           {filtered.length === 0 ? (
             <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
           ) : filtered.map(c => (
-            <div
-              key={c._id}
-              onClick={() => { onChange(c._id); setOpen(false); setQuery(""); }}
-              style={{
-                padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem",
-                background: c._id === value ? "rgba(245,158,11,0.1)" : "transparent",
-                color: c._id === value ? "var(--accent)" : "var(--text)",
-                borderBottom: "1px solid var(--border)",
-              }}
+            <div key={c._id} onClick={() => { onChange(c._id); setOpen(false); setQuery(""); }}
+              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", background: c._id === value ? "rgba(245,158,11,0.1)" : "transparent", color: c._id === value ? "var(--accent)" : "var(--text)", borderBottom: "1px solid var(--border)" }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}
-            >
+              onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}>
               <span style={{ fontWeight: 700, color: "var(--blue)", marginRight: 6 }}>{c.folio}</span>
               <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
                 {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo} · ${c.total.toLocaleString()}
               </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CAMBIO 4: componente searchable para vales de salida ──
+function ValeSearchable({
+  refacciones, onAdd,
+}: {
+  refacciones: Refaccion[];
+  onAdd: (r: Refaccion) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtradas = refacciones
+    .filter(r => r.stock > 0)
+    .filter(r =>
+      r.nombre.toLowerCase().includes(query.toLowerCase()) ||
+      (r.numeroParte ?? "").toLowerCase().includes(query.toLowerCase())
+    );
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <input
+        className="form-input"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="🔍 Buscar refacción por nombre o número de parte..."
+      />
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
+          {filtradas.length === 0 ? (
+            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+          ) : filtradas.map(r => (
+            <div key={r._id}
+              onClick={() => { onAdd(r); setQuery(""); setOpen(false); }}
+              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", borderBottom: "1px solid var(--border)", color: "var(--text)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+              <span style={{ fontWeight: 600 }}>{r.nombre}</span>
+              {r.numeroParte && <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: "0.78rem" }}>({r.numeroParte})</span>}
+              <span style={{ color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)", marginLeft: 8, fontSize: "0.78rem", fontWeight: 700 }}>Stock: {r.stock}</span>
             </div>
           ))}
         </div>
@@ -450,24 +491,24 @@ export default function Almacen() {
   }
 
   async function saveRefaccion() {
-  if (!form.nombre.trim()) return;
-  setSaving(true);
-  try {
-    if (editing) {
-      const { data } = await api.put(`/refacciones/${editing._id}`, form);
-      setRefacciones(prev => prev.map(r => r._id === editing._id ? data : r));
-    } else {
-      const { data } = await api.post("/refacciones", form);
-      setRefacciones(prev => [data, ...prev]);
+    if (!form.nombre.trim()) return;
+    setSaving(true);
+    try {
+      if (editing) {
+        const { data } = await api.put(`/refacciones/${editing._id}`, form);
+        setRefacciones(prev => prev.map(r => r._id === editing._id ? data : r));
+      } else {
+        const { data } = await api.post("/refacciones", form);
+        setRefacciones(prev => [data, ...prev]);
+      }
+      setModal(false);
+    } catch (e: any) {
+      if (e?.response?.status === 409) {
+        alert("Ya existe una refacción con ese número de parte");
+      }
     }
-    setModal(false);
-  } catch (e: any) {
-    if (e?.response?.status === 409) {
-      alert("Ya existe una refacción con ese número de parte");
-    }
+    finally { setSaving(false); }
   }
-  finally { setSaving(false); }
-}
 
   async function ajustarStock() {
     if (!stockModal) return;
@@ -601,13 +642,8 @@ export default function Almacen() {
   }
   async function removeUsada(id: string) { if (!confirm("¿Eliminar este registro?")) return; await api.delete(`/refacciones-usadas/${id}`); setUsadas(prev => prev.filter(x => x._id !== id)); }
 
-  function addSolicitudItem() {
-    setSolicitudItems(p => [...p, emptySolicitudItem()]);
-  }
-  function removeSolicitudItem(i: number) {
-    setSolicitudItems(p => p.filter((_, idx) => idx !== i));
-  }
-  // ── FIX: calcular precioEstimado = cantidad × precioUnitario automáticamente ──
+  function addSolicitudItem() { setSolicitudItems(p => [...p, emptySolicitudItem()]); }
+  function removeSolicitudItem(i: number) { setSolicitudItems(p => p.filter((_, idx) => idx !== i)); }
   function updateSolicitudItem(i: number, field: string, val: any) {
     setSolicitudItems(p => p.map((item, idx) => {
       if (idx !== i) return item;
@@ -690,8 +726,6 @@ export default function Almacen() {
   });
 
   const cotizSeleccionada = cotizacionesDisp.find(c => c._id === solicitudCotizId);
-
-  // ── Total estimado de la solicitud ──
   const totalSolicitud = solicitudItems.reduce((sum, i) => sum + i.precioEstimado, 0);
 
   return (
@@ -708,6 +742,10 @@ export default function Almacen() {
               <button className="btn btn-secondary" onClick={openValeManual}>📤 Vale de salida</button>
               <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>
             </>
+          )}
+          {/* ── botón vale también en tab vales ── */}
+          {canAddRefac && tab === "vales" && (
+            <button className="btn btn-secondary" onClick={openValeManual}>📤 Vale de salida</button>
           )}
           {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
           {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
@@ -1092,62 +1130,12 @@ export default function Almacen() {
             </div>
             <div style={{ marginTop: 16 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Material a entregar</p>
-              <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
-                {/* ── CAMBIO 4: searchable select para vales de salida ── */}
-                {(() => {
-                  const [valeQuery, setValeQuery] = useState("");
-                  const [valeOpen, setValeOpen] = useState(false);
-                  const valeRef = useRef<HTMLDivElement>(null);
-
-                  useEffect(() => {
-                    function handleClick(e: MouseEvent) {
-                      if (valeRef.current && !valeRef.current.contains(e.target as Node)) setValeOpen(false);
-                    }
-                    document.addEventListener("mousedown", handleClick);
-                    return () => document.removeEventListener("mousedown", handleClick);
-                  }, []);
-
-                  const refsFiltradas = refacciones
-                    .filter(r => r.stock > 0)
-                    .filter(r =>
-                      r.nombre.toLowerCase().includes(valeQuery.toLowerCase()) ||
-                      (r.numeroParte ?? "").toLowerCase().includes(valeQuery.toLowerCase())
-                    );
-
-                  return (
-                    <div ref={valeRef} style={{ position: "relative" }}>
-                      <input
-                        className="form-input"
-                        value={valeQuery}
-                        onChange={e => { setValeQuery(e.target.value); setValeOpen(true); }}
-                        onFocus={() => setValeOpen(true)}
-                        placeholder="🔍 Buscar refacción por nombre o número de parte..."
-                      />
-                      {valeOpen && (
-                        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-                          {refsFiltradas.length === 0 ? (
-                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
-                          ) : refsFiltradas.map(r => (
-                            <div key={r._id}
-                              onClick={() => { addValeItem(r); setValeQuery(""); setValeOpen(false); }}
-                              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", borderBottom: "1px solid var(--border)", color: "var(--text)" }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-                              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                              <span style={{ fontWeight: 600 }}>{r.nombre}</span>
-                              {r.numeroParte && <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: "0.78rem" }}>({r.numeroParte})</span>}
-                              <span style={{ color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)", marginLeft: 8, fontSize: "0.78rem", fontWeight: 700 }}>Stock: {r.stock}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
+              {/* ── CAMBIO 4: componente correcto sin hooks en IIFE ── */}
+              <ValeSearchable refacciones={refacciones} onAdd={addValeItem} />
               {valeItems.length === 0 ? (
                 <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Sin items — agrega refacciones del selector de arriba</p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
                   {valeItems.map((item, i) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 32px", gap: 8, alignItems: "center", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
                       <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{item.nombre}</span>
@@ -1316,13 +1304,11 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal nueva solicitud de compra ── */}
       {solicitudModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSolicitudModal(false)}>
           <div className="modal" style={{ maxWidth: 660 }}>
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
-
             <div className="form-group">
               <label className="form-label">
                 Cotización relacionada (opcional)
@@ -1334,11 +1320,7 @@ export default function Almacen() {
               </label>
               {cotizacionesDisp.length > 0 ? (
                 <>
-                  <SearchableCotizacion
-                    value={solicitudCotizId}
-                    onChange={setSolicitudCotizId}
-                    options={cotizacionesDisp}
-                  />
+                  <SearchableCotizacion value={solicitudCotizId} onChange={setSolicitudCotizId} options={cotizacionesDisp} />
                   {cotizSeleccionada && (
                     <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -1362,23 +1344,15 @@ export default function Almacen() {
                 </div>
               )}
             </div>
-
             <div className="form-group">
               <label className="form-label">Notas generales (opcional)</label>
-              <textarea className="form-textarea" rows={2} value={solicitudNotas}
-                onChange={e => setSolicitudNotas(e.target.value)}
-                placeholder="Ej. Urgente para servicio preventivo de la semana..." />
+              <textarea className="form-textarea" rows={2} value={solicitudNotas} onChange={e => setSolicitudNotas(e.target.value)} placeholder="Ej. Urgente para servicio preventivo de la semana..." />
             </div>
-
             <div style={{ marginTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
-                  Artículos a solicitar
-                </p>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Artículos a solicitar</p>
                 <button className="btn btn-secondary btn-sm" onClick={addSolicitudItem}>+ Agregar artículo</button>
               </div>
-
-              {/* ── Encabezados de columnas ── */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 90px 90px 90px 32px", gap: 8, padding: "0 12px", marginBottom: 4 }}>
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Artículo</span>
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "center" }}>Cant.</span>
@@ -1387,19 +1361,12 @@ export default function Almacen() {
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>Total</span>
                 <span />
               </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {solicitudItems.map((item, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 90px 90px 90px 32px", gap: 8, alignItems: "center", padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                    <input className="form-input" value={item.nombre}
-                      onChange={e => updateSolicitudItem(i, "nombre", e.target.value)}
-                      placeholder="Nombre..." style={{ padding: "6px 10px" }} />
-                    <input className="form-input" type="number" min={1} value={item.cantidad}
-                      onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)}
-                      style={{ padding: "6px 8px", textAlign: "center" }} />
-                    <select className="form-select" value={item.unidad}
-                      onChange={e => updateSolicitudItem(i, "unidad", e.target.value)}
-                      style={{ padding: "6px 8px" }}>
+                    <input className="form-input" value={item.nombre} onChange={e => updateSolicitudItem(i, "nombre", e.target.value)} placeholder="Nombre..." style={{ padding: "6px 10px" }} />
+                    <input className="form-input" type="number" min={1} value={item.cantidad} onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)} style={{ padding: "6px 8px", textAlign: "center" }} />
+                    <select className="form-select" value={item.unidad} onChange={e => updateSolicitudItem(i, "unidad", e.target.value)} style={{ padding: "6px 8px" }}>
                       <option value="pieza">Pieza</option>
                       <option value="litro">Litro</option>
                       <option value="juego">Juego</option>
@@ -1407,42 +1374,28 @@ export default function Almacen() {
                       <option value="metro">Metro</option>
                       <option value="kg">Kg</option>
                     </select>
-                    {/* ── FIX: precio unitario ── */}
-                    <input className="form-input" type="number" min={0} value={item.precioUnitario}
-                      onChange={e => updateSolicitudItem(i, "precioUnitario", +e.target.value)}
-                      placeholder="0" style={{ padding: "6px 8px", textAlign: "right" }} />
-                    {/* ── Total calculado automáticamente ── */}
+                    <input className="form-input" type="number" min={0} value={item.precioUnitario} onChange={e => updateSolicitudItem(i, "precioUnitario", +e.target.value)} placeholder="0" style={{ padding: "6px 8px", textAlign: "right" }} />
                     <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: item.precioEstimado > 0 ? "var(--green)" : "var(--text-muted)" }}>
                       {item.precioEstimado > 0 ? `$${item.precioEstimado.toLocaleString("es-MX")}` : "—"}
                     </div>
-                    <button onClick={() => removeSolicitudItem(i)}
-                      disabled={solicitudItems.length === 1}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>
-                      ✕
-                    </button>
+                    <button onClick={() => removeSolicitudItem(i)} disabled={solicitudItems.length === 1}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>✕</button>
                   </div>
                 ))}
               </div>
-
-              {/* ── Total general ── */}
               {totalSolicitud > 0 && (
                 <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "var(--radius-sm)" }}>
                   <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Total estimado:</span>
-                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--green)" }}>
-                    ${totalSolicitud.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                  </span>
+                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--green)" }}>${totalSolicitud.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
-
               <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
                 💡 La solicitud quedará <strong style={{ color: "var(--accent)" }}>Sin liberar</strong> hasta que gerencia o developer la apruebe.
               </div>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setSolicitudModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={guardarSolicitud}
-                disabled={savingSolicitud || !solicitudItems.some(i => i.nombre.trim())}>
+              <button className="btn btn-primary" onClick={guardarSolicitud} disabled={savingSolicitud || !solicitudItems.some(i => i.nombre.trim())}>
                 {savingSolicitud ? "Enviando..." : "📤 Enviar solicitud"}
               </button>
             </div>
@@ -1450,27 +1403,19 @@ export default function Almacen() {
         </div>
       )}
 
-      {/* ── Modal ver cotización enlazada ── */}
       {verCotizacion && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerCotizacion(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
             <button className="modal-close" onClick={() => setVerCotizacion(null)}>✕</button>
             <h2 className="modal-title">📄 {verCotizacion.folio}</h2>
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <span className={`badge ${
-                verCotizacion.tipo === "servicio"    ? "badge-amber"  :
-                verCotizacion.tipo === "refacciones" ? "badge-purple" : "badge-blue"
-              }`}>{verCotizacion.tipo}</span>
-              <span className={`badge ${verCotizacion.estatus === "activa" ? "badge-green" : "badge-gray"}`}>
-                {verCotizacion.estatus}
-              </span>
+              <span className={`badge ${verCotizacion.tipo === "servicio" ? "badge-amber" : verCotizacion.tipo === "refacciones" ? "badge-purple" : "badge-blue"}`}>{verCotizacion.tipo}</span>
+              <span className={`badge ${verCotizacion.estatus === "activa" ? "badge-green" : "badge-gray"}`}>{verCotizacion.estatus}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Cliente</span>
-                <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>
-                  {verCotizacion.cliente?.nombre ?? verCotizacion.clienteOcasional?.nombre ?? "—"}
-                </span>
+                <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{verCotizacion.cliente?.nombre ?? verCotizacion.clienteOcasional?.nombre ?? "—"}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Fecha</span>
@@ -1478,21 +1423,15 @@ export default function Almacen() {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Total c/IVA</span>
-                <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.95rem" }}>
-                  ${verCotizacion.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                </span>
+                <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.95rem" }}>${verCotizacion.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
               <div style={{ padding: "10px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {verCotizacion.items.map((item, i) => (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: "0.82rem" }}>
-                      <span style={{ color: "var(--text)", flex: 1 }}>
-                        {item.descripcion.slice(0, 60)}{item.descripcion.length > 60 ? "…" : ""}
-                      </span>
-                      <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: "var(--text-muted)" }}>
-                        ${item.total.toLocaleString()}
-                      </span>
+                      <span style={{ color: "var(--text)", flex: 1 }}>{item.descripcion.slice(0, 60)}{item.descripcion.length > 60 ? "…" : ""}</span>
+                      <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: "var(--text-muted)" }}>${item.total.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -1500,19 +1439,11 @@ export default function Almacen() {
               {verCotizacion.subtotal !== undefined && (
                 <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
                   <button className="btn btn-secondary" style={{ flex: 1 }}
-                    onClick={() => generarReporte({
-                      ...verCotizacion,
-                      cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
-                      lugar: verCotizacion.lugar ?? "Zapopán, Jal",
-                    })}>
+                    onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal" })}>
                     👁️ Ver reporte
                   </button>
                   <button className="btn btn-primary" style={{ flex: 1 }}
-                    onClick={() => descargarPDF({
-                      ...verCotizacion,
-                      cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional,
-                      lugar: verCotizacion.lugar ?? "Zapopán, Jal",
-                    })}>
+                    onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal" })}>
                     📥 Descargar PDF
                   </button>
                 </div>
