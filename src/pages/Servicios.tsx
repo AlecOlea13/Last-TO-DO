@@ -270,7 +270,7 @@ export default function Servicios() {
   const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
 
   // ── Offline ──
-  const { online, pendientes, sincronizando, sincronizar, actualizarPendientes } = useOnlineStatus();
+  const { online, pendientes, sincronizando, actualizarPendientes } = useOnlineStatus();
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
   const [montas, setMontas]             = useState<Monta[]>([]);
