@@ -1,6 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import {
+  cachearServicios, obtenerServiciosCache,
+  guardarAccion, guardarFotoOffline, fileToBase64,
+} from "../utils/offlineDB";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
@@ -69,6 +74,10 @@ const ORDEN_BADGE: Record<string, string> = {
 const STORAGE_KEY_RECORDATORIO = "pipsa_ultimo_recordatorio";
 const TREINTA_MIN = 30 * 60 * 1000;
 
+function nanoid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas?: Pausa[]; grande?: boolean }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -114,20 +123,22 @@ function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas
 }
 
 function VistaTecnicoMovil({
-  servicios, iniciandoId, pausandoId, reanudandoId,
+  servicios, iniciandoId, pausandoId, reanudandoId, online, pendientes,
   onIniciarConfirm, onPausar, onReanudar, onCerrar,
 }: {
   servicios: Servicio[];
   iniciandoId: string | null;
   pausandoId: string | null;
   reanudandoId: string | null;
+  online: boolean;
+  pendientes: number;
   onIniciarConfirm: (s: Servicio) => void;
   onPausar: (s: Servicio) => void;
   onReanudar: (s: Servicio) => void;
   onCerrar: (s: Servicio) => void;
 }) {
   const activo      = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
-  const pendientes  = servicios.filter(s => s.estatus === "abierto");
+  const pendientesSvc = servicios.filter(s => s.estatus === "abierto");
   const pausaActiva = activo?.pausas?.find(p => !p.horaFin);
 
   function fmt(date?: string) {
@@ -138,6 +149,28 @@ function VistaTecnicoMovil({
 
   return (
     <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+      {/* ── Banner offline / pendientes ── */}
+      {!online && (
+        <div style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.4)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: "1.4rem" }}>📵</span>
+          <div>
+            <div style={{ fontWeight: 700, color: "var(--red)", fontSize: "0.9rem" }}>Sin conexión</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Tus acciones se guardan y se envían cuando recuperes internet</div>
+          </div>
+        </div>
+      )}
+
+      {online && pendientes > 0 && (
+        <div style={{ background: "rgba(245,158,11,0.12)", border: "1.5px solid var(--accent)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: "1.4rem" }}>🔄</span>
+          <div>
+            <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.9rem" }}>Sincronizando...</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{pendientes} acción{pendientes !== 1 ? "es" : ""} pendiente{pendientes !== 1 ? "s" : ""} de enviar</div>
+          </div>
+        </div>
+      )}
+
       {activo && (
         <div style={{ background: activo.estatus === "pausado" ? "rgba(107,114,128,0.12)" : "rgba(245,158,11,0.08)", border: `2px solid ${activo.estatus === "pausado" ? "var(--border)" : "var(--accent)"}`, borderRadius: 16, padding: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -155,7 +188,7 @@ function VistaTecnicoMovil({
           )}
           {activo.estatus === "pausado" && pausaActiva && (
             <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>
-              ⏸️ <strong>Motivo de pausa:</strong> {pausaActiva.razon}
+              ⏸️ <strong>Motivo:</strong> {pausaActiva.razon}
             </div>
           )}
           {activo.horaInicio && activo.estatus === "en_proceso" && (
@@ -190,11 +223,11 @@ function VistaTecnicoMovil({
         </div>
       )}
 
-      {pendientes.length > 0 && (
+      {pendientesSvc.length > 0 && (
         <div>
           <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>Servicios pendientes</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {pendientes.map(s => (
+            {pendientesSvc.map(s => (
               <div key={s._id} style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 14, padding: 16, opacity: activo ? 0.6 : 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-head)" }}>{s.folio}</span>
@@ -217,7 +250,7 @@ function VistaTecnicoMovil({
         </div>
       )}
 
-      {!activo && pendientes.length === 0 && (
+      {!activo && pendientesSvc.length === 0 && (
         <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
           <div style={{ fontSize: "3rem", marginBottom: 12 }}>✅</div>
           <div style={{ fontSize: "1.1rem", fontWeight: 600 }}>Sin servicios pendientes</div>
@@ -235,6 +268,9 @@ export default function Servicios() {
   const canAsignarTecnico = ["developer", "gerencia", "oficina"].includes(rol);
   const esTecnico         = rol === "tecnico";
   const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
+
+  // ── Offline ──
+  const { online, pendientes, sincronizando, sincronizar, actualizarPendientes } = useOnlineStatus();
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
   const [montas, setMontas]             = useState<Monta[]>([]);
@@ -258,7 +294,7 @@ export default function Servicios() {
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
 
-  // ── Reporte de servicios ──
+  // ── Reporte ──
   const [modalReporte, setModalReporte]                 = useState(false);
   const [reportePeriodo, setReportePeriodo]             = useState<"semana" | "mes" | "custom">("mes");
   const [reporteMes, setReporteMes]                     = useState(() => {
@@ -271,6 +307,7 @@ export default function Servicios() {
 
   useEffect(() => { load(); }, []);
 
+  // ── Recordatorio técnico ──
   useEffect(() => {
     if (rol !== "tecnico") return;
     if ("Notification" in window && Notification.permission === "default") {
@@ -280,48 +317,57 @@ export default function Servicios() {
       const hayActivo = servicios.some(s => s.estatus === "en_proceso" || s.estatus === "pausado");
       if (!hayActivo) return;
       const ultimo = parseInt(localStorage.getItem(STORAGE_KEY_RECORDATORIO) ?? "0");
-      const ahora  = Date.now();
-      if (ahora - ultimo >= TREINTA_MIN) {
-        localStorage.setItem(STORAGE_KEY_RECORDATORIO, String(ahora));
+      if (Date.now() - ultimo >= TREINTA_MIN) {
+        localStorage.setItem(STORAGE_KEY_RECORDATORIO, String(Date.now()));
         setMostrarRecordatorio(true);
         if ("Notification" in window && Notification.permission === "granted") {
-          try {
-            new Notification("⏱️ Control Pipsa", {
-              body: "Recuerda terminar el servicio en la app cuando lo hayas completado.",
-              icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png",
-            });
-          } catch {}
+          try { new Notification("⏱️ Control Pipsa", { body: "Recuerda terminar el servicio en la app.", icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png" }); } catch {}
         }
       }
     }
-    function onVisibilityChange() { if (document.visibilityState === "visible") checkRecordatorio(); }
+    function onVisibility() { if (document.visibilityState === "visible") checkRecordatorio(); }
     const intervalo = setInterval(checkRecordatorio, 60 * 1000);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibility);
     checkRecordatorio();
-    return () => { clearInterval(intervalo); document.removeEventListener("visibilitychange", onVisibilityChange); };
+    return () => { clearInterval(intervalo); document.removeEventListener("visibilitychange", onVisibility); };
   }, [rol, servicios]);
 
   async function load() {
-    try {
-      const [s, m, c, t] = await Promise.all([
-        api.get("/servicios"),
-        api.get("/montacargas"),
-        api.get("/clientes"),
-        api.get("/tipos-servicio"),
-      ]);
-      setServicios(s.data);
-      setMontas(m.data);
-      setClientes(c.data);
-      setTipos(t.data);
-    } catch {}
-    if (["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol)) {
+    if (online) {
       try {
-        const { data } = await api.get("/users");
-        setUsuarios(data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
+        const [s, m, c, t] = await Promise.all([
+          api.get("/servicios"),
+          api.get("/montacargas"),
+          api.get("/clientes"),
+          api.get("/tipos-servicio"),
+        ]);
+        setServicios(s.data);
+        setMontas(m.data);
+        setClientes(c.data);
+        setTipos(t.data);
+        // ── Cachear servicios para uso offline ──
+        if (esTecnico) await cachearServicios(s.data);
+      } catch {}
+      if (["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol)) {
+        try {
+          const { data } = await api.get("/users");
+          setUsuarios(data.filter((x: any) => ["tecnico", "oficina", "almacen"].includes(x.rol)));
+        } catch {}
+      }
+    } else {
+      // ── Sin internet: cargar desde cache ──
+      try {
+        const cached = await obtenerServiciosCache();
+        if (cached.length > 0) setServicios(cached);
       } catch {}
     }
     setLoading(false);
   }
+
+  // ── Recargar cuando regresa internet ──
+  useEffect(() => {
+    if (online) load();
+  }, [online]);
 
   async function save() {
     if (!form.montacargas || !form.problema.trim()) return;
@@ -335,17 +381,39 @@ export default function Servicios() {
     finally { setSaving(false); }
   }
 
-  async function subirFoto(file: File, tipo: "hoja" | "equipo" | "refacciones") {
+  // ── Subir foto: online → Cloudinary directo, offline → IndexedDB ──
+  async function subirFoto(
+    file: File,
+    tipo: "hoja" | "equipo" | "refacciones",
+    accionId?: string
+  ) {
     setUploadingFoto(tipo);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", UPLOAD_PRESET);
     try {
-      const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-      const data = await res.json();
-      const key  = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
-      setCerrarForm((p: any) => ({ ...p, [key]: data.secure_url }));
-    } catch { alert("Error al subir imagen"); }
+      if (online) {
+        // Subir directo a Cloudinary
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("upload_preset", UPLOAD_PRESET);
+        const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
+        const data = await res.json();
+        const key  = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
+        setCerrarForm((p: any) => ({ ...p, [key]: data.secure_url }));
+      } else {
+        // Guardar en IndexedDB como base64
+        if (!accionId) return;
+        const base64 = await fileToBase64(file);
+        await guardarFotoOffline({
+          id:       nanoid(),
+          accionId,
+          tipo,
+          base64,
+          fileName: file.name,
+        });
+        // Mostrar preview local
+        const key = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
+        setCerrarForm((p: any) => ({ ...p, [key]: base64 }));
+      }
+    } catch { alert("Error al procesar la imagen"); }
     finally { setUploadingFoto(null); }
   }
 
@@ -364,8 +432,29 @@ export default function Servicios() {
     setConfirmarIniciarModal(null);
     try {
       const ubicacion = await obtenerUbicacion();
-      const { data } = await api.post(`/servicios/${s._id}/iniciar`, ubicacion ? { ubicacion } : {});
-      setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+      const payload   = ubicacion ? { ubicacion } : {};
+
+      if (online) {
+        const { data } = await api.post(`/servicios/${s._id}/iniciar`, payload);
+        setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+        await cachearServicios(servicios.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+      } else {
+        // Guardar acción offline
+        await guardarAccion({
+          id:         nanoid(),
+          tipo:       "iniciar",
+          servicioId: s._id,
+          payload,
+          timestamp:  Date.now(),
+        });
+        // Actualizar estado local optimistamente
+        const ahora = new Date().toISOString();
+        setServicios(prev => prev.map(sv => sv._id === s._id
+          ? { ...sv, estatus: "en_proceso", horaInicio: ahora }
+          : sv
+        ));
+        await actualizarPendientes();
+      }
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
@@ -375,9 +464,26 @@ export default function Servicios() {
   async function pausar() {
     if (!pausarModal || !razonPausa.trim()) return;
     setPausandoId(pausarModal._id);
+    const payload = { razon: razonPausa.trim() };
     try {
-      const { data } = await api.post(`/servicios/${pausarModal._id}/pausar`, { razon: razonPausa.trim() });
-      setServicios(prev => prev.map(sv => sv._id === pausarModal._id ? { ...sv, ...data } : sv));
+      if (online) {
+        const { data } = await api.post(`/servicios/${pausarModal._id}/pausar`, payload);
+        setServicios(prev => prev.map(sv => sv._id === pausarModal._id ? { ...sv, ...data } : sv));
+      } else {
+        await guardarAccion({
+          id:         nanoid(),
+          tipo:       "pausar",
+          servicioId: pausarModal._id,
+          payload,
+          timestamp:  Date.now(),
+        });
+        const ahora = new Date().toISOString();
+        setServicios(prev => prev.map(sv => sv._id === pausarModal._id
+          ? { ...sv, estatus: "pausado", pausas: [...(sv.pausas ?? []), { _id: nanoid(), razon: razonPausa.trim(), horaInicio: ahora }] }
+          : sv
+        ));
+        await actualizarPendientes();
+      }
       setPausarModal(null);
       setRazonPausa("");
     } catch (e: any) {
@@ -389,21 +495,64 @@ export default function Servicios() {
   async function reanudar(s: Servicio) {
     setReanudandoId(s._id);
     try {
-      const { data } = await api.post(`/servicios/${s._id}/reanudar`);
-      setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+      if (online) {
+        const { data } = await api.post(`/servicios/${s._id}/reanudar`);
+        setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
+      } else {
+        await guardarAccion({
+          id:         nanoid(),
+          tipo:       "reanudar",
+          servicioId: s._id,
+          payload:    {},
+          timestamp:  Date.now(),
+        });
+        setServicios(prev => prev.map(sv => sv._id === s._id
+          ? { ...sv, estatus: "en_proceso", pausas: sv.pausas?.map(p => !p.horaFin ? { ...p, horaFin: new Date().toISOString() } : p) }
+          : sv
+        ));
+        await actualizarPendientes();
+      }
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setReanudandoId(null); }
   }
 
+  // ── ID temporal para agrupar fotos offline con su acción de cierre ──
+  const [cerrarAccionId] = useState(() => nanoid());
+
   async function cerrar() {
     if (!cerrarModal) return;
     setSaving(true);
     try {
       const ubicacion = await obtenerUbicacion();
-      await api.post(`/servicios/${cerrarModal._id}/cerrar`, { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) });
-      load();
+      const payload   = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
+
+      if (online) {
+        await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
+        load();
+      } else {
+        await guardarAccion({
+          id:         cerrarAccionId,
+          tipo:       "cerrar",
+          servicioId: cerrarModal._id,
+          payload:    {
+            ...payload,
+            // Las URLs de fotos offline (base64) se reemplazan por vacío
+            // — las fotos reales están en IndexedDB asociadas por cerrarAccionId
+            fotoHojaFirmada:  payload.fotoHojaFirmada?.startsWith("data:") ? "" : payload.fotoHojaFirmada,
+            fotoEquipoFinal:  payload.fotoEquipoFinal?.startsWith("data:")  ? "" : payload.fotoEquipoFinal,
+            fotoRefacciones:  payload.fotoRefacciones?.startsWith("data:")  ? "" : payload.fotoRefacciones,
+          },
+          timestamp: Date.now(),
+        });
+        setServicios(prev => prev.map(sv => sv._id === cerrarModal._id
+          ? { ...sv, estatus: "cerrado" }
+          : sv
+        ));
+        await actualizarPendientes();
+      }
+
       setCerrarModal(null);
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
@@ -445,7 +594,6 @@ export default function Servicios() {
     };
   }
 
-  // ── Reporte ──
   function filtrarPorPeriodoReporte(s: Servicio): boolean {
     const fecha = s.fechaReporte ? new Date(s.fechaReporte.split("T")[0] + "T12:00:00") : null;
     if (!fecha) return false;
@@ -454,8 +602,8 @@ export default function Servicios() {
       return fecha.getFullYear() === y && fecha.getMonth() === m - 1;
     }
     if (reportePeriodo === "semana") {
-      const hoy    = new Date();
-      const lunes  = new Date(hoy);
+      const hoy   = new Date();
+      const lunes = new Date(hoy);
       lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
       lunes.setHours(0, 0, 0, 0);
       const domingo = new Date(lunes);
@@ -489,9 +637,7 @@ export default function Servicios() {
     const porEquipo = new Map<string, { eco: string; marca: string; count: number }>();
     for (const s of datos) {
       const key = s.montacargas?._id ?? "__sin__";
-      if (!porEquipo.has(key)) {
-        porEquipo.set(key, { eco: s.montacargas?.numeroEconomico ?? "—", marca: s.montacargas?.marca ?? "—", count: 0 });
-      }
+      if (!porEquipo.has(key)) porEquipo.set(key, { eco: s.montacargas?.numeroEconomico ?? "—", marca: s.montacargas?.marca ?? "—", count: 0 });
       porEquipo.get(key)!.count++;
     }
 
@@ -520,11 +666,7 @@ export default function Servicios() {
 
     const rowsEquipo = [...porEquipo.values()]
       .sort((a, b) => b.count - a.count)
-      .map(e => `<tr>
-        <td>${e.eco}</td>
-        <td>${e.marca}</td>
-        <td style="text-align:center">${e.count}</td>
-      </tr>`).join("");
+      .map(e => `<tr><td>${e.eco}</td><td>${e.marca}</td><td style="text-align:center">${e.count}</td></tr>`).join("");
 
     const rowsDetalle = datos
       .sort((a, b) => new Date(a.fechaReporte).getTime() - new Date(b.fechaReporte).getTime())
@@ -546,14 +688,11 @@ export default function Servicios() {
   body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px;max-width:900px;margin:auto; }
   .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
   .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
-  h1 { font-size:13pt;font-weight:900; }
-  h2 { font-size:10pt;font-weight:700;margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px; }
+  h1 { font-size:13pt;font-weight:900; } h2 { font-size:10pt;font-weight:700;margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px; }
   p.sub { font-size:8.5pt;color:#555; }
   table { width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:6px; }
-  thead { background:#222;color:#fff; }
-  thead th { padding:5px 8px;text-align:left; }
-  tbody tr:nth-child(even) { background:#f5f5f5; }
-  td { padding:4px 8px;border-bottom:1px solid #ddd; }
+  thead { background:#222;color:#fff; } thead th { padding:5px 8px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; } td { padding:4px 8px;border-bottom:1px solid #ddd; }
   .resumen-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px; }
   .resumen-box { border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center; }
   .resumen-box .val { font-size:18pt;font-weight:900;color:#222; }
@@ -577,26 +716,15 @@ export default function Servicios() {
   <div class="resumen-box"><div class="val">$${totalCostoRef.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Refacciones</div></div>
 </div>
 <h2>Por técnico</h2>
-<table>
-  <thead><tr><th>Técnico</th><th style="text-align:center">Servicios</th><th style="text-align:right">Mano de obra</th><th style="text-align:right">Refacciones</th></tr></thead>
-  <tbody>${rowsTecnico || '<tr><td colspan="4" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody>
-</table>
+<table><thead><tr><th>Técnico</th><th style="text-align:center">Servicios</th><th style="text-align:right">Mano de obra</th><th style="text-align:right">Refacciones</th></tr></thead>
+<tbody>${rowsTecnico || '<tr><td colspan="4" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody></table>
 <h2>Por equipo</h2>
-<table>
-  <thead><tr><th>No. Económico</th><th>Marca</th><th style="text-align:center">Servicios</th></tr></thead>
-  <tbody>${rowsEquipo || '<tr><td colspan="3" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody>
-</table>
+<table><thead><tr><th>No. Económico</th><th>Marca</th><th style="text-align:center">Servicios</th></tr></thead>
+<tbody>${rowsEquipo || '<tr><td colspan="3" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody></table>
 <h2>Detalle de servicios</h2>
-<table>
-  <thead><tr>
-    <th>Folio</th><th>Fecha</th><th>Equipo</th><th>Cliente</th>
-    <th>Tipo</th><th>Técnico</th><th style="text-align:right">Refacciones</th><th style="text-align:right">Mano de obra</th>
-  </tr></thead>
-  <tbody>${rowsDetalle || '<tr><td colspan="8" style="text-align:center;color:#aaa">Sin servicios en este período</td></tr>'}</tbody>
-</table>
-<div style="text-align:right;margin-top:8px;font-size:9pt;">
-  <strong>Total: $${(totalCostoRef + totalCostoMano).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong>
-</div>
+<table><thead><tr><th>Folio</th><th>Fecha</th><th>Equipo</th><th>Cliente</th><th>Tipo</th><th>Técnico</th><th style="text-align:right">Refacciones</th><th style="text-align:right">Mano de obra</th></tr></thead>
+<tbody>${rowsDetalle || '<tr><td colspan="8" style="text-align:center;color:#aaa">Sin servicios en este período</td></tr>'}</tbody></table>
+<div style="text-align:right;margin-top:8px;font-size:9pt;"><strong>Total: $${(totalCostoRef + totalCostoMano).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
 </body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
@@ -628,9 +756,9 @@ export default function Servicios() {
     const url = cerrarForm[fotoKey];
     return (
       <div>
-        <label className="form-label">{label}</label>
+        <label className="form-label">{label}{!online && <span style={{ fontSize: "0.68rem", color: "var(--accent)", marginLeft: 6 }}>📵 se guardará offline</span>}</label>
         <div onClick={() => ref.current?.click()}
-          style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)", transition: "border-color .15s" }}
+          style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
           onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
           onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
           {url ? (
@@ -642,7 +770,7 @@ export default function Servicios() {
           )}
         </div>
         <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo); }} />
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirFoto(f, tipo, cerrarAccionId); }} />
       </div>
     );
   }
@@ -655,6 +783,17 @@ export default function Servicios() {
           <div>
             <h1 className="page-title">Mis Servicios</h1>
             <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} pendientes</p>
+          </div>
+          {/* Badge de conexión */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.78rem", fontWeight: 600, color: online ? "var(--green)" : "var(--red)" }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: online ? "var(--green)" : "var(--red)", display: "inline-block" }} />
+            {online ? "En línea" : "Sin conexión"}
+            {sincronizando && <span style={{ color: "var(--accent)" }}>· Sincronizando...</span>}
+            {!sincronizando && pendientes > 0 && (
+              <span style={{ background: "var(--accent)", color: "#000", borderRadius: 99, padding: "1px 7px", fontSize: "0.68rem" }}>
+                {pendientes} pendiente{pendientes !== 1 ? "s" : ""}
+              </span>
+            )}
           </div>
         </div>
 
@@ -676,6 +815,8 @@ export default function Servicios() {
             iniciandoId={iniciandoId}
             pausandoId={pausandoId}
             reanudandoId={reanudandoId}
+            online={online}
+            pendientes={pendientes}
             onIniciarConfirm={s => setConfirmarIniciarModal(s)}
             onPausar={s => { setPausarModal(s); setRazonPausa(""); }}
             onReanudar={reanudar}
@@ -683,6 +824,7 @@ export default function Servicios() {
           />
         )}
 
+        {/* Modales técnico — igual que antes, sin cambios */}
         {confirmarIniciarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmarIniciarModal(null)}>
             <div className="modal" style={{ maxWidth: 360 }}>
@@ -697,6 +839,11 @@ export default function Servicios() {
                   <div style={{ fontSize: "0.85rem", marginTop: 8, padding: "8px 12px", background: "var(--surface2)", borderRadius: 8 }}>{confirmarIniciarModal.problema}</div>
                 )}
               </div>
+              {!online && (
+                <div style={{ fontSize: "0.75rem", color: "var(--accent)", textAlign: "center", marginBottom: 8, padding: "6px 12px", background: "rgba(245,158,11,0.08)", borderRadius: 8 }}>
+                  📵 Sin internet — se sincronizará cuando recuperes señal
+                </div>
+              )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", marginBottom: 12 }}>📍 Se registrará tu ubicación al iniciar</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
@@ -730,9 +877,7 @@ export default function Servicios() {
                   {pausandoId === pausarModal._id ? "Pausando..." : "⏸️ Confirmar pausa"}
                 </button>
                 <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setPausarModal(null)}>
-                  Cancelar
-                </button>
+                  onClick={() => setPausarModal(null)}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -750,6 +895,11 @@ export default function Servicios() {
                 <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 12 }}>
                   ⏱️ Tiempo activo: <Cronometro horaInicio={cerrarModal.horaInicio} pausas={cerrarModal.pausas} />
                 </p>
+              )}
+              {!online && (
+                <div style={{ fontSize: "0.78rem", color: "var(--accent)", padding: "8px 12px", background: "rgba(245,158,11,0.08)", borderRadius: 8, marginBottom: 10 }}>
+                  📵 Sin internet — el cierre y las fotos se enviarán automáticamente cuando recuperes señal
+                </div>
               )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
               <div className="form-grid">
@@ -779,12 +929,10 @@ export default function Servicios() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
                   onClick={cerrar} disabled={saving}>
-                  {saving ? "Cerrando..." : "✅ Confirmar cierre"}
+                  {saving ? "Cerrando..." : online ? "✅ Confirmar cierre" : "💾 Guardar offline"}
                 </button>
                 <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setCerrarModal(null)}>
-                  Cancelar
-                </button>
+                  onClick={() => setCerrarModal(null)}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -793,7 +941,7 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista normal ──
+  // ── Vista normal (no técnico) — igual que antes ──
   return (
     <>
       <div className="page-header">
@@ -871,9 +1019,7 @@ export default function Servicios() {
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "var(--text-muted)", background: "var(--surface2)", padding: "3px 8px", borderRadius: 6 }}>
                             ⏸️ {pausaActiva?.razon ? pausaActiva.razon.slice(0, 20) + (pausaActiva.razon.length > 20 ? "..." : "") : "Pausado"}
                           </span>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)" }}>—</span>
-                        )}
+                        ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                       </td>
                       <td>
                         {soloVer ? (
@@ -939,13 +1085,12 @@ export default function Servicios() {
         </div>
       </div>
 
-      {/* ── Modal reporte de servicios ── */}
+      {/* ── Modal reporte ── */}
       {modalReporte && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
           <div className="modal" style={{ maxWidth: 480 }}>
             <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
             <h2 className="modal-title">📊 Reporte de servicios</h2>
-
             <div className="form-group" style={{ marginTop: 8 }}>
               <label className="form-label">Período</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
@@ -957,27 +1102,15 @@ export default function Servicios() {
                 ))}
               </div>
             </div>
-
             {reportePeriodo === "mes" && (
-              <div className="form-group">
-                <label className="form-label">Mes y año</label>
-                <input className="form-input" type="month" value={reporteMes} onChange={e => setReporteMes(e.target.value)} />
-              </div>
+              <div className="form-group"><label className="form-label">Mes y año</label><input className="form-input" type="month" value={reporteMes} onChange={e => setReporteMes(e.target.value)} /></div>
             )}
-
             {reportePeriodo === "custom" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Desde</label>
-                  <input className="form-input" type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hasta</label>
-                  <input className="form-input" type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Desde</label><input className="form-input" type="date" value={reporteDesde} onChange={e => setReporteDesde(e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Hasta</label><input className="form-input" type="date" value={reporteHasta} onChange={e => setReporteHasta(e.target.value)} /></div>
               </div>
             )}
-
             <div className="form-group">
               <label className="form-label">Filtrar por técnico</label>
               <select className="form-select" value={reporteFiltroTecnico} onChange={e => setReporteFiltroTecnico(e.target.value)}>
@@ -985,13 +1118,9 @@ export default function Servicios() {
                 {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
               </select>
             </div>
-
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Se incluyen solo servicios <strong style={{ color: "var(--text)" }}>cerrados</strong> en el período seleccionado.
-              <br />
-              <span style={{ fontSize: "0.75rem" }}>El reporte se abre en una nueva pestaña — usa 🖨️ para imprimir o guardar PDF.</span>
+              Solo servicios <strong style={{ color: "var(--text)" }}>cerrados</strong> en el período.
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={generarReporteServicios}>📄 Ver reporte</button>
@@ -1024,7 +1153,7 @@ export default function Servicios() {
               <div className="form-group">
                 <label className="form-label">Tipo de servicio</label>
                 <select className="form-select" value={form.tipoServicio} onChange={e => setForm((p: any) => ({ ...p, tipoServicio: e.target.value }))}>
-                  <option value="">Sin tipo (revisión / otro)</option>
+                  <option value="">Sin tipo</option>
                   {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
                 </select>
               </div>
