@@ -55,10 +55,11 @@ type Cliente      = { _id: string; nombre: string };
 type TipoServicio = { _id: string; nombre: string; intervaloHrs?: number };
 type Usuario      = { _id: string; nombre: string; rol: string };
 
+// ── CAMBIO 3b: quitados costoRefacciones y costoManoObra ──
 const emptyForm = {
   montacargas: "", cliente: "", tipoServicio: "", tecnicoAsignado: "",
   fechaReporte: new Date().toISOString().split("T")[0],
-  problema: "", costoRefacciones: 0, costoManoObra: 0, horometro: 0,
+  problema: "", horometro: 0,
 };
 
 const emptyCerrarForm = {
@@ -137,9 +138,9 @@ function VistaTecnicoMovil({
   onReanudar: (s: Servicio) => void;
   onCerrar: (s: Servicio) => void;
 }) {
-  const activo      = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
+  const activo        = servicios.find(s => s.estatus === "en_proceso" || s.estatus === "pausado");
   const pendientesSvc = servicios.filter(s => s.estatus === "abierto");
-  const pausaActiva = activo?.pausas?.find(p => !p.horaFin);
+  const pausaActiva   = activo?.pausas?.find(p => !p.horaFin);
 
   function fmt(date?: string) {
     if (!date) return "—";
@@ -149,8 +150,6 @@ function VistaTecnicoMovil({
 
   return (
     <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
-
-      {/* ── Banner offline / pendientes ── */}
       {!online && (
         <div style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.4)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: "1.4rem" }}>📵</span>
@@ -269,7 +268,6 @@ export default function Servicios() {
   const esTecnico         = rol === "tecnico";
   const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
 
-  // ── Offline ──
   const { online, pendientes, sincronizando, actualizarPendientes } = useOnlineStatus();
 
   const [servicios, setServicios]       = useState<Servicio[]>([]);
@@ -294,7 +292,6 @@ export default function Servicios() {
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
 
-  // ── Reporte ──
   const [modalReporte, setModalReporte]                 = useState(false);
   const [reportePeriodo, setReportePeriodo]             = useState<"semana" | "mes" | "custom">("mes");
   const [reporteMes, setReporteMes]                     = useState(() => {
@@ -307,7 +304,6 @@ export default function Servicios() {
 
   useEffect(() => { load(); }, []);
 
-  // ── Recordatorio técnico ──
   useEffect(() => {
     if (rol !== "tecnico") return;
     if ("Notification" in window && Notification.permission === "default") {
@@ -345,7 +341,6 @@ export default function Servicios() {
         setMontas(m.data);
         setClientes(c.data);
         setTipos(t.data);
-        // ── Cachear servicios para uso offline ──
         if (esTecnico) await cachearServicios(s.data);
       } catch {}
       if (["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol)) {
@@ -355,7 +350,6 @@ export default function Servicios() {
         } catch {}
       }
     } else {
-      // ── Sin internet: cargar desde cache ──
       try {
         const cached = await obtenerServiciosCache();
         if (cached.length > 0) setServicios(cached);
@@ -364,7 +358,6 @@ export default function Servicios() {
     setLoading(false);
   }
 
-  // ── Recargar cuando regresa internet ──
   useEffect(() => {
     if (online) load();
   }, [online]);
@@ -381,16 +374,10 @@ export default function Servicios() {
     finally { setSaving(false); }
   }
 
-  // ── Subir foto: online → Cloudinary directo, offline → IndexedDB ──
-  async function subirFoto(
-    file: File,
-    tipo: "hoja" | "equipo" | "refacciones",
-    accionId?: string
-  ) {
+  async function subirFoto(file: File, tipo: "hoja" | "equipo" | "refacciones", accionId?: string) {
     setUploadingFoto(tipo);
     try {
       if (online) {
-        // Subir directo a Cloudinary
         const fd = new FormData();
         fd.append("file", file);
         fd.append("upload_preset", UPLOAD_PRESET);
@@ -399,17 +386,9 @@ export default function Servicios() {
         const key  = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
         setCerrarForm((p: any) => ({ ...p, [key]: data.secure_url }));
       } else {
-        // Guardar en IndexedDB como base64
         if (!accionId) return;
         const base64 = await fileToBase64(file);
-        await guardarFotoOffline({
-          id:       nanoid(),
-          accionId,
-          tipo,
-          base64,
-          fileName: file.name,
-        });
-        // Mostrar preview local
+        await guardarFotoOffline({ id: nanoid(), accionId, tipo, base64, fileName: file.name });
         const key = tipo === "hoja" ? "fotoHojaFirmada" : tipo === "equipo" ? "fotoEquipoFinal" : "fotoRefacciones";
         setCerrarForm((p: any) => ({ ...p, [key]: base64 }));
       }
@@ -433,26 +412,14 @@ export default function Servicios() {
     try {
       const ubicacion = await obtenerUbicacion();
       const payload   = ubicacion ? { ubicacion } : {};
-
       if (online) {
         const { data } = await api.post(`/servicios/${s._id}/iniciar`, payload);
         setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
         await cachearServicios(servicios.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
       } else {
-        // Guardar acción offline
-        await guardarAccion({
-          id:         nanoid(),
-          tipo:       "iniciar",
-          servicioId: s._id,
-          payload,
-          timestamp:  Date.now(),
-        });
-        // Actualizar estado local optimistamente
+        await guardarAccion({ id: nanoid(), tipo: "iniciar", servicioId: s._id, payload, timestamp: Date.now() });
         const ahora = new Date().toISOString();
-        setServicios(prev => prev.map(sv => sv._id === s._id
-          ? { ...sv, estatus: "en_proceso", horaInicio: ahora }
-          : sv
-        ));
+        setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: "en_proceso", horaInicio: ahora } : sv));
         await actualizarPendientes();
       }
     } catch (e: any) {
@@ -470,13 +437,7 @@ export default function Servicios() {
         const { data } = await api.post(`/servicios/${pausarModal._id}/pausar`, payload);
         setServicios(prev => prev.map(sv => sv._id === pausarModal._id ? { ...sv, ...data } : sv));
       } else {
-        await guardarAccion({
-          id:         nanoid(),
-          tipo:       "pausar",
-          servicioId: pausarModal._id,
-          payload,
-          timestamp:  Date.now(),
-        });
+        await guardarAccion({ id: nanoid(), tipo: "pausar", servicioId: pausarModal._id, payload, timestamp: Date.now() });
         const ahora = new Date().toISOString();
         setServicios(prev => prev.map(sv => sv._id === pausarModal._id
           ? { ...sv, estatus: "pausado", pausas: [...(sv.pausas ?? []), { _id: nanoid(), razon: razonPausa.trim(), horaInicio: ahora }] }
@@ -499,13 +460,7 @@ export default function Servicios() {
         const { data } = await api.post(`/servicios/${s._id}/reanudar`);
         setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, ...data } : sv));
       } else {
-        await guardarAccion({
-          id:         nanoid(),
-          tipo:       "reanudar",
-          servicioId: s._id,
-          payload:    {},
-          timestamp:  Date.now(),
-        });
+        await guardarAccion({ id: nanoid(), tipo: "reanudar", servicioId: s._id, payload: {}, timestamp: Date.now() });
         setServicios(prev => prev.map(sv => sv._id === s._id
           ? { ...sv, estatus: "en_proceso", pausas: sv.pausas?.map(p => !p.horaFin ? { ...p, horaFin: new Date().toISOString() } : p) }
           : sv
@@ -518,7 +473,6 @@ export default function Servicios() {
     finally { setReanudandoId(null); }
   }
 
-  // ── ID temporal para agrupar fotos offline con su acción de cierre ──
   const [cerrarAccionId] = useState(() => nanoid());
 
   async function cerrar() {
@@ -527,32 +481,23 @@ export default function Servicios() {
     try {
       const ubicacion = await obtenerUbicacion();
       const payload   = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
-
       if (online) {
         await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
         load();
       } else {
         await guardarAccion({
-          id:         cerrarAccionId,
-          tipo:       "cerrar",
-          servicioId: cerrarModal._id,
-          payload:    {
+          id: cerrarAccionId, tipo: "cerrar", servicioId: cerrarModal._id,
+          payload: {
             ...payload,
-            // Las URLs de fotos offline (base64) se reemplazan por vacío
-            // — las fotos reales están en IndexedDB asociadas por cerrarAccionId
-            fotoHojaFirmada:  payload.fotoHojaFirmada?.startsWith("data:") ? "" : payload.fotoHojaFirmada,
-            fotoEquipoFinal:  payload.fotoEquipoFinal?.startsWith("data:")  ? "" : payload.fotoEquipoFinal,
-            fotoRefacciones:  payload.fotoRefacciones?.startsWith("data:")  ? "" : payload.fotoRefacciones,
+            fotoHojaFirmada: payload.fotoHojaFirmada?.startsWith("data:") ? "" : payload.fotoHojaFirmada,
+            fotoEquipoFinal: payload.fotoEquipoFinal?.startsWith("data:")  ? "" : payload.fotoEquipoFinal,
+            fotoRefacciones: payload.fotoRefacciones?.startsWith("data:")  ? "" : payload.fotoRefacciones,
           },
           timestamp: Date.now(),
         });
-        setServicios(prev => prev.map(sv => sv._id === cerrarModal._id
-          ? { ...sv, estatus: "cerrado" }
-          : sv
-        ));
+        setServicios(prev => prev.map(sv => sv._id === cerrarModal._id ? { ...sv, estatus: "cerrado" } : sv));
         await actualizarPendientes();
       }
-
       setCerrarModal(null);
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
@@ -565,10 +510,23 @@ export default function Servicios() {
     setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: estatus as any } : sv));
   }
 
+  // ── CAMBIO 3a: al cambiar montacargas, autocompletar cliente ──
   function onMontaChange(montaId: string) {
     const monta = montas.find(m => m._id === montaId);
     setForm((p: any) => ({ ...p, montacargas: montaId, cliente: monta?.clienteActual?._id ?? p.cliente }));
   }
+
+  // ── CAMBIO 3a: al cambiar cliente, filtrar montacargas ──
+  function onClienteChange(clienteId: string) {
+    setForm((p: any) => ({ ...p, cliente: clienteId, montacargas: "" }));
+  }
+
+  // ── CAMBIO 3a: montas filtradas por cliente ──
+  const montasFiltradas = form.cliente
+    ? montas.filter(m => m.clienteActual?._id === form.cliente)
+    : montas;
+
+  const montasSinCliente = form.cliente && montasFiltradas.length === 0;
 
   function buildOrdenTrabajo(s: Servicio): OrdenTrabajoReporte {
     return {
@@ -784,7 +742,6 @@ export default function Servicios() {
             <h1 className="page-title">Mis Servicios</h1>
             <p className="page-subtitle">{servicios.filter(s => s.estatus !== "cerrado").length} pendientes</p>
           </div>
-          {/* Badge de conexión */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.78rem", fontWeight: 600, color: online ? "var(--green)" : "var(--red)" }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: online ? "var(--green)" : "var(--red)", display: "inline-block" }} />
             {online ? "En línea" : "Sin conexión"}
@@ -824,7 +781,6 @@ export default function Servicios() {
           />
         )}
 
-        {/* Modales técnico — igual que antes, sin cambios */}
         {confirmarIniciarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmarIniciarModal(null)}>
             <div className="modal" style={{ maxWidth: 360 }}>
@@ -941,7 +897,7 @@ export default function Servicios() {
     );
   }
 
-  // ── Vista normal (no técnico) — igual que antes ──
+  // ── Vista normal (no técnico) ──
   return (
     <>
       <div className="page-header">
@@ -1136,18 +1092,32 @@ export default function Servicios() {
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">Nuevo servicio</h2>
             <div className="form-grid">
+              {/* ── CAMBIO 3a: cliente primero para filtrar montas ── */}
               <div className="form-group">
-                <label className="form-label">Montacargas *</label>
-                <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
-                  <option value="">Selecciona equipo...</option>
-                  {montas.map(m => <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>)}
+                <label className="form-label">Cliente</label>
+                <select className="form-select" value={form.cliente} onChange={e => onClienteChange(e.target.value)}>
+                  <option value="">Sin cliente</option>
+                  {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Cliente</label>
-                <select className="form-select" value={form.cliente} onChange={e => setForm((p: any) => ({ ...p, cliente: e.target.value }))}>
-                  <option value="">Sin cliente</option>
-                  {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
+                <label className="form-label">Montacargas *</label>
+                {/* ── CAMBIO 3a: aviso si cliente seleccionado no tiene equipos ── */}
+                {montasSinCliente && (
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>
+                    Este cliente no tiene equipos asignados — mostrando todos
+                  </p>
+                )}
+                {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && (
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>
+                    Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente
+                  </p>
+                )}
+                <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
+                  <option value="">Selecciona equipo...</option>
+                  {(montasSinCliente ? montas : montasFiltradas).map(m => (
+                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -1178,14 +1148,7 @@ export default function Servicios() {
                 <label className="form-label">Problema / descripción *</label>
                 <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema o trabajo a realizar..." rows={3} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Costo refacciones</label>
-                <input className="form-input" type="number" value={form.costoRefacciones} onChange={e => setForm((p: any) => ({ ...p, costoRefacciones: +e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Costo mano de obra</label>
-                <input className="form-input" type="number" value={form.costoManoObra} onChange={e => setForm((p: any) => ({ ...p, costoManoObra: +e.target.value }))} />
-              </div>
+              {/* ── CAMBIO 3b: costoRefacciones y costoManoObra eliminados ── */}
             </div>
             {form.tipoServicio && (
               <div style={{ padding: "10px 14px", background: "rgba(255,180,0,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", fontSize: "0.82rem", color: "var(--accent)", marginTop: 8 }}>

@@ -260,6 +260,8 @@ export default function Cotizaciones() {
   const [savingComentario, setSavingComentario]       = useState(false);
   const [uploadingIdx, setUploadingIdx]               = useState<number | null>(null);
   const [verTodosMontas, setVerTodosMontas]           = useState(false);
+  // ── CAMBIO 2: nuevo estado ──
+  const [guardarEquipoCliente, setGuardarEquipoCliente] = useState(false);
 
   const [modalReporte, setModalReporte] = useState(false);
   const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
@@ -317,6 +319,7 @@ export default function Cotizaciones() {
   function openNew() {
     setEditing(null);
     setVerTodosMontas(false);
+    setGuardarEquipoCliente(false); // ── CAMBIO 2
     setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }], cursoDC3: { ...emptyCursoDC3 } });
     setModal(true);
   }
@@ -324,6 +327,7 @@ export default function Cotizaciones() {
   function openEdit(c: Cotizacion) {
     setEditing(c);
     setVerTodosMontas(false);
+    setGuardarEquipoCliente(false); // ── CAMBIO 2
     const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
       folio: c.folio, tipo: c.tipo, tipoPeriodo: c.tipoPeriodo ?? "mensual", condiciones: c.condiciones ?? "",
@@ -342,6 +346,7 @@ export default function Cotizaciones() {
   function clonar(c: Cotizacion) {
     setEditing(null);
     setVerTodosMontas(false);
+    setGuardarEquipoCliente(false); // ── CAMBIO 2
     setForm({
       folio: "", tipo: c.tipo, tipoPeriodo: c.tipoPeriodo ?? "mensual", condiciones: c.condiciones ?? "",
       cliente: c.cliente?._id ?? "", esOcasional: !c.cliente && !!c.clienteOcasional?.nombre,
@@ -492,7 +497,6 @@ export default function Cotizaciones() {
         payload.clienteOcasional = null;
       }
 
-      // ── Curso: generar item automáticamente y guardar cursoDC3 ──
       if (form.tipo === "curso" && form.cursoDC3) {
         const dc3 = form.cursoDC3;
         const modalidadLabel: Record<string, string> = {
@@ -522,6 +526,18 @@ export default function Cotizaciones() {
         const { data } = await api.post("/cotizaciones", payload);
         setCotizaciones(prev => [data, ...prev]);
       }
+
+      // ── CAMBIO 2: guardar clienteActual en montacargas si se marcó el checkbox ──
+      if (guardarEquipoCliente && form.cliente && form.montacargas) {
+        await api.put(`/montacargas/${form.montacargas}`, { clienteActual: form.cliente });
+        setMontas(prev => prev.map(m =>
+          m._id === form.montacargas
+            ? { ...m, clienteActual: { _id: form.cliente, nombre: clientes.find(c => c._id === form.cliente)?.nombre ?? "" } }
+            : m
+        ));
+        setGuardarEquipoCliente(false);
+      }
+
       setModal(false); setEditing(null); load();
     } catch {}
     finally { setSaving(false); }
@@ -721,6 +737,25 @@ export default function Cotizaciones() {
               <div className="form-group" style={{ margin: 0 }}><label className="form-label">Modelo</label><input className="form-input" value={form.equipoModelo ?? ""} onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))} placeholder="Ej. YL_456" /></div>
               <div className="form-group" style={{ margin: 0 }}><label className="form-label">Serie</label><input className="form-input" value={form.equipoSerie ?? ""} onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))} placeholder="Ej. 1A3234RT45" /></div>
             </div>
+            {/* ── CAMBIO 2: checkbox guardar equipo del cliente ── */}
+            {form.cliente && form.montacargas && !montaSeleccionada?.clienteActual && (
+              <div style={{ marginTop: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={guardarEquipoCliente}
+                    onChange={e => setGuardarEquipoCliente(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
+                    💾 Guardar equipo de este cliente
+                    <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
+                      {" "}(asignar {clientes.find(c => c._id === form.cliente)?.nombre ?? "cliente"} a este montacargas)
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
         )}
 
@@ -781,7 +816,6 @@ export default function Cotizaciones() {
           </div>
         )}
 
-        {/* ── Bloque curso DC3 ── */}
         {esCurso && (
           <div className="form-group span-2" style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", padding: 14 }}>
             <p style={{ fontSize: "0.72rem", color: "#ef4444", fontWeight: 700, textTransform: "uppercase", marginBottom: 12 }}>
@@ -867,7 +901,6 @@ export default function Cotizaciones() {
         </div>
       </div>
 
-      {/* ── Conceptos (se ocultan en curso, se generan automáticamente) ── */}
       {!esCurso && (
         <div style={{ marginTop: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -1099,7 +1132,6 @@ export default function Cotizaciones() {
         </div>
       )}
 
-      {/* ── Modal reporte semanal ── */}
       {modalReporte && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
           <div className="modal" style={{ maxWidth: 960, width: "96vw", display: "flex", flexDirection: "column" }}>
@@ -1249,7 +1281,6 @@ export default function Cotizaciones() {
         </div>
       )}
 
-      {/* ── Modal marcar facturada ── */}
       {facturaModal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setFacturaModal(null); }}>
           <div className="modal" style={{ maxWidth: 400 }}>
@@ -1274,7 +1305,6 @@ export default function Cotizaciones() {
         </div>
       )}
 
-      {/* ── Modal comentarios ── */}
       {comentarioModal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setComentarioModal(null); }}>
           <div className="modal" style={{ maxWidth: 500 }}>

@@ -450,20 +450,24 @@ export default function Almacen() {
   }
 
   async function saveRefaccion() {
-    if (!form.nombre.trim()) return;
-    setSaving(true);
-    try {
-      if (editing) {
-        const { data } = await api.put(`/refacciones/${editing._id}`, form);
-        setRefacciones(prev => prev.map(r => r._id === editing._id ? data : r));
-      } else {
-        const { data } = await api.post("/refacciones", form);
-        setRefacciones(prev => [data, ...prev]);
-      }
-      setModal(false);
-    } catch {}
-    finally { setSaving(false); }
+  if (!form.nombre.trim()) return;
+  setSaving(true);
+  try {
+    if (editing) {
+      const { data } = await api.put(`/refacciones/${editing._id}`, form);
+      setRefacciones(prev => prev.map(r => r._id === editing._id ? data : r));
+    } else {
+      const { data } = await api.post("/refacciones", form);
+      setRefacciones(prev => [data, ...prev]);
+    }
+    setModal(false);
+  } catch (e: any) {
+    if (e?.response?.status === 409) {
+      alert("Ya existe una refacción con ese número de parte");
+    }
   }
+  finally { setSaving(false); }
+}
 
   async function ajustarStock() {
     if (!stockModal) return;
@@ -1089,10 +1093,56 @@ export default function Almacen() {
             <div style={{ marginTop: 16 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Material a entregar</p>
               <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
-                <select className="form-select" onChange={e => { const r = refacciones.find(r => r._id === e.target.value); if (r) { addValeItem(r); e.target.value = ""; } }} defaultValue="">
-                  <option value="">+ Agregar refacción al vale...</option>
-                  {refacciones.filter(r => r.stock > 0).map(r => <option key={r._id} value={r._id}>{r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""} — Stock: {r.stock}</option>)}
-                </select>
+                {/* ── CAMBIO 4: searchable select para vales de salida ── */}
+                {(() => {
+                  const [valeQuery, setValeQuery] = useState("");
+                  const [valeOpen, setValeOpen] = useState(false);
+                  const valeRef = useRef<HTMLDivElement>(null);
+
+                  useEffect(() => {
+                    function handleClick(e: MouseEvent) {
+                      if (valeRef.current && !valeRef.current.contains(e.target as Node)) setValeOpen(false);
+                    }
+                    document.addEventListener("mousedown", handleClick);
+                    return () => document.removeEventListener("mousedown", handleClick);
+                  }, []);
+
+                  const refsFiltradas = refacciones
+                    .filter(r => r.stock > 0)
+                    .filter(r =>
+                      r.nombre.toLowerCase().includes(valeQuery.toLowerCase()) ||
+                      (r.numeroParte ?? "").toLowerCase().includes(valeQuery.toLowerCase())
+                    );
+
+                  return (
+                    <div ref={valeRef} style={{ position: "relative" }}>
+                      <input
+                        className="form-input"
+                        value={valeQuery}
+                        onChange={e => { setValeQuery(e.target.value); setValeOpen(true); }}
+                        onFocus={() => setValeOpen(true)}
+                        placeholder="🔍 Buscar refacción por nombre o número de parte..."
+                      />
+                      {valeOpen && (
+                        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
+                          {refsFiltradas.length === 0 ? (
+                            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+                          ) : refsFiltradas.map(r => (
+                            <div key={r._id}
+                              onClick={() => { addValeItem(r); setValeQuery(""); setValeOpen(false); }}
+                              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", borderBottom: "1px solid var(--border)", color: "var(--text)" }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                              <span style={{ fontWeight: 600 }}>{r.nombre}</span>
+                              {r.numeroParte && <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: "0.78rem" }}>({r.numeroParte})</span>}
+                              <span style={{ color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)", marginLeft: 8, fontSize: "0.78rem", fontWeight: 700 }}>Stock: {r.stock}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               {valeItems.length === 0 ? (
                 <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Sin items — agrega refacciones del selector de arriba</p>
