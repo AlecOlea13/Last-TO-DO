@@ -18,7 +18,7 @@ import Proveedores  from "./pages/Proveedores";
 import Portales     from "./pages/Portales";
 import Flota        from "./pages/Flota";
 import ProtectedRoute from "./routes/ProtectedRoute";
-import { useInactivityLogout } from "./hooks/useInactivityLogout";
+import { useInactivityLogout } from "./hooks/useInactivityHook";
 
 // ── Componente interno para poder usar useNavigate dentro de BrowserRouter ──
 function AppRoutes() {
