@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api";
 import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -6,6 +6,7 @@ import {
   cachearServicios, obtenerServiciosCache,
   guardarAccion, guardarFotoOffline, fileToBase64,
 } from "../utils/offlineDB";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
@@ -55,7 +56,6 @@ type Cliente      = { _id: string; nombre: string };
 type TipoServicio = { _id: string; nombre: string; intervaloHrs?: number };
 type Usuario      = { _id: string; nombre: string; rol: string };
 
-// ── CAMBIO 3b: quitados costoRefacciones y costoManoObra ──
 const emptyForm = {
   montacargas: "", cliente: "", tipoServicio: "", tecnicoAsignado: "",
   fechaReporte: new Date().toISOString().split("T")[0],
@@ -77,6 +77,28 @@ const TREINTA_MIN = 30 * 60 * 1000;
 
 function nanoid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// ── Botón micrófono reutilizable ──
+function BtnMic({ onResult, style }: { onResult: (t: string) => void; style?: React.CSSProperties }) {
+  const { escuchando, iniciar, detener } = useSpeechRecognition(onResult);
+  return (
+    <button
+      type="button"
+      onClick={escuchando ? detener : iniciar}
+      style={{
+        background: escuchando ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.1)",
+        border: `1.5px solid ${escuchando ? "var(--red)" : "rgba(245,158,11,0.3)"}`,
+        borderRadius: 8, padding: "8px 12px", cursor: "pointer",
+        fontSize: "1.2rem", lineHeight: 1, flexShrink: 0,
+        animation: escuchando ? "pulse 1s infinite" : "none",
+        ...style,
+      }}
+      title={escuchando ? "Toca para detener" : "Toca para dictar"}
+    >
+      {escuchando ? "🔴" : "🎙️"}
+    </button>
+  );
 }
 
 function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas?: Pausa[]; grande?: boolean }) {
@@ -510,22 +532,16 @@ export default function Servicios() {
     setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: estatus as any } : sv));
   }
 
-  // ── CAMBIO 3a: al cambiar montacargas, autocompletar cliente ──
   function onMontaChange(montaId: string) {
     const monta = montas.find(m => m._id === montaId);
     setForm((p: any) => ({ ...p, montacargas: montaId, cliente: monta?.clienteActual?._id ?? p.cliente }));
   }
 
-  // ── CAMBIO 3a: al cambiar cliente, filtrar montacargas ──
   function onClienteChange(clienteId: string) {
     setForm((p: any) => ({ ...p, cliente: clienteId, montacargas: "" }));
   }
 
-  // ── CAMBIO 3a: montas filtradas por cliente ──
-  const montasFiltradas = form.cliente
-    ? montas.filter(m => m.clienteActual?._id === form.cliente)
-    : montas;
-
+  const montasFiltradas  = form.cliente ? montas.filter(m => m.clienteActual?._id === form.cliente) : montas;
   const montasSinCliente = form.cliente && montasFiltradas.length === 0;
 
   function buildOrdenTrabajo(s: Servicio): OrdenTrabajoReporte {
@@ -815,6 +831,7 @@ export default function Servicios() {
           </div>
         )}
 
+        {/* ── Modal pausar técnico — CON DICTADO DE VOZ ── */}
         {pausarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
             <div className="modal" style={{ maxWidth: 440 }}>
@@ -825,7 +842,22 @@ export default function Servicios() {
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: "1rem" }}>¿Por qué pausas el servicio?</label>
-                <textarea className="form-textarea" rows={4} value={razonPausa} onChange={e => setRazonPausa(e.target.value)} placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..." style={{ fontSize: "1rem" }} autoFocus />
+                {/* ── Dictado de voz ── */}
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <textarea
+                    className="form-textarea"
+                    rows={4}
+                    value={razonPausa}
+                    onChange={e => setRazonPausa(e.target.value)}
+                    placeholder="Escribe o usa el micrófono 🎙️..."
+                    style={{ fontSize: "1rem", flex: 1 }}
+                    autoFocus
+                  />
+                  <BtnMic onResult={texto => setRazonPausa(p => p ? p + " " + texto : texto)} />
+                </div>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+                  🎙️ Toca el micrófono para dictar en lugar de escribir
+                </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
@@ -839,6 +871,7 @@ export default function Servicios() {
           </div>
         )}
 
+        {/* ── Modal cerrar técnico — CON DICTADO, HORÓMETRO OPCIONAL, BOTONES ESTATUS ── */}
         {cerrarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
             <div className="modal" style={{ maxWidth: 520 }}>
@@ -858,30 +891,83 @@ export default function Servicios() {
                 </div>
               )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
+
               <div className="form-grid">
+                {/* ── Horómetro opcional ── */}
                 <div className="form-group">
-                  <label className="form-label">Horómetro al cierre</label>
-                  <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
+                  <label className="form-label">
+                    Horómetro al cierre
+                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(opcional — dejar en 0 si no aplica)</span>
+                  </label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    value={cerrarForm.horometro}
+                    onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))}
+                    placeholder="0"
+                  />
                 </div>
+
                 <div className="form-group">
                   <label className="form-label">Próximo servicio</label>
                   <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
                 </div>
+
+                {/* ── Estatus como botones grandes ── */}
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label className="form-label">Estatus del equipo al cerrar</label>
-                  <select className="form-select" value={cerrarForm.estatusMonta} onChange={e => setCerrarForm((p: any) => ({ ...p, estatusMonta: e.target.value }))}>
-                    <option value="disponible">Disponible</option>
-                    <option value="rentado">Rentado</option>
-                  </select>
+                  <label className="form-label" style={{ marginBottom: 8 }}>¿Cómo queda el equipo?</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "disponible" }))}
+                      style={{
+                        padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--border)"}`,
+                        background: cerrarForm.estatusMonta === "disponible" ? "rgba(34,197,94,0.15)" : "var(--surface2)",
+                        color: cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--text-muted)",
+                        fontSize: "1rem", fontWeight: 700, cursor: "pointer", textAlign: "center",
+                      }}
+                    >
+                      ✅ Disponible
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "rentado" }))}
+                      style={{
+                        padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--border)"}`,
+                        background: cerrarForm.estatusMonta === "rentado" ? "rgba(59,130,246,0.15)" : "var(--surface2)",
+                        color: cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--text-muted)",
+                        fontSize: "1rem", fontWeight: 700, cursor: "pointer", textAlign: "center",
+                      }}
+                    >
+                      🏭 Rentado
+                    </button>
+                  </div>
                 </div>
+
+                {/* ── Notas con dictado de voz ── */}
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Notas / trabajos realizados</label>
-                  <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} style={{ fontSize: "1rem" }} />
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <textarea
+                      className="form-textarea"
+                      value={cerrarForm.notasCierre}
+                      onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))}
+                      placeholder="Escribe o usa el micrófono 🎙️ para dictar los trabajos realizados..."
+                      rows={4}
+                      style={{ fontSize: "1rem", flex: 1 }}
+                    />
+                    <BtnMic onResult={texto => setCerrarForm((p: any) => ({ ...p, notasCierre: p.notasCierre ? p.notasCierre + " " + texto : texto }))} />
+                  </div>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+                    🎙️ Toca el micrófono y habla — el texto aparece solo
+                  </p>
                 </div>
+
                 <div className="form-group"><FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" /></div>
                 <div className="form-group"><FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" /></div>
                 <div className="form-group"><FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" /></div>
               </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
                   onClick={cerrar} disabled={saving}>
@@ -893,6 +979,9 @@ export default function Servicios() {
             </div>
           </div>
         )}
+
+        {/* animación pulso para micrófono activo */}
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
       </>
     );
   }
@@ -997,14 +1086,10 @@ export default function Servicios() {
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
                           {s.ubicacionInicio && (
-                            <a className="btn btn-secondary btn-sm"
-                              href={"https://www.google.com/maps?q=" + s.ubicacionInicio.lat + "," + s.ubicacionInicio.lng}
-                              target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>📍</a>
+                            <a className="btn btn-secondary btn-sm" href={"https://www.google.com/maps?q=" + s.ubicacionInicio.lat + "," + s.ubicacionInicio.lng} target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>📍</a>
                           )}
                           {s.ubicacionCierre && (
-                            <a className="btn btn-secondary btn-sm"
-                              href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng}
-                              target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>🏁</a>
+                            <a className="btn btn-secondary btn-sm" href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng} target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>🏁</a>
                           )}
                           {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
@@ -1092,7 +1177,6 @@ export default function Servicios() {
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
             <h2 className="modal-title">Nuevo servicio</h2>
             <div className="form-grid">
-              {/* ── CAMBIO 3a: cliente primero para filtrar montas ── */}
               <div className="form-group">
                 <label className="form-label">Cliente</label>
                 <select className="form-select" value={form.cliente} onChange={e => onClienteChange(e.target.value)}>
@@ -1102,17 +1186,8 @@ export default function Servicios() {
               </div>
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
-                {/* ── CAMBIO 3a: aviso si cliente seleccionado no tiene equipos ── */}
-                {montasSinCliente && (
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>
-                    Este cliente no tiene equipos asignados — mostrando todos
-                  </p>
-                )}
-                {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && (
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>
-                    Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente
-                  </p>
-                )}
+                {montasSinCliente && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Este cliente no tiene equipos asignados — mostrando todos</p>}
+                {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente</p>}
                 <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
                   <option value="">Selecciona equipo...</option>
                   {(montasSinCliente ? montas : montasFiltradas).map(m => (
@@ -1148,7 +1223,6 @@ export default function Servicios() {
                 <label className="form-label">Problema / descripción *</label>
                 <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema o trabajo a realizar..." rows={3} />
               </div>
-              {/* ── CAMBIO 3b: costoRefacciones y costoManoObra eliminados ── */}
             </div>
             {form.tipoServicio && (
               <div style={{ padding: "10px 14px", background: "rgba(255,180,0,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", fontSize: "0.82rem", color: "var(--accent)", marginTop: 8 }}>
@@ -1163,7 +1237,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal pausar ── */}
+      {/* ── Modal pausar vista normal — CON DICTADO ── */}
       {pausarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
           <div className="modal" style={{ maxWidth: 440 }}>
@@ -1174,7 +1248,10 @@ export default function Servicios() {
             </p>
             <div className="form-group">
               <label className="form-label">Razón de la pausa *</label>
-              <textarea className="form-textarea" rows={3} value={razonPausa} onChange={e => setRazonPausa(e.target.value)} placeholder="Ej. Falta de refacción, almuerzo, espera de cliente..." autoFocus />
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <textarea className="form-textarea" rows={3} value={razonPausa} onChange={e => setRazonPausa(e.target.value)} placeholder="Escribe o usa el micrófono 🎙️..." autoFocus style={{ flex: 1 }} />
+                <BtnMic onResult={texto => setRazonPausa(p => p ? p + " " + texto : texto)} />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setPausarModal(null)}>Cancelar</button>
@@ -1186,7 +1263,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal cerrar ── */}
+      {/* ── Modal cerrar vista normal — CON DICTADO Y HORÓMETRO OPCIONAL ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1212,7 +1289,10 @@ export default function Servicios() {
             )}
             <div className="form-grid">
               <div className="form-group">
-                <label className="form-label">Horómetro al cierre</label>
+                <label className="form-label">
+                  Horómetro al cierre
+                  <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(dejar en 0 si no aplica)</span>
+                </label>
                 <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
               </div>
               <div className="form-group">
@@ -1228,7 +1308,10 @@ export default function Servicios() {
               </div>
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Notas de cierre / trabajos realizados</label>
-                <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Trabajos realizados, observaciones..." rows={3} />
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))} placeholder="Escribe o usa el micrófono 🎙️..." rows={3} style={{ flex: 1 }} />
+                  <BtnMic onResult={texto => setCerrarForm((p: any) => ({ ...p, notasCierre: p.notasCierre ? p.notasCierre + " " + texto : texto }))} />
+                </div>
               </div>
               <div className="form-group"><FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" /></div>
               <div className="form-group"><FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" /></div>
@@ -1241,6 +1324,8 @@ export default function Servicios() {
           </div>
         </div>
       )}
+
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
     </>
   );
 }
