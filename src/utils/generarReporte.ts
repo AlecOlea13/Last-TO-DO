@@ -15,6 +15,7 @@ export type CotizacionReporte = {
   tipo: string;
   tipoPeriodo?: string;
   condiciones?: string;
+  moneda?: "MXN" | "USD"; // ── NUEVO ──
   cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
     numeroEconomico?: string; marca: string; modelo: string; capacidad?: string;
@@ -35,7 +36,6 @@ export type CotizacionReporte = {
   iva: number;
   total: number;
   flete?: number;
-  // ── Nuevo ──
   cursoDC3?: {
     modalidad?: string;
     participantes?: number;
@@ -59,13 +59,22 @@ export type OrdenTrabajoReporte = {
   costoRefacciones?: number; costoManoObra?: number; observaciones?: string;
 };
 
+// ── Helper moneda ──
+function fmtMoneda(valor: number, moneda: "MXN" | "USD" = "MXN"): string {
+  const simbolo = moneda === "USD" ? "USD $" : "$";
+  return `${simbolo}${valor.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+}
+
 function generarPlantillaCondiciones(
   tipo: string,
   tipoPeriodo?: string,
   vigenciaDias: number = 30,
   entregaDias: number = 14,
   incluirCancelacion: boolean = false,
+  moneda: "MXN" | "USD" = "MXN", // ── NUEVO ──
 ): string {
+  const monedaTexto = moneda === "USD" ? "dólares americanos (USD)" : "pesos mexicanos";
+  const monedaSimbolo = moneda === "USD" ? "USD" : "M.N.";
   const lineas: string[] = [];
 
   if (tipo === "renta") {
@@ -73,22 +82,22 @@ function generarPlantillaCondiciones(
     const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
     lineas.push(`Contrato por ${plazo}.`);
     if (incluirCancelacion) lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la firma de contrato.`);
   } else if (tipo === "venta") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("El equipo se entrega en las condiciones descritas en esta cotización.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días, sujeto a disponibilidad.`);
   } else if (tipo === "refacciones") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("Las existencias son salvo previa venta.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
   } else if (tipo === "curso") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("El curso incluye material didáctico y evaluación teórica y práctica.");
     lineas.push("La calificación mínima aprobatoria es de 80%.");
@@ -97,7 +106,7 @@ function generarPlantillaCondiciones(
     lineas.push("El cliente deberá proporcionar: sala de juntas o salón, cañón proyector, hojas blancas y plumas.");
     lineas.push("Para la evaluación práctica, el cliente deberá tener disponible un montacargas en buen estado.");
   } else {
-    lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
+    lineas.push(`Los precios son considerados para su pago en ${monedaTexto} (${monedaSimbolo}) y causan el 16% de IVA.`);
     lineas.push("El servicio solo incluye lo señalado en esta cotización.");
     lineas.push("De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.");
     lineas.push(`Vigencia de la cotización, es de ${vigenciaDias} días naturales.`);
@@ -113,14 +122,14 @@ function condicionesHtml(cot: CotizacionReporte): string {
   if (cot.condiciones?.trim()) {
     return cot.condiciones.split("\n").filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join("");
   }
-  return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo).split("\n").map(l => `<li>${l}</li>`).join("");
+  return generarPlantillaCondiciones(cot.tipo, cot.tipoPeriodo, 30, 14, false, cot.moneda).split("\n").map(l => `<li>${l}</li>`).join("");
 }
 
-// ── NUEVO: reporte HTML para cursos DC3 ──
 function htmlCurso(cot: CotizacionReporte): string {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+  const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Tania Hernandez";
   const asesorPuesto = cot.asesor?.puesto   ?? "Ventas";
@@ -142,7 +151,7 @@ function htmlCurso(cot: CotizacionReporte): string {
     "practico":          "Práctico",
     "teorico-practico":  "Teórico-Práctico",
   };
-  const modalidad = modalidadLabel[dc3.modalidad ?? "teorico-practico"] ?? "Teórico-Práctico";
+  const modalidad  = modalidadLabel[dc3.modalidad ?? "teorico-practico"] ?? "Teórico-Práctico";
   const lugarCurso = dc3.lugar ?? cot.lugar ?? "Instalaciones del cliente";
 
   const temasTeoricos = [
@@ -215,7 +224,6 @@ function htmlCurso(cot: CotizacionReporte): string {
     ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
-    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
     ".saludo { font-size: 10pt; margin: 12px 0 16px; line-height: 1.7; }",
     ".curso-titulo { font-size: 13pt; font-weight: 900; text-align: center; border: 2px solid #222; padding: 10px; margin: 12px 0; background: #f5f5f5; letter-spacing: 0.5px; }",
@@ -243,6 +251,7 @@ function htmlCurso(cot: CotizacionReporte): string {
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; font-size: 10pt; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
     ".constancia-badge { display: inline-block; background: #16a34a; color: #fff; border-radius: 20px; padding: 3px 12px; font-size: 9pt; font-weight: 700; margin-top: 8px; }",
+    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
     ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
     ".conditions ul { margin-top: 6px; padding-left: 18px; }",
     ".conditions li { margin-bottom: 2px; }",
@@ -251,7 +260,7 @@ function htmlCurso(cot: CotizacionReporte): string {
     "@media print { body { padding: 16px; } }",
     "</style>", "</head>", "<body>",
 
-    `<p class="folio-ref">${cot.folio}</p>`,
+    `<p style="text-align:center;font-size:8.5pt;color:#888;margin-bottom:6px;letter-spacing:.08em">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
     `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
@@ -271,6 +280,8 @@ function htmlCurso(cot: CotizacionReporte): string {
     clienteTel      ? "Tel. " + clienteTel + "<br>"                             : "",
     clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
     "</div>",
+
+    moneda === "USD" ? `<div><span class="moneda-badge">💵 Precios en Dólares Americanos (USD)</span></div>` : "",
 
     `<div class="saludo">El equipo de <strong>Pipsa Montacargas</strong> le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta <strong>COTIZACIÓN</strong> le pueda generar.</div>`,
 
@@ -302,15 +313,15 @@ function htmlCurso(cot: CotizacionReporte): string {
         <tr>
           <td>Curso ${modalidad} — Operador de Montacargas DC-3</td>
           <td style="text-align:center">${participantes}</td>
-          <td style="text-align:right">$${precioPorPersona.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-          <td style="text-align:right;font-weight:700">$${(participantes * precioPorPersona).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right">${fmtMoneda(precioPorPersona, moneda)}</td>
+          <td style="text-align:right;font-weight:700">${fmtMoneda(participantes * precioPorPersona, moneda)}</td>
         </tr>
       </tbody>
     </table>`,
     '<div class="totals">',
-    `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
+    `<div class="total-row"><span>IVA 16%</span><span>${fmtMoneda(cot.iva, moneda)}</span></div>`,
+    `<div class="total-row grand-total"><span>TOTAL</span><span>${fmtMoneda(cot.total, moneda)}</span></div>`,
     "</div>",
     "</div>",
 
@@ -337,6 +348,7 @@ function htmlServicio(cot: CotizacionReporte): string {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+  const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
   const asesorPuesto = cot.asesor?.puesto   ?? "Asesor comercial";
@@ -362,7 +374,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
         <span>${s.descripcion}</span>
-        <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+        <span>${fmtMoneda(s.precio, moneda)}</span>
       </div>`
     ).join("");
     return `<tr>
@@ -374,8 +386,8 @@ function htmlServicio(cot: CotizacionReporte): string {
         <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
         ${subHtml}
       </td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:110px">${fmtMoneda(item.total, moneda)}</td>
     </tr>`;
   }).join("");
 
@@ -394,6 +406,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".equipo-info { font-size: 10pt; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; padding: 7px 12px; margin-bottom: 10px; color: #333; }",
     ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; white-space: pre-wrap; }",
     ".intro { margin-bottom: 10px; font-size: 10pt; }",
+    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
     "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
@@ -433,6 +446,8 @@ function htmlServicio(cot: CotizacionReporte): string {
     clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
     "</div>",
 
+    moneda === "USD" ? `<div><span class="moneda-badge">💵 Precios en Dólares Americanos (USD)</span></div>` : "",
+
     equipoTexto ? `<div class="equipo-info">🔧 <strong>Equipo:</strong>&nbsp;&nbsp;${equipoTexto}</div>` : "",
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
@@ -445,9 +460,9 @@ function htmlServicio(cot: CotizacionReporte): string {
     "</table>",
 
     '<div class="totals">',
-    `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
+    `<div class="total-row"><span>IVA 16%</span><span>${fmtMoneda(cot.iva, moneda)}</span></div>`,
+    `<div class="total-row grand-total"><span>TOTAL</span><span>${fmtMoneda(cot.total, moneda)}</span></div>`,
     "</div>",
 
     '<div class="conditions">',
@@ -473,6 +488,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
   const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+  const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Richard Kimche";
   const asesorPuesto = cot.asesor?.puesto   ?? "Director comercial";
@@ -508,7 +524,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
         <span>${s.descripcion}</span>
-        <span>$${s.precio.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+        <span>${fmtMoneda(s.precio, moneda)}</span>
       </div>`
     ).join("");
     const equipoExtra = idx === 0 && equipoDatos
@@ -526,8 +542,8 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
         ${subHtml}
       </td>
       <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:60px">${item.cantidad}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">$${item.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:120px">${fmtMoneda(item.total, moneda)}</td>
     </tr>`;
   }).join("");
 
@@ -545,6 +561,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
     ".saludo { font-size: 10pt; margin: 12px 0; line-height: 1.7; }",
     ".section-title { font-weight: bold; font-size: 11pt; margin: 12px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
+    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
     "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }",
     "thead { background: #222; color: white; }",
     "thead th { padding: 8px; text-align: left; }",
@@ -584,6 +601,8 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     clienteContacto ? "<strong>At&#39;n: " + clienteContacto + "</strong><br>" : "",
     "</div>",
 
+    moneda === "USD" ? `<div><span class="moneda-badge">💵 Precios en Dólares Americanos (USD)</span></div>` : "",
+
     '<div class="saludo">',
     `El equipo de PIPSA Montacargas le envía un cordial saludo y se pone a sus órdenes con cualquier duda que esta COTIZACIÓN de <strong>${tipoLabel}</strong> le pueda generar.`,
     "</div>",
@@ -601,9 +620,9 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     </table>`,
 
     '<div class="totals">',
-    `<div class="total-row"><span>SUB TOTAL</span><span>$${cot.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row"><span>IVA 16%</span><span>$${cot.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
-    `<div class="total-row grand-total"><span>TOTAL</span><span>$${cot.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>`,
+    `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
+    `<div class="total-row"><span>IVA 16%</span><span>${fmtMoneda(cot.iva, moneda)}</span></div>`,
+    `<div class="total-row grand-total"><span>TOTAL</span><span>${fmtMoneda(cot.total, moneda)}</span></div>`,
     cot.tipo === "renta" ? `<p class="precio-nota">* El precio indicado corresponde a la renta del equipo.</p>` : "",
     "</div>",
 
@@ -838,7 +857,6 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 </html>`;
 }
 
-// ── Selector de template ──
 function resolverHtml(cot: CotizacionReporte): Promise<string> | string {
   if (cot.tipo === "venta" || cot.tipo === "renta") return htmlVentaRenta(cot);
   if (cot.tipo === "curso")                          return htmlCurso(cot);

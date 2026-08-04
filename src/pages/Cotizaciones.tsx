@@ -23,6 +23,7 @@ type Cotizacion = {
   _id: string; folio: string; tipo: "servicio" | "renta" | "venta" | "refacciones" | "curso";
   tipoPeriodo?: "semanal" | "mensual" | "anual";
   condiciones?: string;
+  moneda?: "MXN" | "USD";
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; contacto?: string };
   clienteOcasional?: ClienteOcasional;
   montacargas?: {
@@ -186,29 +187,31 @@ function SearchableSelect({
   );
 }
 
-function generarPlantillaCondiciones(tipo: string, tipoPeriodo?: string, vigenciaDias: number = 30, entregaDias: number = 14, incluirCancelacion: boolean = false): string {
+function generarPlantillaCondiciones(tipo: string, tipoPeriodo?: string, vigenciaDias: number = 30, entregaDias: number = 14, incluirCancelacion: boolean = false, moneda: "MXN" | "USD" = "MXN"): string {
+  const monedaTexto   = moneda === "USD" ? "dólares americanos (USD)" : "pesos mexicanos";
+  const monedaSimbolo = moneda === "USD" ? "USD" : "M.N.";
   const lineas: string[] = [];
   if (tipo === "renta") {
     const plazoLabel: Record<string, string> = { semanal: "1 semana", mensual: "1 mes", anual: "1 año" };
     const plazo = plazoLabel[tipoPeriodo ?? "mensual"] ?? "1 mes";
     lineas.push(`Contrato por ${plazo}.`);
     if (incluirCancelacion) lineas.push("Términos de Cancelación: Se puede cancelar contrato con 60 días de anticipación después de los 6 meses.");
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("La renta del equipo incluye mantenimiento preventivo cada 500 horas y mantenimientos correctivos sin costo mientras el daño no sea ocasionado por mal uso.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la firma de contrato.`);
   } else if (tipo === "venta") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("El equipo se entrega en las condiciones descritas en esta cotización.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días, sujeto a disponibilidad.`);
   } else if (tipo === "refacciones") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("Las existencias son salvo previa venta.");
     lineas.push(`Tiempo de entrega: ${entregaDias} días a partir de la confirmación del pedido.`);
   } else if (tipo === "curso") {
-    lineas.push("Todos los precios son en pesos mexicanos más IVA.");
+    lineas.push(`Todos los precios son en ${monedaTexto} más IVA.`);
     lineas.push(`Vigencia de la cotización: ${vigenciaDias} días a partir de la fecha del documento.`);
     lineas.push("El curso incluye material didáctico y evaluación teórica y práctica.");
     lineas.push("La calificación mínima aprobatoria es de 80%.");
@@ -217,7 +220,7 @@ function generarPlantillaCondiciones(tipo: string, tipoPeriodo?: string, vigenci
     lineas.push("El cliente deberá proporcionar: sala de juntas o salón, cañón proyector, hojas blancas y plumas.");
     lineas.push("Para la evaluación práctica, el cliente deberá tener disponible un montacargas en buen estado.");
   } else {
-    lineas.push("Los precios son considerados para su pago pesos M.N. y causan el 16% de IVA.");
+    lineas.push(`Los precios son considerados para su pago en ${monedaTexto} (${monedaSimbolo}) y causan el 16% de IVA.`);
     lineas.push("El servicio solo incluye lo señalado en esta cotización.");
     lineas.push("De presentar alguna falla adicional ó requerir alguna refacción adicional, se cotizará por aparte.");
     lineas.push(`Vigencia de la cotización, es de ${vigenciaDias} días naturales.`);
@@ -260,8 +263,8 @@ export default function Cotizaciones() {
   const [savingComentario, setSavingComentario]       = useState(false);
   const [uploadingIdx, setUploadingIdx]               = useState<number | null>(null);
   const [verTodosMontas, setVerTodosMontas]           = useState(false);
-  // ── CAMBIO 2: nuevo estado ──
   const [guardarEquipoCliente, setGuardarEquipoCliente] = useState(false);
+  const [moneda, setMoneda]                           = useState<"MXN" | "USD">("MXN");
 
   const [modalReporte, setModalReporte] = useState(false);
   const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
@@ -319,7 +322,8 @@ export default function Cotizaciones() {
   function openNew() {
     setEditing(null);
     setVerTodosMontas(false);
-    setGuardarEquipoCliente(false); // ── CAMBIO 2
+    setGuardarEquipoCliente(false);
+    setMoneda("MXN");
     setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }], cursoDC3: { ...emptyCursoDC3 } });
     setModal(true);
   }
@@ -327,7 +331,8 @@ export default function Cotizaciones() {
   function openEdit(c: Cotizacion) {
     setEditing(c);
     setVerTodosMontas(false);
-    setGuardarEquipoCliente(false); // ── CAMBIO 2
+    setGuardarEquipoCliente(false);
+    setMoneda(c.moneda ?? "MXN");
     const esOcasional = !c.cliente && !!c.clienteOcasional?.nombre;
     setForm({
       folio: c.folio, tipo: c.tipo, tipoPeriodo: c.tipoPeriodo ?? "mensual", condiciones: c.condiciones ?? "",
@@ -346,7 +351,8 @@ export default function Cotizaciones() {
   function clonar(c: Cotizacion) {
     setEditing(null);
     setVerTodosMontas(false);
-    setGuardarEquipoCliente(false); // ── CAMBIO 2
+    setGuardarEquipoCliente(false);
+    setMoneda(c.moneda ?? "MXN");
     setForm({
       folio: "", tipo: c.tipo, tipoPeriodo: c.tipoPeriodo ?? "mensual", condiciones: c.condiciones ?? "",
       cliente: c.cliente?._id ?? "", esOcasional: !c.cliente && !!c.clienteOcasional?.nombre,
@@ -488,7 +494,7 @@ export default function Cotizaciones() {
     if (!tieneClienteValido) return;
     setSaving(true);
     try {
-      const payload: any = { ...form };
+      const payload: any = { ...form, moneda };
       delete payload.esOcasional;
       if (form.esOcasional) {
         payload.cliente = null;
@@ -527,7 +533,6 @@ export default function Cotizaciones() {
         setCotizaciones(prev => [data, ...prev]);
       }
 
-      // ── CAMBIO 2: guardar clienteActual en montacargas si se marcó el checkbox ──
       if (guardarEquipoCliente && form.cliente && form.montacargas) {
         await api.put(`/montacargas/${form.montacargas}`, { clienteActual: form.cliente });
         setMontas(prev => prev.map(m =>
@@ -630,7 +635,7 @@ export default function Cotizaciones() {
   const esCurso              = form.tipo === "curso";
 
   function generarPlantilla() {
-    setForm((p: any) => ({ ...p, condiciones: generarPlantillaCondiciones(form.tipo, form.tipoPeriodo) }));
+    setForm((p: any) => ({ ...p, condiciones: generarPlantillaCondiciones(form.tipo, form.tipoPeriodo, 30, 14, false, moneda) }));
   }
 
   const cotsSemana  = getCotizacionesSemana();
@@ -737,16 +742,11 @@ export default function Cotizaciones() {
               <div className="form-group" style={{ margin: 0 }}><label className="form-label">Modelo</label><input className="form-input" value={form.equipoModelo ?? ""} onChange={e => setForm((p: any) => ({ ...p, equipoModelo: e.target.value }))} placeholder="Ej. YL_456" /></div>
               <div className="form-group" style={{ margin: 0 }}><label className="form-label">Serie</label><input className="form-input" value={form.equipoSerie ?? ""} onChange={e => setForm((p: any) => ({ ...p, equipoSerie: e.target.value }))} placeholder="Ej. 1A3234RT45" /></div>
             </div>
-            {/* ── CAMBIO 2: checkbox guardar equipo del cliente ── */}
             {form.cliente && form.montacargas && !montaSeleccionada?.clienteActual && (
               <div style={{ marginTop: 10 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={guardarEquipoCliente}
-                    onChange={e => setGuardarEquipoCliente(e.target.checked)}
-                    style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }}
-                  />
+                  <input type="checkbox" checked={guardarEquipoCliente} onChange={e => setGuardarEquipoCliente(e.target.checked)}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }} />
                   <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text)" }}>
                     💾 Guardar equipo de este cliente
                     <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
@@ -888,6 +888,34 @@ export default function Cotizaciones() {
           </div>
         )}
 
+        {/* ── Selector de moneda ── */}
+        <div className="form-group">
+          <label className="form-label">Moneda</label>
+          <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+            {(["MXN", "USD"] as const).map((val, i) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setMoneda(val)}
+                style={{
+                  flex: 1, padding: "10px 8px", border: "none", cursor: "pointer",
+                  background: moneda === val ? "rgba(245,158,11,0.15)" : "var(--surface2)",
+                  color: moneda === val ? "var(--accent)" : "var(--text-muted)",
+                  fontWeight: moneda === val ? 700 : 400, fontSize: "0.85rem",
+                  borderRight: i === 0 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                {val === "MXN" ? "🇲🇽 Pesos (MXN)" : "🇺🇸 Dólares (USD)"}
+              </button>
+            ))}
+          </div>
+          {moneda === "USD" && (
+            <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 6 }}>
+              💡 Al generar la plantilla de condiciones se usará lenguaje en dólares automáticamente
+            </p>
+          )}
+        </div>
+
         <div className="form-group span-2" style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>📋 Condiciones comerciales</p>
@@ -935,7 +963,7 @@ export default function Cotizaciones() {
                     <input className="form-input" type="number" value={item.cantidad} onChange={e => updateItem(i, "cantidad", +e.target.value)} style={{ padding: "8px" }} />
                     <textarea className="form-textarea" value={item.descripcion} onChange={e => updateItem(i, "descripcion", e.target.value)} placeholder={esRefacciones ? "Nombre de la refacción" : "Descripción del concepto"} rows={2} style={{ resize: "vertical", minHeight: 40 }} />
                     <input className="form-input" type="number" value={item.precioUnitario} onChange={e => updateItem(i, "precioUnitario", +e.target.value)} style={{ padding: "8px" }} readOnly={tieneSubconceptos} title={tieneSubconceptos ? "Calculado desde subconceptos" : ""} />
-                    <input className="form-input" value={`$${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
+                    <input className="form-input" value={`${moneda === "USD" ? "USD $" : "$"}${item.total.toLocaleString()}`} readOnly style={{ padding: "8px", color: "var(--text-muted)" }} />
                     <button className="btn btn-danger btn-icon" onClick={() => removeItem(i)}>✕</button>
                   </div>
                   {!esRefacciones && (
@@ -963,9 +991,9 @@ export default function Cotizaciones() {
             })}
           </div>
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA (16%):</span><span>${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-            <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}><span>Total:</span><span>${form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>{moneda === "USD" ? "USD " : ""}${form.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+            <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>IVA (16%):</span><span>{moneda === "USD" ? "USD " : ""}${form.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
+            <div style={{ display: "flex", gap: 24, fontSize: "1rem", fontWeight: 700, color: "var(--text)" }}><span>Total:</span><span>{moneda === "USD" ? "USD $" : "$"}{form.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
           </div>
         </div>
       )}
@@ -1044,11 +1072,13 @@ export default function Cotizaciones() {
           ) : (
             <table>
               <thead>
-                <tr><th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Precio base</th><th>Total c/IVA</th><th>Estatus</th><th>Comentarios</th><th></th></tr>
+                <tr><th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Moneda</th><th>Precio base</th><th>Total c/IVA</th><th>Estatus</th><th>Comentarios</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(c => {
                   const precioBase = precioBaseConcepto(c);
+                  const mon = c.moneda ?? "MXN";
+                  const simb = mon === "USD" ? "USD $" : "$";
                   return (
                     <tr key={c._id}>
                       <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{c.folio}</td>
@@ -1066,16 +1096,21 @@ export default function Cotizaciones() {
                       <td style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{c.asesor?.nombre ?? "—"}</td>
                       <td>{fmt(c.fecha)}</td>
                       <td>
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: mon === "USD" ? "#1d4ed8" : "var(--text-muted)", background: mon === "USD" ? "rgba(29,78,216,0.1)" : "var(--surface2)", padding: "2px 7px", borderRadius: 6 }}>
+                          {mon === "USD" ? "💵 USD" : "🇲🇽 MXN"}
+                        </span>
+                      </td>
+                      <td>
                         {precioBase !== null ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                            <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.92rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                            <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.92rem" }}>{simb}{precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                             <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
                               {c.tipo === "renta" ? "precio renta" : c.tipo === "venta" ? "precio venta" : c.tipo === "curso" ? `× ${c.cursoDC3?.participantes ?? 1} pers.` : ""}
                             </span>
                           </div>
                         ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                       </td>
-                      <td style={{ fontWeight: 700 }}>${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ fontWeight: 700 }}>{simb}{c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           <span className={`badge ${ESTATUS_BADGE[c.estatus] ?? "badge-gray"}`}>
@@ -1099,10 +1134,10 @@ export default function Cotizaciones() {
                       <td>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                           <button className="btn btn-secondary btn-sm"
-                            onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}
+                            onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}
                             title="Ver reporte">👁️</button>
                           <button className="btn btn-primary btn-sm"
-                            onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}
+                            onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}
                             title="Descargar PDF">📥 PDF</button>
                           <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
                           <button className="btn btn-secondary btn-sm" onClick={() => clonar(c)} title="Clonar" disabled={saving}>📋</button>
@@ -1154,7 +1189,7 @@ export default function Cotizaciones() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               {[
                 { label: "Cotizaciones", val: cotsSemana.length,                                        color: "var(--accent)", icon: "📄" },
-                { label: "Monto total",  val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)",   icon: "💰" },
+                { label: "Monto total",  val: `$${totalSemana.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--text)", icon: "💰" },
                 { label: "Facturadas",   val: cotsSemana.filter(c => c.estatus === "facturada").length, color: "#3b82f6",       icon: "🧾" },
                 { label: "Activas",      val: cotsSemana.filter(c => c.estatus === "activa").length,    color: "#22c55e",       icon: "✅" },
               ].map(s => (
@@ -1214,6 +1249,8 @@ export default function Cotizaciones() {
                       <tbody>
                         {g.cotizaciones.map(c => {
                           const precioBase = precioBaseConcepto(c);
+                          const mon  = c.moneda ?? "MXN";
+                          const simb = mon === "USD" ? "USD $" : "$";
                           return (
                             <tr key={c._id}>
                               <td style={{ fontWeight: 700, fontFamily: "monospace", fontSize: "0.73rem" }}>{c.folio}</td>
@@ -1239,7 +1276,7 @@ export default function Cotizaciones() {
                               <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                                 {precioBase !== null ? (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-                                    <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.78rem" }}>${precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                    <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: "0.78rem" }}>{simb}{precioBase.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                                     <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>
                                       {c.tipo === "renta" ? "renta" : c.tipo === "venta" ? "venta" : c.tipo === "curso" ? "por persona" : ""}
                                     </span>
@@ -1247,7 +1284,7 @@ export default function Cotizaciones() {
                                 ) : <span style={{ color: "var(--text-muted)" }}>—</span>}
                               </td>
                               <td style={{ textAlign: "right", fontWeight: 700, whiteSpace: "nowrap", color: c.estatus === "cancelada" ? "var(--text-muted)" : "var(--text)" }}>
-                                ${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                                {simb}{c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
                               </td>
                               <td style={{ textAlign: "center" }}>
                                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
@@ -1261,7 +1298,7 @@ export default function Cotizaciones() {
                               </td>
                               <td>
                                 <button className="btn btn-secondary btn-sm" style={{ padding: "3px 7px" }} title="Ver cotización"
-                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3 })}>👁️</button>
+                                  onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}>👁️</button>
                               </td>
                             </tr>
                           );
