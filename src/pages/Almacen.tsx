@@ -90,6 +90,7 @@ type Solicitud = {
   cotizacion?: SolicitudCotizacion;
   items: SolicitudItem[];
   notas?: string;
+  moneda?: "MXN" | "USD"; // ── NUEVO ──
   estatus: "sin_liberar" | "liberada" | "cancelada";
   fechaLiberacion?: string;
   createdAt: string;
@@ -280,7 +281,6 @@ function SearchableCotizacion({
   );
 }
 
-// ── CAMBIO 4: componente searchable para vales de salida ──
 function ValeSearchable({
   refacciones, onAdd,
 }: {
@@ -393,6 +393,7 @@ export default function Almacen() {
   const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([emptySolicitudItem()]);
   const [solicitudNotas, setSolicitudNotas]   = useState("");
   const [solicitudCotizId, setSolicitudCotizId] = useState("");
+  const [solicitudMoneda, setSolicitudMoneda] = useState<"MXN" | "USD">("MXN"); // ── NUEVO ──
   const [savingSolicitud, setSavingSolicitud] = useState(false);
   const [verCotizacion, setVerCotizacion]     = useState<SolicitudCotizacion | null>(null);
 
@@ -434,7 +435,7 @@ export default function Almacen() {
 
       setCotizacionesDisp(
         cots.data.filter((c: any) => {
-          if (c.estatus !== "activa") return false;
+          if (c.estatus === "cancelada") return false;
           if (!["servicio", "refacciones"].includes(c.tipo)) return false;
           if (esGerencia) return true;
           if (asesorDelUsuario && c.asesor?._id === asesorDelUsuario) return true;
@@ -655,6 +656,157 @@ export default function Almacen() {
     }));
   }
 
+  // ── NUEVO: generar reporte de solicitud ──
+  function generarReporteSolicitud(s: Solicitud) {
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const fecha   = new Date(s.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
+    const mon     = s.moneda ?? "MXN";
+    const simb    = mon === "USD" ? "USD $" : "$";
+    const total   = s.items.reduce((sum, i) => sum + (i.precioEstimado ?? 0), 0);
+
+    const itemsHtml = s.items.map((item, i) => `
+      <tr style="background:${i % 2 === 0 ? "#f9f9f9" : "#fff"}">
+        <td style="padding:8px 12px;border:1px solid #ddd;font-weight:600">${item.nombre}</td>
+        <td style="padding:8px 12px;border:1px solid #ddd;text-align:center">${item.cantidad}</td>
+        <td style="padding:8px 12px;border:1px solid #ddd;text-align:center">${item.unidad}</td>
+        <td style="padding:8px 12px;border:1px solid #ddd;text-align:right">${item.precioUnitario ? simb + item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
+        <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;font-weight:700;color:#16a34a">${item.precioEstimado ? simb + item.precioEstimado.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
+        <td style="padding:8px 12px;border:1px solid #ddd;color:#555;font-size:9pt">${item.notas || "—"}</td>
+      </tr>
+    `).join("");
+
+    const cotHtml = s.cotizacion ? `
+      <div style="background:#f0f7ff;border:1px solid #bbd6f5;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:10pt">
+        <strong style="color:#1d4ed8">Cotización relacionada:</strong>
+        ${s.cotizacion.folio} — ${s.cotizacion.cliente?.nombre ?? s.cotizacion.clienteOcasional?.nombre ?? "Sin cliente"}
+        <span style="margin-left:12px;color:#555">${s.cotizacion.tipo}</span>
+        <span style="margin-left:12px;font-weight:700;color:#f59e0b">$${s.cotizacion.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+      </div>` : "";
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>${s.folio}</title>
+<style>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:11pt;color:#222;padding:32px;max-width:820px;margin:auto; }
+  .header { display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:20px; }
+  .header-left { display:flex;align-items:center;gap:14px; }
+  .logo { width:65px;height:65px;object-fit:contain;background:#000;border-radius:6px; }
+  .company { font-size:11pt;font-weight:700;max-width:320px;line-height:1.4; }
+  .header-right { text-align:right;font-size:9.5pt;line-height:1.8; }
+  .title-box { background:#222;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px; }
+  .title-box h1 { font-size:13pt;font-weight:900;letter-spacing:1px; }
+  .meta { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px; }
+  .meta-item { background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:8px 12px; }
+  .meta-label { font-size:8pt;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:2px; }
+  .meta-value { font-size:10.5pt;font-weight:600;color:#222; }
+  .moneda-badge { display:inline-block;background:${mon === "USD" ? "#1d4ed8" : "#15803d"};color:#fff;border-radius:6px;padding:3px 10px;font-size:9pt;font-weight:700;margin-left:8px; }
+  .estatus-badge { display:inline-block;padding:3px 12px;border-radius:20px;font-size:9pt;font-weight:700;margin-left:8px; }
+  table { width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10pt; }
+  thead { background:#222;color:#fff; }
+  thead th { padding:8px 12px;text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.06em; }
+  thead th:nth-child(2),thead th:nth-child(3) { text-align:center; }
+  thead th:nth-child(4),thead th:nth-child(5) { text-align:right; }
+  .total-row { display:flex;justify-content:flex-end;gap:40px;padding:10px 12px;background:#f9f9f9;border:1px solid #ddd;border-radius:4px;font-size:11pt;font-weight:700; }
+  .total-val { color:#16a34a; }
+  .notas-box { background:#fffbeb;border:1px solid #f0d060;border-radius:4px;padding:10px 14px;font-size:10pt;margin-top:12px; }
+  .firma-grid { display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:48px; }
+  .firma-box { text-align:center; }
+  .firma-line { border-top:1.5px solid #222;padding-top:6px;font-size:9.5pt;font-weight:700;text-transform:uppercase; }
+  .footer { margin-top:32px;border-top:1px solid #ccc;padding-top:12px;font-size:9pt;color:#888;text-align:center; }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
+  @media print { .print-btn { display:none; } body { padding:16px; } }
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header">
+  <div class="header-left">
+    <img src="${logoUrl}" class="logo" alt="Pipsa" />
+    <div class="company">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>
+  </div>
+  <div class="header-right">
+    <strong>Zapopán, Jal.; ${fecha}</strong><br>
+    Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>
+    45235, Zapopán, Jal.<br>
+    www.pipsamontacargas.com
+  </div>
+</div>
+
+<div class="title-box">
+  <h1>SOLICITUD DE COMPRA</h1>
+  <div>
+    <span style="color:#f59e0b;font-weight:700;font-size:11pt">${s.folio}</span>
+    <span class="moneda-badge">${mon === "USD" ? "💵 USD" : "🇲🇽 MXN"}</span>
+    <span class="estatus-badge" style="${s.estatus === "sin_liberar" ? "background:rgba(245,158,11,0.2);color:#b45309" : s.estatus === "liberada" ? "background:rgba(34,197,94,0.2);color:#15803d" : "background:rgba(107,114,128,0.2);color:#374151"}">
+      ${s.estatus === "sin_liberar" ? "Sin liberar" : s.estatus === "liberada" ? "✅ Liberada" : "❌ Cancelada"}
+    </span>
+  </div>
+</div>
+
+<div class="meta">
+  <div class="meta-item">
+    <div class="meta-label">Solicitado por</div>
+    <div class="meta-value">${s.solicitadoPor?.nombre ?? "—"}</div>
+  </div>
+  <div class="meta-item">
+    <div class="meta-label">Fecha</div>
+    <div class="meta-value">${fecha}</div>
+  </div>
+  <div class="meta-item">
+    <div class="meta-label">Liberado por</div>
+    <div class="meta-value">${s.liberadaPor?.nombre ?? "Pendiente"}</div>
+  </div>
+</div>
+
+${cotHtml}
+
+<table>
+  <thead>
+    <tr>
+      <th>Artículo</th>
+      <th style="width:60px">Cant.</th>
+      <th style="width:80px">Unidad</th>
+      <th style="width:120px">Precio u.</th>
+      <th style="width:130px">Total est.</th>
+      <th>Notas / Proveedor</th>
+    </tr>
+  </thead>
+  <tbody>${itemsHtml}</tbody>
+</table>
+
+${total > 0 ? `
+<div class="total-row">
+  <span>Total estimado:</span>
+  <span class="total-val">${simb}${total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+</div>` : ""}
+
+${s.notas ? `
+<div class="notas-box">
+  <strong>📝 Notas generales:</strong><br>
+  <span style="white-space:pre-wrap">${s.notas}</span>
+</div>` : ""}
+
+<div class="firma-grid">
+  <div class="firma-box"><div class="firma-line">Solicitado por: ${s.solicitadoPor?.nombre ?? "_______________"}</div></div>
+  <div class="firma-box"><div class="firma-line">Autorizado por: ${s.liberadaPor?.nombre ?? "_______________"}</div></div>
+</div>
+
+<div class="footer">
+  Control Pipsa — Equipos Industriales y Montacargas de Guadalajara · Documento generado automáticamente
+</div>
+<script>window.onload = function() { document.title = '${s.folio}'; };</script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
   async function guardarSolicitud() {
     if (!solicitudItems.some(i => i.nombre.trim())) return;
     setSavingSolicitud(true);
@@ -663,17 +815,20 @@ export default function Almacen() {
         items: solicitudItems.filter(i => i.nombre.trim()),
         notas: solicitudNotas,
         cotizacionId: solicitudCotizId || undefined,
+        moneda: solicitudMoneda, // ── NUEVO ──
       });
       setSolicitudes(prev => [data, ...prev]);
       setSolicitudModal(false);
       setSolicitudItems([emptySolicitudItem()]);
       setSolicitudNotas("");
       setSolicitudCotizId("");
+      setSolicitudMoneda("MXN");
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setSavingSolicitud(false); }
   }
+
   async function liberarSolicitud(id: string) {
     try {
       const { data } = await api.post(`/solicitudes-compra/${id}/liberar`);
@@ -743,7 +898,6 @@ export default function Almacen() {
               <button className="btn btn-primary" onClick={openNew}>+ Nueva refacción</button>
             </>
           )}
-          {/* ── botón vale también en tab vales ── */}
           {canAddRefac && tab === "vales" && (
             <button className="btn btn-secondary" onClick={openValeManual}>📤 Vale de salida</button>
           )}
@@ -754,6 +908,7 @@ export default function Almacen() {
               setSolicitudItems([emptySolicitudItem()]);
               setSolicitudNotas("");
               setSolicitudCotizId("");
+              setSolicitudMoneda("MXN"); // ── NUEVO ──
               setSolicitudModal(true);
             }}>
               + Nueva solicitud
@@ -941,8 +1096,15 @@ export default function Almacen() {
               <table>
                 <thead>
                   <tr>
-                    <th>Folio</th><th>Solicitado por</th><th>Cotización</th><th>Artículos</th>
-                    <th>Notas</th><th>Fecha</th><th>Estatus</th><th>Liberado por</th><th></th>
+                    <th>Folio</th>
+                    <th>Solicitado por</th>
+                    <th>Cotización</th>
+                    <th>Artículos</th>
+                    <th>Notas</th>
+                    <th>Fecha</th>
+                    <th>Estatus</th>
+                    <th>Liberado por</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -968,22 +1130,20 @@ export default function Almacen() {
                           <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>
                         )}
                       </td>
+                      {/* ── NUEVO: botón reporte en lugar de lista de artículos ── */}
                       <td>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          {s.items.map((item, i) => (
-                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                              {item.cantidad}× {item.nombre} ({item.unidad})
-                              {item.precioEstimado > 0 && (
-                                <span style={{ color: "var(--green)", marginLeft: 4 }}>
-                                  ~${item.precioEstimado.toLocaleString()}
-                                </span>
-                              )}
-                            </span>
-                          ))}
-                          {s.items.reduce((sum, i) => sum + (i.precioEstimado ?? 0), 0) > 0 && (
-                            <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--green)", borderTop: "1px solid var(--border)", paddingTop: 4, marginTop: 2 }}>
-                              Total: ${s.items.reduce((sum, i) => sum + (i.precioEstimado ?? 0), 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </span>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => generarReporteSolicitud(s)}
+                          title="Ver solicitud completa"
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          📄 Ver solicitud
+                        </button>
+                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+                          {s.items.length} artículo{s.items.length !== 1 ? "s" : ""}
+                          {s.moneda === "USD" && (
+                            <span style={{ marginLeft: 6, color: "#1d4ed8", fontWeight: 700 }}>💵 USD</span>
                           )}
                         </div>
                       </td>
@@ -1130,7 +1290,6 @@ export default function Almacen() {
             </div>
             <div style={{ marginTop: 16 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Material a entregar</p>
-              {/* ── CAMBIO 4: componente correcto sin hooks en IIFE ── */}
               <ValeSearchable refacciones={refacciones} onAdd={addValeItem} />
               {valeItems.length === 0 ? (
                 <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Sin items — agrega refacciones del selector de arriba</p>
@@ -1304,11 +1463,13 @@ export default function Almacen() {
         </div>
       )}
 
+      {/* ── Modal nueva solicitud ── */}
       {solicitudModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSolicitudModal(false)}>
           <div className="modal" style={{ maxWidth: 660 }}>
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
+
             <div className="form-group">
               <label className="form-label">
                 Cotización relacionada (opcional)
@@ -1344,10 +1505,31 @@ export default function Almacen() {
                 </div>
               )}
             </div>
+
             <div className="form-group">
               <label className="form-label">Notas generales (opcional)</label>
               <textarea className="form-textarea" rows={2} value={solicitudNotas} onChange={e => setSolicitudNotas(e.target.value)} placeholder="Ej. Urgente para servicio preventivo de la semana..." />
             </div>
+
+            {/* ── NUEVO: selector de moneda ── */}
+            <div className="form-group">
+              <label className="form-label">Moneda de la solicitud</label>
+              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                {(["MXN", "USD"] as const).map((val, i) => (
+                  <button key={val} type="button" onClick={() => setSolicitudMoneda(val)}
+                    style={{
+                      flex: 1, padding: "10px 8px", border: "none", cursor: "pointer",
+                      background: solicitudMoneda === val ? "rgba(245,158,11,0.15)" : "var(--surface2)",
+                      color: solicitudMoneda === val ? "var(--accent)" : "var(--text-muted)",
+                      fontWeight: solicitudMoneda === val ? 700 : 400, fontSize: "0.85rem",
+                      borderRight: i === 0 ? "1px solid var(--border)" : "none",
+                    }}>
+                    {val === "MXN" ? "🇲🇽 Pesos (MXN)" : "🇺🇸 Dólares (USD)"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div style={{ marginTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Artículos a solicitar</p>
@@ -1357,7 +1539,7 @@ export default function Almacen() {
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Artículo</span>
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "center" }}>Cant.</span>
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Unidad</span>
-                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>$ c/u</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>{solicitudMoneda === "USD" ? "USD $" : "$"} c/u</span>
                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", textAlign: "right" }}>Total</span>
                 <span />
               </div>
@@ -1376,7 +1558,7 @@ export default function Almacen() {
                     </select>
                     <input className="form-input" type="number" min={0} value={item.precioUnitario} onChange={e => updateSolicitudItem(i, "precioUnitario", +e.target.value)} placeholder="0" style={{ padding: "6px 8px", textAlign: "right" }} />
                     <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: item.precioEstimado > 0 ? "var(--green)" : "var(--text-muted)" }}>
-                      {item.precioEstimado > 0 ? `$${item.precioEstimado.toLocaleString("es-MX")}` : "—"}
+                      {item.precioEstimado > 0 ? `${solicitudMoneda === "USD" ? "USD $" : "$"}${item.precioEstimado.toLocaleString("es-MX")}` : "—"}
                     </div>
                     <button onClick={() => removeSolicitudItem(i)} disabled={solicitudItems.length === 1}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>✕</button>
@@ -1386,7 +1568,9 @@ export default function Almacen() {
               {totalSolicitud > 0 && (
                 <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: "var(--radius-sm)" }}>
                   <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Total estimado:</span>
-                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--green)" }}>${totalSolicitud.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "var(--green)" }}>
+                    {solicitudMoneda === "USD" ? "USD $" : "$"}{totalSolicitud.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                  </span>
                 </div>
               )}
               <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
@@ -1439,11 +1623,11 @@ export default function Almacen() {
               {verCotizacion.subtotal !== undefined && (
                 <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
                   <button className="btn btn-secondary" style={{ flex: 1 }}
-                    onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal" })}>
+                    onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>
                     👁️ Ver reporte
                   </button>
                   <button className="btn btn-primary" style={{ flex: 1 }}
-                    onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal" })}>
+                    onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>
                     📥 Descargar PDF
                   </button>
                 </div>
