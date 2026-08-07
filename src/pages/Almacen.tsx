@@ -69,10 +69,7 @@ type SolicitudCotizacion = {
   clienteOcasional?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
     _id?: string; numeroEconomico: string; marca: string; modelo: string;
-    capacidad?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
-    horquillas?: string; desplazadorLateral?: boolean; tipoLlantas?: string;
-    voltaje?: string; tipoBateria?: string; incluyeCargador?: boolean;
-    equipoSeguridad?: { alarmaReversa?: boolean; torretaAmbar?: boolean; luces?: boolean; extintor?: boolean };
+    capacidad?: string; serie?: string;
   };
   asesor?: { _id?: string; nombre: string; puesto: string; telefono: string; email: string };
   total: number; subtotal: number; iva: number; estatus: string;
@@ -90,7 +87,7 @@ type Solicitud = {
   cotizacion?: SolicitudCotizacion;
   items: SolicitudItem[];
   notas?: string;
-  moneda?: "MXN" | "USD"; // ── NUEVO ──
+  moneda?: "MXN" | "USD";
   estatus: "sin_liberar" | "liberada" | "cancelada";
   fechaLiberacion?: string;
   createdAt: string;
@@ -213,9 +210,7 @@ async function imprimirValeTermico(vale: Vale) {
   }
 }
 
-function SearchableCotizacion({
-  value, onChange, options,
-}: {
+function SearchableCotizacion({ value, onChange, options }: {
   value: string;
   onChange: (id: string) => void;
   options: SolicitudCotizacion[];
@@ -246,47 +241,38 @@ function SearchableCotizacion({
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
+        <input className="form-input"
           value={open ? query : (selected ? getLabel(selected) : "")}
           onChange={e => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => { setOpen(true); setQuery(""); }}
-          placeholder="Buscar por folio o cliente..."
-        />
+          placeholder="Buscar por folio o cliente..." />
         {value && (
-          <button
-            onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
-            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem" }}
-          >✕</button>
+          <button onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem" }}>✕</button>
         )}
       </div>
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-          {filtered.length === 0 ? (
-            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
-          ) : filtered.map(c => (
-            <div key={c._id} onClick={() => { onChange(c._id); setOpen(false); setQuery(""); }}
-              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", background: c._id === value ? "rgba(245,158,11,0.1)" : "transparent", color: c._id === value ? "var(--accent)" : "var(--text)", borderBottom: "1px solid var(--border)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}>
-              <span style={{ fontWeight: 700, color: "var(--blue)", marginRight: 6 }}>{c.folio}</span>
-              <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo} · ${c.total.toLocaleString()}
-              </span>
-            </div>
-          ))}
+          {filtered.length === 0
+            ? <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+            : filtered.map(c => (
+              <div key={c._id} onClick={() => { onChange(c._id); setOpen(false); setQuery(""); }}
+                style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", background: c._id === value ? "rgba(245,158,11,0.1)" : "transparent", color: c._id === value ? "var(--accent)" : "var(--text)", borderBottom: "1px solid var(--border)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}>
+                <span style={{ fontWeight: 700, color: "var(--blue)", marginRight: 6 }}>{c.folio}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                  {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo} · ${c.total.toLocaleString()}
+                </span>
+              </div>
+            ))}
         </div>
       )}
     </div>
   );
 }
 
-function ValeSearchable({
-  refacciones, onAdd,
-}: {
-  refacciones: Refaccion[];
-  onAdd: (r: Refaccion) => void;
-}) {
+function ValeSearchable({ refacciones, onAdd }: { refacciones: Refaccion[]; onAdd: (r: Refaccion) => void }) {
   const [query, setQuery] = useState("");
   const [open, setOpen]   = useState(false);
   const ref               = useRef<HTMLDivElement>(null);
@@ -308,28 +294,24 @@ function ValeSearchable({
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <input
-        className="form-input"
-        value={query}
+      <input className="form-input" value={query}
         onChange={e => { setQuery(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder="🔍 Buscar refacción por nombre o número de parte..."
-      />
+        placeholder="🔍 Buscar refacción por nombre o número de parte..." />
       {open && (
         <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 9999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-          {filtradas.length === 0 ? (
-            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
-          ) : filtradas.map(r => (
-            <div key={r._id}
-              onClick={() => { onAdd(r); setQuery(""); setOpen(false); }}
-              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", borderBottom: "1px solid var(--border)", color: "var(--text)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-              <span style={{ fontWeight: 600 }}>{r.nombre}</span>
-              {r.numeroParte && <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: "0.78rem" }}>({r.numeroParte})</span>}
-              <span style={{ color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)", marginLeft: 8, fontSize: "0.78rem", fontWeight: 700 }}>Stock: {r.stock}</span>
-            </div>
-          ))}
+          {filtradas.length === 0
+            ? <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
+            : filtradas.map(r => (
+              <div key={r._id} onClick={() => { onAdd(r); setQuery(""); setOpen(false); }}
+                style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.85rem", borderBottom: "1px solid var(--border)", color: "var(--text)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                <span style={{ fontWeight: 600 }}>{r.nombre}</span>
+                {r.numeroParte && <span style={{ color: "var(--text-muted)", marginLeft: 6, fontSize: "0.78rem" }}>({r.numeroParte})</span>}
+                <span style={{ color: r.stock <= r.stockMinimo ? "var(--red)" : "var(--green)", marginLeft: 8, fontSize: "0.78rem", fontWeight: 700 }}>Stock: {r.stock}</span>
+              </div>
+            ))}
         </div>
       )}
     </div>
@@ -361,12 +343,16 @@ export default function Almacen() {
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
 
+  // ── Filtro de solicitudes ──
+  const [filtroSol, setFiltroSol] = useState<"sin_liberar" | "liberada" | "cancelada" | "todos">(
+    canVerSinLiberar ? "sin_liberar" : "todos"
+  );
+
   const [modal, setModal]           = useState(false);
   const [stockModal, setStockModal] = useState<Refaccion | null>(null);
   const [editing, setEditing]       = useState<Refaccion | null>(null);
   const [form, setForm]             = useState<any>(emptyRefaccion);
   const [stockForm, setStockForm]   = useState<{ tipo: string; cantidad: number; tecnicoId: string; notas: string }>({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" });
-
   const [escanerModal, setEscanerModal] = useState(false);
 
   const [valeModal, setValeModal]     = useState(false);
@@ -389,14 +375,13 @@ export default function Almacen() {
   const [usadaForm, setUsadaForm]   = useState<any>(emptyUsada);
   const [uploadingUsada, setUploadingUsada] = useState(false);
 
-  const [solicitudModal, setSolicitudModal]   = useState(false);
-  const [solicitudItems, setSolicitudItems]   = useState<SolicitudItem[]>([emptySolicitudItem()]);
-  const [solicitudNotas, setSolicitudNotas]   = useState("");
+  const [solicitudModal, setSolicitudModal]     = useState(false);
+  const [solicitudItems, setSolicitudItems]     = useState<SolicitudItem[]>([emptySolicitudItem()]);
+  const [solicitudNotas, setSolicitudNotas]     = useState("");
   const [solicitudCotizId, setSolicitudCotizId] = useState("");
-  const [solicitudMoneda, setSolicitudMoneda] = useState<"MXN" | "USD">("MXN"); // ── NUEVO ──
-  const [savingSolicitud, setSavingSolicitud] = useState(false);
-  const [verCotizacion, setVerCotizacion]     = useState<SolicitudCotizacion | null>(null);
-
+  const [solicitudMoneda, setSolicitudMoneda]   = useState<"MXN" | "USD">("MXN");
+  const [savingSolicitud, setSavingSolicitud]   = useState(false);
+  const [verCotizacion, setVerCotizacion]       = useState<SolicitudCotizacion | null>(null);
   const [saving, setSaving] = useState(false);
 
   const evidenciaRef = useRef<HTMLInputElement>(null);
@@ -426,9 +411,7 @@ export default function Almacen() {
       if (!esGerencia) {
         try {
           const { data: todosAsesores } = await api.get("/asesores");
-          const miAsesor = todosAsesores.find(
-            (a: any) => a.usuario?._id === userId || a.usuario === userId
-          );
+          const miAsesor = todosAsesores.find((a: any) => a.usuario?._id === userId || a.usuario === userId);
           if (miAsesor) asesorDelUsuario = miAsesor._id;
         } catch {}
       }
@@ -442,24 +425,18 @@ export default function Almacen() {
           return false;
         })
       );
-    } catch (e) {
-      console.error("Error cargando almacén:", e);
-    }
+    } catch (e) { console.error("Error cargando almacén:", e); }
 
     try {
       const { data } = await api.get("/users");
       setTecnicos(data.filter((u: any) => ["tecnico", "almacen", "developer", "gerencia", "oficina"].includes(u.rol)));
-    } catch {
-      setTecnicos([]);
-    }
+    } catch { setTecnicos([]); }
 
     if (canVerSolicitudes) {
       try {
         const { data } = await api.get("/solicitudes-compra");
         setSolicitudes(data);
-      } catch {
-        setSolicitudes([]);
-      }
+      } catch { setSolicitudes([]); }
     }
 
     setLoading(false);
@@ -467,9 +444,7 @@ export default function Almacen() {
 
   const handleScanned = useCallback((codigo: string) => {
     setEscanerModal(false);
-    const encontrada = refacciones.find(r =>
-      r.numeroParte && r.numeroParte.trim().toLowerCase() === codigo.trim().toLowerCase()
-    );
+    const encontrada = refacciones.find(r => r.numeroParte && r.numeroParte.trim().toLowerCase() === codigo.trim().toLowerCase());
     if (encontrada) {
       setStockModal(encontrada);
       setStockForm({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" });
@@ -483,11 +458,7 @@ export default function Almacen() {
   function openNew() { setEditing(null); setForm(emptyRefaccion); setModal(true); }
   function openEdit(r: Refaccion) {
     setEditing(r);
-    setForm({
-      nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "",
-      proveedor: r.proveedor ?? "", marcaCompatible: r.marcaCompatible ?? "",
-      unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio,
-    });
+    setForm({ nombre: r.nombre, numeroParte: r.numeroParte ?? "", categoria: r.categoria ?? "", proveedor: r.proveedor ?? "", marcaCompatible: r.marcaCompatible ?? "", unidad: r.unidad, stock: r.stock, stockMinimo: r.stockMinimo, precio: r.precio });
     setModal(true);
   }
 
@@ -504,9 +475,7 @@ export default function Almacen() {
       }
       setModal(false);
     } catch (e: any) {
-      if (e?.response?.status === 409) {
-        alert("Ya existe una refacción con ese número de parte");
-      }
+      if (e?.response?.status === 409) alert("Ya existe una refacción con ese número de parte");
     }
     finally { setSaving(false); }
   }
@@ -517,11 +486,7 @@ export default function Almacen() {
       if (!stockForm.tecnicoId) { alert("Selecciona el técnico que solicita el material"); return; }
       setSaving(true);
       try {
-        const { data } = await api.post("/vales-salida", {
-          tecnicoId: stockForm.tecnicoId,
-          notas: stockForm.notas || undefined,
-          items: [{ refaccionId: stockModal._id, nombre: stockModal.nombre, cantidad: stockForm.cantidad }],
-        });
+        const { data } = await api.post("/vales-salida", { tecnicoId: stockForm.tecnicoId, notas: stockForm.notas || undefined, items: [{ refaccionId: stockModal._id, nombre: stockModal.nombre, cantidad: stockForm.cantidad }] });
         setVales(prev => [data, ...prev]);
         setRefacciones(prev => prev.map(r => r._id === stockModal._id ? { ...r, stock: Math.max(0, r.stock - stockForm.cantidad) } : r));
         setStockModal(null);
@@ -550,15 +515,9 @@ export default function Almacen() {
     if (!valeTecnico || !valeItems.length) return;
     setSaving(true);
     try {
-      const { data } = await api.post("/vales-salida", {
-        tecnicoId: valeTecnico, notas: valeNotas || undefined, items: valeItems,
-      });
+      const { data } = await api.post("/vales-salida", { tecnicoId: valeTecnico, notas: valeNotas || undefined, items: valeItems });
       setVales(prev => [data, ...prev]);
-      setRefacciones(prev => prev.map(r => {
-        const item = valeItems.find(i => i.refaccionId === r._id);
-        if (!item) return r;
-        return { ...r, stock: Math.max(0, r.stock - item.cantidad) };
-      }));
+      setRefacciones(prev => prev.map(r => { const item = valeItems.find(i => i.refaccionId === r._id); if (!item) return r; return { ...r, stock: Math.max(0, r.stock - item.cantidad) }; }));
       setValeModal(false);
     } catch {}
     finally { setSaving(false); }
@@ -577,13 +536,9 @@ export default function Almacen() {
   }
   async function subirEvidencia(file: File) {
     setUploadingEvidencia(true);
-    const fd = new FormData();
-    fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
-    try {
-      const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-      const data = await res.json();
-      setFotosEvidencia(prev => [...prev, data.secure_url]);
-    } catch { alert("Error al subir imagen"); }
+    const fd = new FormData(); fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
+    try { const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd }); const data = await res.json(); setFotosEvidencia(prev => [...prev, data.secure_url]); }
+    catch { alert("Error al subir imagen"); }
     finally { setUploadingEvidencia(false); }
   }
   async function surtirOrden() {
@@ -624,8 +579,7 @@ export default function Almacen() {
   function openNuevaUsada() { setUsadaForm(emptyUsada); setUsadaModal(true); }
   async function subirFotoUsada(file: File) {
     setUploadingUsada(true);
-    const fd = new FormData();
-    fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
+    const fd = new FormData(); fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
     try { const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd }); const data = await res.json(); setUsadaForm((p: any) => ({ ...p, fotos: [...p.fotos, data.secure_url] })); }
     catch { alert("Error al subir imagen"); }
     finally { setUploadingUsada(false); }
@@ -649,14 +603,11 @@ export default function Almacen() {
     setSolicitudItems(p => p.map((item, idx) => {
       if (idx !== i) return item;
       const updated = { ...item, [field]: val };
-      if (field === "cantidad" || field === "precioUnitario") {
-        updated.precioEstimado = updated.cantidad * updated.precioUnitario;
-      }
+      if (field === "cantidad" || field === "precioUnitario") updated.precioEstimado = updated.cantidad * updated.precioUnitario;
       return updated;
     }));
   }
 
-  // ── NUEVO: generar reporte de solicitud ──
   function generarReporteSolicitud(s: Solicitud) {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
     const fecha   = new Date(s.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
@@ -672,8 +623,7 @@ export default function Almacen() {
         <td style="padding:8px 12px;border:1px solid #ddd;text-align:right">${item.precioUnitario ? simb + item.precioUnitario.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
         <td style="padding:8px 12px;border:1px solid #ddd;text-align:right;font-weight:700;color:#16a34a">${item.precioEstimado ? simb + item.precioEstimado.toLocaleString("es-MX", { minimumFractionDigits: 2 }) : "—"}</td>
         <td style="padding:8px 12px;border:1px solid #ddd;color:#555;font-size:9pt">${item.notas || "—"}</td>
-      </tr>
-    `).join("");
+      </tr>`).join("");
 
     const cotHtml = s.cotizacion ? `
       <div style="background:#f0f7ff;border:1px solid #bbd6f5;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:10pt">
@@ -683,123 +633,79 @@ export default function Almacen() {
         <span style="margin-left:12px;font-weight:700;color:#f59e0b">$${s.cotizacion.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
       </div>` : "";
 
-    const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>${s.folio}</title>
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${s.folio}</title>
 <style>
-  * { margin:0;padding:0;box-sizing:border-box; }
-  body { font-family:Arial,sans-serif;font-size:11pt;color:#222;padding:32px;max-width:820px;margin:auto; }
-  .header { display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:20px; }
-  .header-left { display:flex;align-items:center;gap:14px; }
-  .logo { width:65px;height:65px;object-fit:contain;background:#000;border-radius:6px; }
-  .company { font-size:11pt;font-weight:700;max-width:320px;line-height:1.4; }
-  .header-right { text-align:right;font-size:9.5pt;line-height:1.8; }
-  .title-box { background:#222;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px; }
-  .title-box h1 { font-size:13pt;font-weight:900;letter-spacing:1px; }
-  .meta { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px; }
-  .meta-item { background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:8px 12px; }
-  .meta-label { font-size:8pt;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:2px; }
-  .meta-value { font-size:10.5pt;font-weight:600;color:#222; }
-  .moneda-badge { display:inline-block;background:${mon === "USD" ? "#1d4ed8" : "#15803d"};color:#fff;border-radius:6px;padding:3px 10px;font-size:9pt;font-weight:700;margin-left:8px; }
-  .estatus-badge { display:inline-block;padding:3px 12px;border-radius:20px;font-size:9pt;font-weight:700;margin-left:8px; }
-  table { width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10pt; }
-  thead { background:#222;color:#fff; }
-  thead th { padding:8px 12px;text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.06em; }
-  thead th:nth-child(2),thead th:nth-child(3) { text-align:center; }
-  thead th:nth-child(4),thead th:nth-child(5) { text-align:right; }
-  .total-row { display:flex;justify-content:flex-end;gap:40px;padding:10px 12px;background:#f9f9f9;border:1px solid #ddd;border-radius:4px;font-size:11pt;font-weight:700; }
-  .total-val { color:#16a34a; }
-  .notas-box { background:#fffbeb;border:1px solid #f0d060;border-radius:4px;padding:10px 14px;font-size:10pt;margin-top:12px; }
-  .firma-grid { display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:48px; }
-  .firma-box { text-align:center; }
-  .firma-line { border-top:1.5px solid #222;padding-top:6px;font-size:9.5pt;font-weight:700;text-transform:uppercase; }
-  .footer { margin-top:32px;border-top:1px solid #ccc;padding-top:12px;font-size:9pt;color:#888;text-align:center; }
-  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
-  @media print { .print-btn { display:none; } body { padding:16px; } }
-</style>
-</head>
-<body>
+* { margin:0;padding:0;box-sizing:border-box; }
+body { font-family:Arial,sans-serif;font-size:11pt;color:#222;padding:32px;max-width:820px;margin:auto; }
+.header { display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:20px; }
+.header-left { display:flex;align-items:center;gap:14px; }
+.logo { width:65px;height:65px;object-fit:contain;background:#000;border-radius:6px; }
+.company { font-size:11pt;font-weight:700;max-width:320px;line-height:1.4; }
+.header-right { text-align:right;font-size:9.5pt;line-height:1.8; }
+.title-box { background:#222;color:#fff;padding:10px 16px;border-radius:6px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px; }
+.title-box h1 { font-size:13pt;font-weight:900;letter-spacing:1px; }
+.meta { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px; }
+.meta-item { background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:8px 12px; }
+.meta-label { font-size:8pt;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:2px; }
+.meta-value { font-size:10.5pt;font-weight:600;color:#222; }
+table { width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10pt; }
+thead { background:#222;color:#fff; }
+thead th { padding:8px 12px;text-align:left;font-size:9pt;text-transform:uppercase;letter-spacing:.06em; }
+thead th:nth-child(2),thead th:nth-child(3) { text-align:center; }
+thead th:nth-child(4),thead th:nth-child(5) { text-align:right; }
+.total-row { display:flex;justify-content:flex-end;gap:40px;padding:10px 12px;background:#f9f9f9;border:1px solid #ddd;border-radius:4px;font-size:11pt;font-weight:700; }
+.notas-box { background:#fffbeb;border:1px solid #f0d060;border-radius:4px;padding:10px 14px;font-size:10pt;margin-top:12px; }
+.firma-grid { display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:48px; }
+.firma-box { text-align:center; }
+.firma-line { border-top:1.5px solid #222;padding-top:6px;font-size:9.5pt;font-weight:700;text-transform:uppercase; }
+.footer { margin-top:32px;border-top:1px solid #ccc;padding-top:12px;font-size:9pt;color:#888;text-align:center; }
+.print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
+@media print { .print-btn { display:none; } body { padding:16px; } }
+</style></head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
 <div class="header">
   <div class="header-left">
     <img src="${logoUrl}" class="logo" alt="Pipsa" />
     <div class="company">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>
   </div>
-  <div class="header-right">
-    <strong>Zapopán, Jal.; ${fecha}</strong><br>
-    Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>
-    45235, Zapopán, Jal.<br>
-    www.pipsamontacargas.com
-  </div>
+  <div class="header-right"><strong>Zapopán, Jal.; ${fecha}</strong><br>Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>45235, Zapopán, Jal.<br>www.pipsamontacargas.com</div>
 </div>
-
 <div class="title-box">
   <h1>SOLICITUD DE COMPRA</h1>
   <div>
     <span style="color:#f59e0b;font-weight:700;font-size:11pt">${s.folio}</span>
-    <span class="moneda-badge">${mon === "USD" ? "💵 USD" : "🇲🇽 MXN"}</span>
-    <span class="estatus-badge" style="${s.estatus === "sin_liberar" ? "background:rgba(245,158,11,0.2);color:#b45309" : s.estatus === "liberada" ? "background:rgba(34,197,94,0.2);color:#15803d" : "background:rgba(107,114,128,0.2);color:#374151"}">
+    <span style="display:inline-block;background:${mon === "USD" ? "#1d4ed8" : "#15803d"};color:#fff;border-radius:6px;padding:3px 10px;font-size:9pt;font-weight:700;margin-left:8px">${mon === "USD" ? "💵 USD" : "🇲🇽 MXN"}</span>
+    <span style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:9pt;font-weight:700;margin-left:8px;${s.estatus === "sin_liberar" ? "background:rgba(245,158,11,0.2);color:#b45309" : s.estatus === "liberada" ? "background:rgba(34,197,94,0.2);color:#15803d" : "background:rgba(107,114,128,0.2);color:#374151"}">
       ${s.estatus === "sin_liberar" ? "Sin liberar" : s.estatus === "liberada" ? "✅ Liberada" : "❌ Cancelada"}
     </span>
   </div>
 </div>
-
 <div class="meta">
-  <div class="meta-item">
-    <div class="meta-label">Solicitado por</div>
-    <div class="meta-value">${s.solicitadoPor?.nombre ?? "—"}</div>
-  </div>
-  <div class="meta-item">
-    <div class="meta-label">Fecha</div>
-    <div class="meta-value">${fecha}</div>
-  </div>
-  <div class="meta-item">
-    <div class="meta-label">Liberado por</div>
-    <div class="meta-value">${s.liberadaPor?.nombre ?? "Pendiente"}</div>
-  </div>
+  <div class="meta-item"><div class="meta-label">Solicitado por</div><div class="meta-value">${s.solicitadoPor?.nombre ?? "—"}</div></div>
+  <div class="meta-item"><div class="meta-label">Fecha</div><div class="meta-value">${fecha}</div></div>
+  <div class="meta-item"><div class="meta-label">Liberado por</div><div class="meta-value">${s.liberadaPor?.nombre ?? "Pendiente"}</div></div>
 </div>
-
 ${cotHtml}
-
 <table>
-  <thead>
-    <tr>
-      <th>Artículo</th>
-      <th style="width:60px">Cant.</th>
-      <th style="width:80px">Unidad</th>
-      <th style="width:120px">Precio u.</th>
-      <th style="width:130px">Total est.</th>
-      <th>Notas / Proveedor</th>
-    </tr>
-  </thead>
+  <thead><tr>
+    <th>Artículo</th>
+    <th style="width:60px">Cant.</th>
+    <th style="width:80px">Unidad</th>
+    <th style="width:120px">Precio u.</th>
+    <th style="width:130px">Total est.</th>
+    <th>Notas / Proveedor</th>
+  </tr></thead>
   <tbody>${itemsHtml}</tbody>
 </table>
-
-${total > 0 ? `
-<div class="total-row">
-  <span>Total estimado:</span>
-  <span class="total-val">${simb}${total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
-</div>` : ""}
-
-${s.notas ? `
-<div class="notas-box">
-  <strong>📝 Notas generales:</strong><br>
-  <span style="white-space:pre-wrap">${s.notas}</span>
-</div>` : ""}
-
+${total > 0 ? `<div class="total-row"><span>Total estimado:</span><span style="color:#16a34a">${simb}${total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>` : ""}
+${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><span style="white-space:pre-wrap">${s.notas}</span></div>` : ""}
 <div class="firma-grid">
   <div class="firma-box"><div class="firma-line">Solicitado por: ${s.solicitadoPor?.nombre ?? "_______________"}</div></div>
   <div class="firma-box"><div class="firma-line">Autorizado por: ${s.liberadaPor?.nombre ?? "_______________"}</div></div>
 </div>
-
-<div class="footer">
-  Control Pipsa — Equipos Industriales y Montacargas de Guadalajara · Documento generado automáticamente
-</div>
+<div class="footer">Control Pipsa — Equipos Industriales y Montacargas de Guadalajara · Documento generado automáticamente</div>
 <script>window.onload = function() { document.title = '${s.folio}'; };</script>
-</body>
-</html>`;
+</body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
     const url  = URL.createObjectURL(blob);
@@ -815,7 +721,7 @@ ${s.notas ? `
         items: solicitudItems.filter(i => i.nombre.trim()),
         notas: solicitudNotas,
         cotizacionId: solicitudCotizId || undefined,
-        moneda: solicitudMoneda, // ── NUEVO ──
+        moneda: solicitudMoneda,
       });
       setSolicitudes(prev => [data, ...prev]);
       setSolicitudModal(false);
@@ -861,12 +767,16 @@ ${s.notas ? `
   const filteredTipos  = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredVales  = vales.filter(v => v.folio.toLowerCase().includes(search.toLowerCase()) || v.tecnico.nombre.toLowerCase().includes(search.toLowerCase()));
-  const filteredSols   = solicitudes.filter(s =>
-    s.folio.toLowerCase().includes(search.toLowerCase()) ||
-    s.solicitadoPor?.nombre.toLowerCase().includes(search.toLowerCase()) ||
-    s.items.some(i => i.nombre.toLowerCase().includes(search.toLowerCase())) ||
-    (s.cotizacion?.folio ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+
+  const filteredSols = solicitudes.filter(s => {
+    if (canVerSinLiberar && filtroSol !== "todos" && s.estatus !== filtroSol) return false;
+    const matchSearch =
+      s.folio.toLowerCase().includes(search.toLowerCase()) ||
+      s.solicitadoPor?.nombre.toLowerCase().includes(search.toLowerCase()) ||
+      s.items.some(i => i.nombre.toLowerCase().includes(search.toLowerCase())) ||
+      (s.cotizacion?.folio ?? "").toLowerCase().includes(search.toLowerCase());
+    return matchSearch;
+  });
 
   const stockBajo         = refacciones.filter(r => r.stock <= r.stockMinimo).length;
   const ordenesPendientes = ordenes.filter(o => o.estatus === "pendiente").length;
@@ -881,7 +791,7 @@ ${s.notas ? `
   });
 
   const cotizSeleccionada = cotizacionesDisp.find(c => c._id === solicitudCotizId);
-  const totalSolicitud = solicitudItems.reduce((sum, i) => sum + i.precioEstimado, 0);
+  const totalSolicitud    = solicitudItems.reduce((sum, i) => sum + i.precioEstimado, 0);
 
   return (
     <>
@@ -908,11 +818,9 @@ ${s.notas ? `
               setSolicitudItems([emptySolicitudItem()]);
               setSolicitudNotas("");
               setSolicitudCotizId("");
-              setSolicitudMoneda("MXN"); // ── NUEVO ──
+              setSolicitudMoneda("MXN");
               setSolicitudModal(true);
-            }}>
-              + Nueva solicitud
-            </button>
+            }}>+ Nueva solicitud</button>
           )}
         </div>
       </div>
@@ -957,9 +865,7 @@ ${s.notas ? `
             <button onClick={() => { setTab("solicitudes"); setSearch(""); }} style={tabStyle("solicitudes")}>
               🛒 Solicitudes de compra
               {canVerSinLiberar && solsPendientes > 0 && (
-                <span style={{ marginLeft: 6, background: "var(--orange)", color: "#fff", borderRadius: 99, fontSize: "0.65rem", fontWeight: 700, padding: "1px 7px" }}>
-                  {solsPendientes}
-                </span>
+                <span style={{ marginLeft: 6, background: "var(--orange)", color: "#fff", borderRadius: 99, fontSize: "0.65rem", fontWeight: 700, padding: "1px 7px" }}>{solsPendientes}</span>
               )}
             </button>
           )}
@@ -975,7 +881,31 @@ ${s.notas ? `
                tab === "solicitudes" ? "Solicitudes de compra"             :
                "Tipos de servicio"}
             </p>
-            <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {/* ── Filtro de solicitudes solo para gerencia/developer ── */}
+              {tab === "solicitudes" && canVerSinLiberar && (
+                <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                  {([
+                    ["sin_liberar", "⏳ Pendientes"],
+                    ["liberada",    "✅ Liberadas"],
+                    ["cancelada",   "❌ Canceladas"],
+                    ["todos",       "Todas"],
+                  ] as const).map(([val, label], i, arr) => (
+                    <button key={val} onClick={() => setFiltroSol(val)}
+                      style={{
+                        padding: "7px 12px", border: "none", cursor: "pointer", fontSize: "0.78rem",
+                        borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none",
+                        background: filtroSol === val ? "rgba(245,158,11,0.15)" : "var(--surface2)",
+                        color: filtroSol === val ? "var(--accent)" : "var(--text-muted)",
+                        fontWeight: filtroSol === val ? 700 : 400,
+                      }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
           </div>
 
           {loading ? (
@@ -1001,7 +931,7 @@ ${s.notas ? `
                       <td>
                         <div style={{ display: "flex", gap: 4 }}>
                           {canEdit && (<><button className="btn btn-secondary btn-sm" onClick={() => openEdit(r)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeRefaccion(r)}>🗑️</button></>)}
-                          {canAddRefac && (<button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" }); }} title="Ajustar stock">±</button>)}
+                          {canAddRefac && <button className="btn btn-primary btn-sm" onClick={() => { setStockModal(r); setStockForm({ tipo: "entrada", cantidad: 1, tecnicoId: "", notas: "" }); }} title="Ajustar stock">±</button>}
                         </div>
                       </td>
                     </tr>
@@ -1024,7 +954,7 @@ ${s.notas ? `
                       <td>{o.items.length} pieza{o.items.length !== 1 ? "s" : ""}</td>
                       <td>{fmt(o.createdAt)}</td>
                       <td><span className={`badge ${ESTATUS_BADGE[o.estatus]}`}>{o.estatus}</span></td>
-                      <td>{(o.estatus === "pendiente" || o.estatus === "parcial") && canSurtir && (<button className="btn btn-primary btn-sm" onClick={() => openSurtir(o)}>Surtir</button>)}</td>
+                      <td>{(o.estatus === "pendiente" || o.estatus === "parcial") && canSurtir && <button className="btn btn-primary btn-sm" onClick={() => openSurtir(o)}>Surtir</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1043,9 +973,7 @@ ${s.notas ? `
                       <td style={{ fontWeight: 600 }}>{v.tecnico.nombre}</td>
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          {v.items.map((item, i) => (
-                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{item.cantidad}× {item.nombre}</span>
-                          ))}
+                          {v.items.map((item, i) => <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{item.cantidad}× {item.nombre}</span>)}
                         </div>
                       </td>
                       <td style={{ fontSize: "0.82rem" }}>{fmtHora(v.createdAt)}</td>
@@ -1075,11 +1003,7 @@ ${s.notas ? `
                       <td>
                         {u.fotos.length > 0 ? (
                           <div style={{ display: "flex", gap: 4 }}>
-                            {u.fotos.map((f, i) => (
-                              <a key={i} href={f} target="_blank" rel="noreferrer">
-                                <img src={f} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid var(--border)" }} />
-                              </a>
-                            ))}
+                            {u.fotos.map((f, i) => <a key={i} href={f} target="_blank" rel="noreferrer"><img src={f} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid var(--border)" }} /></a>)}
                           </div>
                         ) : <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span>}
                       </td>
@@ -1090,61 +1014,39 @@ ${s.notas ? `
               </table>
             )
           ) : tab === "solicitudes" ? (
-            filteredSols.filter(s => canVerSinLiberar || s.estatus === "liberada").length === 0 ? (
-              <div className="empty-state"><span className="empty-icon">🛒</span><p>Sin solicitudes de compra</p></div>
+            filteredSols.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🛒</span><p>Sin solicitudes{filtroSol !== "todos" ? ` ${filtroSol === "sin_liberar" ? "pendientes" : filtroSol === "liberada" ? "liberadas" : "canceladas"}` : ""}</p></div>
             ) : (
               <table>
                 <thead>
                   <tr>
-                    <th>Folio</th>
-                    <th>Solicitado por</th>
-                    <th>Cotización</th>
-                    <th>Artículos</th>
-                    <th>Notas</th>
-                    <th>Fecha</th>
-                    <th>Estatus</th>
-                    <th>Liberado por</th>
-                    <th></th>
+                    <th>Folio</th><th>Solicitado por</th><th>Cotización</th><th>Artículos</th>
+                    <th>Notas</th><th>Fecha</th><th>Estatus</th><th>Liberado por</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSols
-                    .filter(s => canVerSinLiberar || s.estatus === "liberada")
-                    .map(s => (
+                  {filteredSols.map(s => (
                     <tr key={s._id}>
                       <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>{s.folio}</td>
                       <td style={{ fontWeight: 600 }}>{s.solicitadoPor?.nombre ?? "—"}</td>
                       <td>
                         {s.cotizacion ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <button onClick={() => setVerCotizacion(s.cotizacion!)}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                            <button onClick={() => setVerCotizacion(s.cotizacion!)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
                               <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: "0.82rem" }}>{s.cotizacion.folio}</span>
                             </button>
-                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                              {s.cotizacion.cliente?.nombre ?? s.cotizacion.clienteOcasional?.nombre ?? "—"}
-                            </span>
+                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{s.cotizacion.cliente?.nombre ?? s.cotizacion.clienteOcasional?.nombre ?? "—"}</span>
                             <span style={{ fontSize: "0.7rem", color: "var(--accent)" }}>${s.cotizacion.total.toLocaleString()}</span>
                           </div>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>
-                        )}
+                        ) : <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>—</span>}
                       </td>
-                      {/* ── NUEVO: botón reporte en lugar de lista de artículos ── */}
                       <td>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => generarReporteSolicitud(s)}
-                          title="Ver solicitud completa"
-                          style={{ whiteSpace: "nowrap" }}
-                        >
+                        <button className="btn btn-secondary btn-sm" onClick={() => generarReporteSolicitud(s)} title="Ver solicitud completa" style={{ whiteSpace: "nowrap" }}>
                           📄 Ver solicitud
                         </button>
                         <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
                           {s.items.length} artículo{s.items.length !== 1 ? "s" : ""}
-                          {s.moneda === "USD" && (
-                            <span style={{ marginLeft: 6, color: "#1d4ed8", fontWeight: 700 }}>💵 USD</span>
-                          )}
+                          {s.moneda === "USD" && <span style={{ marginLeft: 6, color: "#1d4ed8", fontWeight: 700 }}>💵 USD</span>}
                         </div>
                       </td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)", maxWidth: 160 }}>{s.notas || "—"}</td>
@@ -1183,10 +1085,10 @@ ${s.notas ? `
                       <td>{(t.itemsChecklist?.length ?? 0) === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span> : <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{t.itemsChecklist.length} item{t.itemsChecklist.length !== 1 ? "s" : ""}</span>}</td>
                       <td>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                          {t.refacciones.length === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span> : t.refacciones.map((r, i) => (<span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>{r.cantidad}× {r.nombre}</span>))}
+                          {t.refacciones.length === 0 ? <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>—</span> : t.refacciones.map((r, i) => <span key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 8px", fontSize: "0.75rem" }}>{r.cantidad}× {r.nombre}</span>)}
                         </div>
                       </td>
-                      <td>{canSurtir && (<div style={{ display: "flex", gap: 4 }}><button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button></div>)}</td>
+                      <td>{canSurtir && <div style={{ display: "flex", gap: 4 }}><button className="btn btn-secondary btn-sm" onClick={() => openEditTipo(t)}>✏️</button><button className="btn btn-danger btn-sm" onClick={() => removeTipo(t)}>🗑️</button></div>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1469,14 +1371,11 @@ ${s.notas ? `
           <div className="modal" style={{ maxWidth: 660 }}>
             <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
             <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
-
             <div className="form-group">
               <label className="form-label">
                 Cotización relacionada (opcional)
                 {!esGerencia && cotizacionesDisp.length === 0 && (
-                  <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: 8, fontSize: "0.7rem" }}>
-                    — no tienes cotizaciones activas vinculadas a tu usuario
-                  </span>
+                  <span style={{ color: "var(--text-muted)", fontWeight: 400, marginLeft: 8, fontSize: "0.7rem" }}>— no tienes cotizaciones activas vinculadas a tu usuario</span>
                 )}
               </label>
               {cotizacionesDisp.length > 0 ? (
@@ -1485,10 +1384,7 @@ ${s.notas ? `
                   {cotizSeleccionada && (
                     <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span>
-                          <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span>
-                        </div>
+                        <div><span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span><span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span></div>
                         <span style={{ fontWeight: 700, color: "var(--accent)" }}>${cotizSeleccionada.total.toLocaleString()}</span>
                       </div>
                       {cotizSeleccionada.items?.[0] && (
@@ -1505,31 +1401,21 @@ ${s.notas ? `
                 </div>
               )}
             </div>
-
             <div className="form-group">
               <label className="form-label">Notas generales (opcional)</label>
               <textarea className="form-textarea" rows={2} value={solicitudNotas} onChange={e => setSolicitudNotas(e.target.value)} placeholder="Ej. Urgente para servicio preventivo de la semana..." />
             </div>
-
-            {/* ── NUEVO: selector de moneda ── */}
             <div className="form-group">
               <label className="form-label">Moneda de la solicitud</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                 {(["MXN", "USD"] as const).map((val, i) => (
                   <button key={val} type="button" onClick={() => setSolicitudMoneda(val)}
-                    style={{
-                      flex: 1, padding: "10px 8px", border: "none", cursor: "pointer",
-                      background: solicitudMoneda === val ? "rgba(245,158,11,0.15)" : "var(--surface2)",
-                      color: solicitudMoneda === val ? "var(--accent)" : "var(--text-muted)",
-                      fontWeight: solicitudMoneda === val ? 700 : 400, fontSize: "0.85rem",
-                      borderRight: i === 0 ? "1px solid var(--border)" : "none",
-                    }}>
+                    style={{ flex: 1, padding: "10px 8px", border: "none", cursor: "pointer", background: solicitudMoneda === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: solicitudMoneda === val ? "var(--accent)" : "var(--text-muted)", fontWeight: solicitudMoneda === val ? 700 : 400, fontSize: "0.85rem", borderRight: i === 0 ? "1px solid var(--border)" : "none" }}>
                     {val === "MXN" ? "🇲🇽 Pesos (MXN)" : "🇺🇸 Dólares (USD)"}
                   </button>
                 ))}
               </div>
             </div>
-
             <div style={{ marginTop: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Artículos a solicitar</p>
@@ -1549,19 +1435,13 @@ ${s.notas ? `
                     <input className="form-input" value={item.nombre} onChange={e => updateSolicitudItem(i, "nombre", e.target.value)} placeholder="Nombre..." style={{ padding: "6px 10px" }} />
                     <input className="form-input" type="number" min={1} value={item.cantidad} onChange={e => updateSolicitudItem(i, "cantidad", +e.target.value)} style={{ padding: "6px 8px", textAlign: "center" }} />
                     <select className="form-select" value={item.unidad} onChange={e => updateSolicitudItem(i, "unidad", e.target.value)} style={{ padding: "6px 8px" }}>
-                      <option value="pieza">Pieza</option>
-                      <option value="litro">Litro</option>
-                      <option value="juego">Juego</option>
-                      <option value="par">Par</option>
-                      <option value="metro">Metro</option>
-                      <option value="kg">Kg</option>
+                      <option value="pieza">Pieza</option><option value="litro">Litro</option><option value="juego">Juego</option><option value="par">Par</option><option value="metro">Metro</option><option value="kg">Kg</option>
                     </select>
                     <input className="form-input" type="number" min={0} value={item.precioUnitario} onChange={e => updateSolicitudItem(i, "precioUnitario", +e.target.value)} placeholder="0" style={{ padding: "6px 8px", textAlign: "right" }} />
                     <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: item.precioEstimado > 0 ? "var(--green)" : "var(--text-muted)" }}>
                       {item.precioEstimado > 0 ? `${solicitudMoneda === "USD" ? "USD $" : "$"}${item.precioEstimado.toLocaleString("es-MX")}` : "—"}
                     </div>
-                    <button onClick={() => removeSolicitudItem(i)} disabled={solicitudItems.length === 1}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>✕</button>
+                    <button onClick={() => removeSolicitudItem(i)} disabled={solicitudItems.length === 1} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: solicitudItems.length === 1 ? 0.3 : 1 }}>✕</button>
                   </div>
                 ))}
               </div>
@@ -1622,14 +1502,8 @@ ${s.notas ? `
               </div>
               {verCotizacion.subtotal !== undefined && (
                 <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
-                  <button className="btn btn-secondary" style={{ flex: 1 }}
-                    onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>
-                    👁️ Ver reporte
-                  </button>
-                  <button className="btn btn-primary" style={{ flex: 1 }}
-                    onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>
-                    📥 Descargar PDF
-                  </button>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>👁️ Ver reporte</button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>📥 Descargar PDF</button>
                 </div>
               )}
             </div>
