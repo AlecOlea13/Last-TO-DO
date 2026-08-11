@@ -7,7 +7,6 @@ import Clientes     from "./pages/Clientes";
 import Montacargas  from "./pages/Montacargas";
 import Rentas       from "./pages/Rentas";
 import Servicios    from "./pages/Servicios";
-// import Facturas     from "./pages/Facturas";
 import Facturacion from "./pages/Facturacion";
 import Cotizaciones from "./pages/Cotizaciones";
 import Asesores     from "./pages/Asesores";

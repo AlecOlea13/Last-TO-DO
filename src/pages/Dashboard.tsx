@@ -67,7 +67,7 @@ export default function Dashboard() {
         api.get("/montacargas"),
         api.get("/servicios"),
         api.get("/rentas"),
-        puedeVerFacturas ? api.get("/facturas") : Promise.resolve({ data: [] }),
+        puedeVerFacturas ? api.get("/facturacion") : Promise.resolve({ data: [] }),
       ]);
       const montaList    = montas.data    ?? [];
       const servicioList = servicios.data ?? [];
@@ -84,7 +84,7 @@ export default function Dashboard() {
         taller:             montaList.filter((m: any) => m.estatus === "taller" || m.estatus === "mantenimiento").length,
         serviciosAbiertos:  servicioList.filter((s: any) => s.estatus !== "cerrado").length,
         rentasVencer:       rentaList.filter((r: any) => r.estatus === "activa" && r.fechaFin && new Date(r.fechaFin) <= en30dias).length,
-        facturasPendientes: facturaList.filter((f: any) => !f.pagado && new Date(f.fechaVencimiento) < hoy).length,
+        facturasPendientes: facturaList.filter((f: any) => f.tipo === "factura" && f.estatus === "vigente" && f.estatusPago !== "pagada").length,
       });
 
       const nuevasAlertas: Alerta[] = [];
@@ -194,14 +194,14 @@ export default function Dashboard() {
           });
         }
 
-        const factVencidas = facturaList.filter((f: any) => !f.pagado && new Date(f.fechaVencimiento) < hoy);
+        const factVencidas = facturaList.filter((f: any) => f.tipo === "factura" && f.estatus === "vigente" && f.estatusPago !== "pagada");
         if (factVencidas.length > 0) {
           nuevasAlertas.push({
             id: "facturas-vencidas",
             tipo: "critico",
             icon: "💸",
-            mensaje: `${factVencidas.length} factura${factVencidas.length > 1 ? "s" : ""} vencida${factVencidas.length > 1 ? "s" : ""} sin pagar.`,
-            ruta: "/dashboard/facturas",
+            mensaje: `${factVencidas.length} factura${factVencidas.length > 1 ? "s" : ""} sin cobrar.`,
+            ruta: "/dashboard/facturacion",
           });
         }
       }
@@ -372,7 +372,7 @@ export default function Dashboard() {
                   <p className="stat-card-label">Rentas por Vencer</p>
                   <div className="stat-card-accent" style={{ background: "var(--purple)" }} />
                 </div>
-                <div className="stat-card" onClick={() => navigate("/dashboard/facturas")} style={{ cursor: "pointer" }}>
+                <div className="stat-card" onClick={() => navigate("/dashboard/facturacion")} style={{ cursor: "pointer" }}>
                   <span className="stat-card-icon">💸</span>
                   <p className="stat-card-value" style={{ color: "var(--red)" }}>{stats.facturasPendientes}</p>
                   <p className="stat-card-label">Facturas Vencidas</p>
