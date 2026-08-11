@@ -230,6 +230,7 @@ export default function Dashboard() {
     { to: "/dashboard/asesores",     icon: "👤", label: "Asesores",     roles: ["developer"] },
     { to: "/dashboard/usuarios",     icon: "👥", label: "Usuarios",     roles: ["developer"] },
     { to: "/dashboard/cxc",          icon: "💰", label: "CxC",          roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/facturacion", icon: "🧾", label: "Facturación", roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/proveedores",  icon: "🏭", label: "Proveedores",  roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/portales",     icon: "🔑", label: "Portales",     roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/flota",        icon: "🚗", label: "Flota",        roles: ["developer","gerencia","oficina"], permiso: "flota" },
