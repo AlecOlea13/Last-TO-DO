@@ -79,7 +79,11 @@ const CFDI_NS3 = "http://www.sat.gob.mx/cfd/3";
 // ── Arregla URLs viejas de Cloudinary para que abran en el browser ──
 function fixCloudinaryUrl(url?: string): string {
   if (!url) return "";
-  return url.replace("/raw/upload/", "/auto/upload/");
+  // Para archivos viejos subidos como raw, forzar descarga
+  if (url.includes("/raw/upload/")) {
+    return url.replace("/raw/upload/", "/raw/upload/fl_attachment/");
+  }
+  return url;
 }
 
 function getByTag(root: Document | Element, tag: string): Element[] {
