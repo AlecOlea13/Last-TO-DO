@@ -31,7 +31,7 @@ interface Resumen {
   };
 }
 
-const API_BACK = import.meta.env.VITE_API_URL ?? "https://pipsa-back.vercel.app";
+const API_BACK = (import.meta.env.VITE_API_URL ?? "https://pipsa-back.vercel.app").replace(/\/api$/, "");
 
 function formatMXN(n: number) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(n);
