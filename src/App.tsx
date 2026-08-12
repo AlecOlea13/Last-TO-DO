@@ -18,6 +18,7 @@ import Proveedores  from "./pages/Proveedores";
 import Portales     from "./pages/Portales";
 import Flota        from "./pages/Flota";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import IAWidget from "./components/IAWidget";
 import { useInactivityLogout } from "./hooks/useInactivityHook";
 
 // ── Componente interno para poder usar useNavigate dentro de BrowserRouter ──
@@ -88,8 +89,10 @@ function App() {
   return (
     <BrowserRouter>
       <AppRoutes />
+      <IAWidget />
     </BrowserRouter>
   );
 }
+
 
 export default App;
