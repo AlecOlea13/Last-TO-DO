@@ -69,8 +69,8 @@ type RenovacionItem = {
   incluir: boolean;
 };
 
-const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
-const UPLOAD_PRESET  = "pipsa productos";
+const CLOUDINARY_RAW = "https://api.cloudinary.com/v1_1/dijxgoytw/auto/upload";
+const UPLOAD_PRESET  = "pipsa-docs";
 const POR_PAGINA     = 70;
 
 const CFDI_NS4 = "http://www.sat.gob.mx/cfd/4";
