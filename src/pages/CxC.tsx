@@ -76,6 +76,12 @@ const POR_PAGINA     = 70;
 const CFDI_NS4 = "http://www.sat.gob.mx/cfd/4";
 const CFDI_NS3 = "http://www.sat.gob.mx/cfd/3";
 
+// ── Arregla URLs viejas de Cloudinary para que abran en el browser ──
+function fixCloudinaryUrl(url?: string): string {
+  if (!url) return "";
+  return url.replace("/raw/upload/", "/auto/upload/");
+}
+
 function getByTag(root: Document | Element, tag: string): Element[] {
   let nodes = Array.from(root.getElementsByTagNameNS(CFDI_NS4, tag));
   if (nodes.length === 0) nodes = Array.from(root.getElementsByTagNameNS(CFDI_NS3, tag));
@@ -564,7 +570,7 @@ export default function CuentasCobrar() {
           <td>${fmtCorto(c.fechaEmision)}</td>
           <td>${c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}</td>
           <td>${fmtCorto(c.fechaPago)}</td>
-          <td style="text-align:center">${c.complementoPago ? '<a href="' + c.complementoPago + '">Ver</a>' : "—"}</td>
+          <td style="text-align:center">${c.complementoPago ? '<a href="' + fixCloudinaryUrl(c.complementoPago) + '">Ver</a>' : "—"}</td>
           <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : c.estatus === "parcial" ? "#f59e0b" : "#dc2626"}">$${pendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
           <td>${c.comentarios ?? "—"}</td>
         </tr>`;
@@ -639,13 +645,12 @@ export default function CuentasCobrar() {
   const totalPendiente = cxcs.filter(c => c.estatus === "pendiente" || c.estatus === "parcial").reduce((a, c) => a + (c.total - (c.montoPagado ?? 0)), 0);
   const totalCobrado   = cxcs.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
 
-  // ── Helper: color y label de estatus ──
   function estatusBadge(estatus?: string) {
     switch (estatus) {
-      case "cobrada":   return { color: "var(--green)",  label: "Cobrada" };
-      case "parcial":   return { color: "var(--accent)", label: "Parcial" };
+      case "cobrada":   return { color: "var(--green)",      label: "Cobrada" };
+      case "parcial":   return { color: "var(--accent)",     label: "Parcial" };
       case "cancelada": return { color: "var(--text-muted)", label: "Cancelada" };
-      default:          return { color: "var(--red)",    label: "Pendiente" };
+      default:          return { color: "var(--red)",        label: "Pendiente" };
     }
   }
 
@@ -679,7 +684,6 @@ export default function CuentasCobrar() {
     );
   }
 
-  // ── Saldo pendiente de una CxC ──
   const saldoPendiente = (c: CxC) => c.total - (c.montoPagado ?? 0);
 
   return (
@@ -789,8 +793,8 @@ export default function CuentasCobrar() {
                 </thead>
                 <tbody>
                   {paginados.map(c => {
-                    const badge   = estatusBadge(c.estatus);
-                    const saldo   = saldoPendiente(c);
+                    const badge       = estatusBadge(c.estatus);
+                    const saldo       = saldoPendiente(c);
                     const esCancelada = c.estatus === "cancelada";
                     return (
                       <tr key={c._id} style={{ opacity: esCancelada ? 0.5 : 1 }}>
@@ -810,7 +814,7 @@ export default function CuentasCobrar() {
                         <td style={{ whiteSpace: "nowrap", fontSize: "0.78rem" }}>{fmt(c.fechaPago)}</td>
                         <td style={{ textAlign: "center" }}>
                           {c.complementoPago
-                            ? <a href={c.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
+                            ? <a href={fixCloudinaryUrl(c.complementoPago)} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
                             : <span style={{ color: "var(--text-muted)" }}>—</span>}
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
@@ -843,10 +847,7 @@ export default function CuentasCobrar() {
                             <button className="btn btn-secondary btn-sm" onClick={() => { setModalComent(c); setComentEdit(c.comentarios ?? ""); }}>💬</button>
                             {c.estatus !== "cobrada" && c.estatus !== "cancelada" && (
                               <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                                onClick={() => {
-                                  setModalCobro(c);
-                                  setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false });
-                                }}>
+                                onClick={() => { setModalCobro(c); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false }); }}>
                                 💳
                               </button>
                             )}
@@ -1088,17 +1089,17 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontFamily: "monospace" }}>UUID: {detalle.uuid ?? "—"}</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 8 }}>
               {[
-                { label: "No. Factura",   val: detalle.folioFactura },
-                { label: "Fecha emisión", val: fmt(detalle.fechaEmision) },
-                { label: "Emisor",        val: detalle.nombreEmisor },
-                { label: "RFC Emisor",    val: detalle.rfcEmisor },
-                { label: "RFC Receptor",  val: detalle.rfcReceptor },
-                { label: "Estatus",       val: estatusBadge(detalle.estatus).label },
-                { label: "Monto pagado",  val: detalle.montoPagado ? `$${detalle.montoPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                { label: "No. Factura",     val: detalle.folioFactura },
+                { label: "Fecha emisión",   val: fmt(detalle.fechaEmision) },
+                { label: "Emisor",          val: detalle.nombreEmisor },
+                { label: "RFC Emisor",      val: detalle.rfcEmisor },
+                { label: "RFC Receptor",    val: detalle.rfcReceptor },
+                { label: "Estatus",         val: estatusBadge(detalle.estatus).label },
+                { label: "Monto pagado",    val: detalle.montoPagado ? `$${detalle.montoPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                 { label: "Saldo pendiente", val: detalle.estatus !== "cobrada" && detalle.estatus !== "cancelada" ? `$${saldoPendiente(detalle).toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
-                { label: "Fecha pago",    val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
-                { label: "Comentarios",   val: detalle.comentarios },
-                { label: "Notas",         val: detalle.notas },
+                { label: "Fecha pago",      val: detalle.fechaPago ? fmt(detalle.fechaPago) : null },
+                { label: "Comentarios",     val: detalle.comentarios },
+                { label: "Notas",           val: detalle.notas },
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{item.label}</p>
@@ -1107,13 +1108,11 @@ export default function CuentasCobrar() {
               ) : null)}
             </div>
             {detalle.complementoPago && (
-              <a href={detalle.complementoPago} target="_blank" rel="noreferrer"
+              <a href={fixCloudinaryUrl(detalle.complementoPago)} target="_blank" rel="noreferrer"
                 style={{ display: "inline-block", marginTop: 8, fontSize: "0.82rem", color: "var(--blue)" }}>
                 📎 Ver complemento de pago
               </a>
             )}
-
-            {/* ── Historial de pagos ── */}
             {detalle.pagos && detalle.pagos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Historial de pagos</p>
@@ -1125,14 +1124,13 @@ export default function CuentasCobrar() {
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{fmt(p.fechaPago)}{p.comentarios ? ` · ${p.comentarios}` : ""}</p>
                       </div>
                       {p.complementoPago && (
-                        <a href={p.complementoPago} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
+                        <a href={fixCloudinaryUrl(p.complementoPago)} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", color: "var(--blue)" }}>📎</a>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
             {detalle.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
@@ -1164,11 +1162,7 @@ export default function CuentasCobrar() {
               <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
               {detalle.estatus !== "cobrada" && detalle.estatus !== "cancelada" && (
                 <button className="btn btn-primary" style={{ background: "var(--green)", color: "#fff" }}
-                  onClick={() => {
-                    setDetalle(null);
-                    setModalCobro(detalle);
-                    setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false });
-                  }}>
+                  onClick={() => { setDetalle(null); setModalCobro(detalle); setFormCobro({ fechaPago: new Date().toISOString().split("T")[0], complementoPago: "", comentarios: "", montoParcial: "", esParcial: false }); }}>
                   💳 Registrar cobro
                 </button>
               )}
@@ -1177,7 +1171,7 @@ export default function CuentasCobrar() {
         </div>
       )}
 
-      {/* ── Modal registrar cobro (con pago parcial) ── */}
+      {/* ── Modal registrar cobro ── */}
       {modalCobro && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalCobro(null); }}>
           <div className="modal" style={{ maxWidth: 460 }}>
@@ -1186,8 +1180,6 @@ export default function CuentasCobrar() {
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               {modalCobro.nombreReceptor} — {modalCobro.folioFactura ?? "—"}
             </p>
-
-            {/* Resumen de saldo */}
             <div style={{ display: "flex", gap: 16, marginTop: 10, marginBottom: 4, padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
               <div>
                 <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Total factura</p>
@@ -1204,9 +1196,7 @@ export default function CuentasCobrar() {
                 <p style={{ fontWeight: 700, color: "var(--red)" }}>${saldoPendiente(modalCobro).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
               </div>
             </div>
-
             <div className="form-grid" style={{ marginTop: 12 }}>
-              {/* Toggle pago parcial */}
               <div className="form-group span-2">
                 <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                   <input type="checkbox" checked={formCobro.esParcial}
@@ -1215,7 +1205,6 @@ export default function CuentasCobrar() {
                   <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Registrar pago parcial</span>
                 </label>
               </div>
-
               {formCobro.esParcial && (
                 <div className="form-group span-2">
                   <label className="form-label">Monto a registrar *</label>
@@ -1232,7 +1221,6 @@ export default function CuentasCobrar() {
                   )}
                 </div>
               )}
-
               <div className="form-group span-2">
                 <label className="form-label">Fecha de cobro *</label>
                 <input className="form-input" type="date" value={formCobro.fechaPago}
@@ -1249,7 +1237,7 @@ export default function CuentasCobrar() {
                     onChange={async e => { const f = e.target.files?.[0]; if (f) { const url = await subirArchivo(f); setFormCobro(p => ({ ...p, complementoPago: url })); } }} />
                 </label>
                 {formCobro.complementoPago && (
-                  <a href={formCobro.complementoPago} target="_blank" rel="noreferrer"
+                  <a href={fixCloudinaryUrl(formCobro.complementoPago)} target="_blank" rel="noreferrer"
                     style={{ fontSize: "0.78rem", color: "var(--blue)", marginTop: 4, display: "block" }}>Ver archivo subido</a>
                 )}
               </div>
@@ -1386,33 +1374,20 @@ export default function CuentasCobrar() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
                       <input type="checkbox" checked={item.incluir && !!item.renta}
                         disabled={!item.renta}
-                        onChange={e => {
-                          const next = [...renovacionItems];
-                          next[idx]  = { ...next[idx], incluir: e.target.checked };
-                          setRenovacionItems(next);
-                        }}
-                        style={{ width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }}
-                      />
+                        onChange={e => { const next = [...renovacionItems]; next[idx] = { ...next[idx], incluir: e.target.checked }; setRenovacionItems(next); }}
+                        style={{ width: 16, height: 16, accentColor: "var(--accent)", flexShrink: 0 }} />
                       <div>
                         <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>
                           Equipo #{item.numeroEconomico}
-                          {item.renta && (
-                            <span style={{ marginLeft: 8, fontSize: "0.72rem", fontWeight: 400, color: "var(--text-muted)" }}>
-                              {item.renta.montacargas?.marca} {item.renta.montacargas?.modelo}
-                            </span>
-                          )}
+                          {item.renta && <span style={{ marginLeft: 8, fontSize: "0.72rem", fontWeight: 400, color: "var(--text-muted)" }}>{item.renta.montacargas?.marca} {item.renta.montacargas?.modelo}</span>}
                         </p>
-                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>
-                          {item.concepto.slice(0, 70)}{item.concepto.length > 70 ? "…" : ""}
-                        </p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{item.concepto.slice(0, 70)}{item.concepto.length > 70 ? "…" : ""}</p>
                       </div>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      {item.renta ? (
-                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.1)", padding: "2px 8px", borderRadius: 10 }}>✅ Renta encontrada</span>
-                      ) : (
-                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 8px", borderRadius: 10 }}>⚠ Sin match</span>
-                      )}
+                      {item.renta
+                        ? <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.1)", padding: "2px 8px", borderRadius: 10 }}>✅ Renta encontrada</span>
+                        : <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "2px 8px", borderRadius: 10 }}>⚠ Sin match</span>}
                     </div>
                   </div>
                   {item.renta && item.incluir && (
@@ -1420,20 +1395,12 @@ export default function CuentasCobrar() {
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Nueva fecha de fin *</label>
                         <input className="form-input" type="date" value={item.fechaFin}
-                          onChange={e => {
-                            const next = [...renovacionItems];
-                            next[idx]  = { ...next[idx], fechaFin: e.target.value };
-                            setRenovacionItems(next);
-                          }} />
+                          onChange={e => { const next = [...renovacionItems]; next[idx] = { ...next[idx], fechaFin: e.target.value }; setRenovacionItems(next); }} />
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Precio *</label>
                         <input className="form-input" type="number" value={item.precioConcepto}
-                          onChange={e => {
-                            const next = [...renovacionItems];
-                            next[idx]  = { ...next[idx], precioConcepto: +e.target.value };
-                            setRenovacionItems(next);
-                          }} />
+                          onChange={e => { const next = [...renovacionItems]; next[idx] = { ...next[idx], precioConcepto: +e.target.value }; setRenovacionItems(next); }} />
                       </div>
                       <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", gridColumn: "1/-1" }}>
                         Fin anterior: <strong>{item.renta.fechaFin ? new Date(item.renta.fechaFin).toLocaleDateString("es-MX") : "—"}</strong>
@@ -1449,9 +1416,7 @@ export default function CuentasCobrar() {
               <button className="btn btn-primary" onClick={renovarDesdeCxC}
                 disabled={renovandoDesde || !renovacionItems.some(i => i.incluir && i.renta && i.fechaFin)}
                 style={{ background: "var(--blue)", color: "#fff" }}>
-                {renovandoDesde
-                  ? "Renovando..."
-                  : `🔄 Renovar ${renovacionItems.filter(i => i.incluir && i.renta).length} renta${renovacionItems.filter(i => i.incluir && i.renta).length !== 1 ? "s" : ""}`}
+                {renovandoDesde ? "Renovando..." : `🔄 Renovar ${renovacionItems.filter(i => i.incluir && i.renta).length} renta${renovacionItems.filter(i => i.incluir && i.renta).length !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
