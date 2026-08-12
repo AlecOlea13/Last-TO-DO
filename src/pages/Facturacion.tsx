@@ -492,7 +492,7 @@ export default function Facturacion() {
       setModalFactura(false);
       resetForm();
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? "Error al timbrar");
+      alert(e?.response?.data?.detalle?.AckEnlaceFiscal?.descripcionError ?? e?.response?.data?.message ?? "Error al timbrar");
     }
     finally { setSaving(false); }
   }
