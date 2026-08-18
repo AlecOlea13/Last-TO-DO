@@ -57,6 +57,16 @@ type Vale = {
   createdAt: string;
 };
 
+// ── Vale de torno ──
+type ValeTornoItem = { descripcion: string; cantidad: number; unidad: string; notas?: string };
+type ValeTorno = {
+  _id: string; folio: string;
+  firmadoPor: { _id: string; nombre: string; rol: string };
+  items: ValeTornoItem[];
+  notas?: string;
+  createdAt: string;
+};
+
 type SolicitudItem = {
   nombre: string; cantidad: number; unidad: string;
   precioUnitario: number;
@@ -110,6 +120,10 @@ const CONDICION_BADGE: Record<string, string> = {
 
 const emptySolicitudItem = (): SolicitudItem => ({
   nombre: "", cantidad: 1, unidad: "pieza", precioUnitario: 0, precioEstimado: 0, notas: ""
+});
+
+const emptyTornoItem = (): ValeTornoItem => ({
+  descripcion: "", cantidad: 1, unidad: "pieza", notas: ""
 });
 
 function EscanerModal({ onScanned, onClose }: { onScanned: (codigo: string) => void; onClose: () => void }) {
@@ -206,6 +220,52 @@ async function imprimirValeTermico(vale: Vale) {
     await qz.websocket.disconnect();
   } catch (err: any) {
     console.error("Error imprimiendo vale:", err);
+    alert("Error al imprimir: " + (err?.message ?? err));
+  }
+}
+
+// ── Impresión térmica del vale de torno ──
+async function imprimirValeTorno(vale: ValeTorno) {
+  const qz = (window as any).qz;
+  if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
+  try {
+    qz.security.setCertificatePromise((resolve: any) => resolve(""));
+    qz.security.setSignatureAlgorithm("SHA512");
+    qz.security.setSignaturePromise((_toSign: any) => (resolve: any) => resolve(""));
+    await qz.websocket.connect();
+    const config = qz.configs.create("GHIA GTP801");
+    const fecha = new Date(vale.createdAt).toLocaleString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const LINE = "--------------------------------\n";
+    const BR   = "\n";
+    const fila = (izq: string, der: string) => izq.substring(0, 22).padEnd(22) + der.substring(0, 10).padStart(10) + "\n";
+    let d = "";
+    d += "\x1B\x40"; d += "\x1B\x61\x01"; d += "\x1B\x21\x30"; d += "PIPSA\n";
+    d += "\x1B\x21\x00"; d += "Montacargas de Guadalajara\n"; d += BR;
+    d += "\x1B\x21\x08"; d += "VALE DE SALIDA AL TORNO\n"; d += "\x1B\x21\x00"; d += LINE;
+    d += "\x1B\x61\x01"; d += "\x1B\x21\x10"; d += `${vale.folio}\n`; d += "\x1B\x21\x00"; d += BR;
+    d += "\x1B\x61\x00";
+    d += `Fecha   : ${fecha}\n`;
+    d += `Entregó : ${vale.firmadoPor.nombre}\n`;
+    if (vale.notas) { d += BR; d += `Notas: ${vale.notas}\n`; }
+    d += LINE; d += "\x1B\x21\x08"; d += fila("DESCRIPCION", "CANT/UND"); d += "\x1B\x21\x00"; d += LINE;
+    for (const item of vale.items) {
+      const cant = `${item.cantidad} ${item.unidad}`;
+      if (item.descripcion.length <= 22) { d += fila(item.descripcion, cant); }
+      else { d += item.descripcion.substring(0, 32) + "\n"; d += fila("", cant); }
+      if (item.notas) { d += `  Nota: ${item.notas}\n`; }
+    }
+    d += LINE; d += BR; d += "\x1B\x61\x01";
+    d += "Firma de quien entrega\n"; d += BR; d += BR; d += BR;
+    d += "________________________________\n"; d += `${vale.firmadoPor.nombre}\n`;
+    d += BR; d += BR;
+    d += "Firma de quien recibe en torno\n"; d += BR; d += BR; d += BR;
+    d += "________________________________\n"; d += "Nombre: ________________________\n";
+    d += BR; d += BR;
+    d += "\x1D\x56\x42\x00";
+    await qz.print(config, [{ type: "raw", format: "plain", data: d, options: { language: "ESCPOS" } }]);
+    await qz.websocket.disconnect();
+  } catch (err: any) {
+    console.error("Error imprimiendo vale torno:", err);
     alert("Error al imprimir: " + (err?.message ?? err));
   }
 }
@@ -329,8 +389,9 @@ export default function Almacen() {
   const canLiberar        = ["developer", "gerencia"].includes(rol);
   const canVerSinLiberar  = ["developer", "gerencia"].includes(rol);
   const esGerencia        = ["developer", "gerencia"].includes(rol);
+  const canTorno          = ["developer", "gerencia", "almacen", "supervisor_almacen"].includes(rol);
 
-  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales" | "solicitudes">("inventario");
+  const [tab, setTab] = useState<"inventario" | "ordenes" | "tipos" | "usadas" | "vales" | "solicitudes" | "torno">("inventario");
   const [refacciones, setRefacciones] = useState<Refaccion[]>([]);
   const [ordenes, setOrdenes]         = useState<Orden[]>([]);
   const [tipos, setTipos]             = useState<TipoServicio[]>([]);
@@ -338,6 +399,7 @@ export default function Almacen() {
   const [servicios, setServicios]     = useState<{ _id: string; folio: string; problema?: string }[]>([]);
   const [tecnicos, setTecnicos]       = useState<Usuario[]>([]);
   const [vales, setVales]             = useState<Vale[]>([]);
+  const [valesTorno, setValesTorno]   = useState<ValeTorno[]>([]);
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [cotizacionesDisp, setCotizacionesDisp] = useState<SolicitudCotizacion[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -359,6 +421,11 @@ export default function Almacen() {
   const [valeItems, setValeItems]     = useState<{ refaccionId: string; nombre: string; cantidad: number; unidad: string }[]>([]);
   const [valeTecnico, setValeTecnico] = useState("");
   const [valeNotas, setValeNotas]     = useState("");
+
+  // ── Estados del vale de torno ──
+  const [tornoModal, setTornoModal]   = useState(false);
+  const [tornoItems, setTornoItems]   = useState<ValeTornoItem[]>([emptyTornoItem()]);
+  const [tornoNotas, setTornoNotas]   = useState("");
 
   const [surtirModal, setSurtirModal]   = useState<Orden | null>(null);
   const [surtirItems, setSurtirItems]   = useState<any[]>([]);
@@ -391,7 +458,7 @@ export default function Almacen() {
 
   async function load() {
     try {
-      const [r, o, t, u, s, v, cots] = await Promise.all([
+      const [r, o, t, u, s, v, cots, vt] = await Promise.all([
         api.get("/refacciones"),
         api.get("/ordenes-refaccion"),
         api.get("/tipos-servicio"),
@@ -399,6 +466,7 @@ export default function Almacen() {
         api.get("/servicios"),
         api.get("/vales-salida"),
         api.get("/cotizaciones").catch(() => ({ data: [] })),
+        api.get("/vales-torno").catch(() => ({ data: [] })),
       ]);
       setRefacciones(r.data);
       setOrdenes(o.data);
@@ -406,6 +474,7 @@ export default function Almacen() {
       setUsadas(u.data);
       setServicios(s.data.map((sv: any) => ({ _id: sv._id, folio: sv.folio, problema: sv.problema })));
       setVales(v.data);
+      setValesTorno(vt.data);
 
       let asesorDelUsuario: string | null = null;
       if (!esGerencia) {
@@ -519,6 +588,30 @@ export default function Almacen() {
       setVales(prev => [data, ...prev]);
       setRefacciones(prev => prev.map(r => { const item = valeItems.find(i => i.refaccionId === r._id); if (!item) return r; return { ...r, stock: Math.max(0, r.stock - item.cantidad) }; }));
       setValeModal(false);
+    } catch {}
+    finally { setSaving(false); }
+  }
+
+  // ── Guardar vale de torno ──
+  function openValeTorno() { setTornoItems([emptyTornoItem()]); setTornoNotas(""); setTornoModal(true); }
+  function addTornoItem() { setTornoItems(prev => [...prev, emptyTornoItem()]); }
+  function removeTornoItem(i: number) { setTornoItems(prev => prev.filter((_, idx) => idx !== i)); }
+  function updateTornoItem(i: number, field: keyof ValeTornoItem, val: any) {
+    setTornoItems(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
+  }
+  async function guardarValeTorno() {
+    const itemsValidos = tornoItems.filter(i => i.descripcion.trim());
+    if (!itemsValidos.length) return;
+    setSaving(true);
+    try {
+      const { data } = await api.post("/vales-torno", {
+        items: itemsValidos,
+        notas: tornoNotas || undefined,
+      });
+      setValesTorno(prev => [data, ...prev]);
+      setTornoModal(false);
+      setTornoItems([emptyTornoItem()]);
+      setTornoNotas("");
     } catch {}
     finally { setSaving(false); }
   }
@@ -767,6 +860,11 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
   const filteredTipos  = tipos.filter(t => t.nombre.toLowerCase().includes(search.toLowerCase()) || (t.descripcion ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredUsadas = usadas.filter(u => u.descripcion.toLowerCase().includes(search.toLowerCase()) || (u.servicio?.folio ?? "").toLowerCase().includes(search.toLowerCase()) || (u.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()));
   const filteredVales  = vales.filter(v => v.folio.toLowerCase().includes(search.toLowerCase()) || v.tecnico.nombre.toLowerCase().includes(search.toLowerCase()));
+  const filteredValesTorno = valesTorno.filter(v =>
+    v.folio.toLowerCase().includes(search.toLowerCase()) ||
+    v.firmadoPor.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    v.items.some(i => i.descripcion.toLowerCase().includes(search.toLowerCase()))
+  );
 
   const filteredSols = solicitudes.filter(s => {
     if (canVerSinLiberar && filtroSol !== "todos" && s.estatus !== filtroSol) return false;
@@ -810,6 +908,9 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
           )}
           {canAddRefac && tab === "vales" && (
             <button className="btn btn-secondary" onClick={openValeManual}>📤 Vale de salida</button>
+          )}
+          {canTorno && tab === "torno" && (
+            <button className="btn btn-secondary" onClick={openValeTorno}>🔧 Vale de torno</button>
           )}
           {canSurtir && tab === "tipos" && <button className="btn btn-primary" onClick={openNewTipo}>+ Nuevo tipo</button>}
           {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
@@ -861,6 +962,7 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
           {canUsadas && <button onClick={() => { setTab("usadas"); setSearch(""); }} style={tabStyle("usadas")}>🔩 Refacciones usadas</button>}
           {canSurtir && <button onClick={() => { setTab("tipos"); setSearch(""); }} style={tabStyle("tipos")}>⚙️ Tipos de servicio</button>}
           {canAddRefac && <button onClick={() => { setTab("vales"); setSearch(""); }} style={tabStyle("vales")}>📤 Vales de salida</button>}
+          {canTorno && <button onClick={() => { setTab("torno"); setSearch(""); }} style={tabStyle("torno")}>🔧 Torno</button>}
           {canVerSolicitudes && (
             <button onClick={() => { setTab("solicitudes"); setSearch(""); }} style={tabStyle("solicitudes")}>
               🛒 Solicitudes de compra
@@ -878,6 +980,7 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                tab === "ordenes"     ? "Órdenes de refacciones"            :
                tab === "usadas"      ? "Refacciones usadas / reemplazadas" :
                tab === "vales"       ? "Vales de salida de material"       :
+               tab === "torno"       ? "Vales de salida al torno"          :
                tab === "solicitudes" ? "Solicitudes de compra"             :
                "Tipos de servicio"}
             </p>
@@ -980,6 +1083,35 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.registradoPor?.nombre ?? "—"}</td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.notas || "—"}</td>
                       <td><button className="btn btn-secondary btn-sm" onClick={() => imprimirValeTermico(v)} title="Imprimir vale">🖨️</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : tab === "torno" ? (
+            filteredValesTorno.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🔧</span><p>Sin vales de torno registrados</p></div>
+            ) : (
+              <table>
+                <thead><tr><th>Folio</th><th>Material</th><th>Fecha y hora</th><th>Entregó</th><th>Notas</th><th></th></tr></thead>
+                <tbody>
+                  {filteredValesTorno.map(v => (
+                    <tr key={v._id}>
+                      <td style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--blue)" }}>{v.folio}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          {v.items.map((item, i) => (
+                            <span key={i} style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                              {item.cantidad}× {item.descripcion}
+                              {item.notas && <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}> — {item.notas}</span>}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td style={{ fontSize: "0.82rem" }}>{fmtHora(v.createdAt)}</td>
+                      <td style={{ fontWeight: 600, fontSize: "0.85rem" }}>{v.firmadoPor.nombre}</td>
+                      <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{v.notas || "—"}</td>
+                      <td><button className="btn btn-secondary btn-sm" onClick={() => imprimirValeTorno(v)} title="Imprimir vale">🖨️</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1212,6 +1344,68 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setValeModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarValeManual} disabled={saving || !valeTecnico || !valeItems.length}>
+                {saving ? "Guardando..." : "✅ Generar vale"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal vale de torno ── */}
+      {tornoModal && canTorno && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTornoModal(false)}>
+          <div className="modal" style={{ maxWidth: 580 }}>
+            <button className="modal-close" onClick={() => setTornoModal(false)}>✕</button>
+            <h2 className="modal-title">🔧 Nuevo vale de salida al torno</h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>
+              El vale quedará firmado por <strong style={{ color: "var(--text)" }}>{localStorage.getItem("nombre") ?? "ti"}</strong>.
+            </p>
+            <div className="form-group">
+              <label className="form-label">Notas generales (opcional)</label>
+              <input className="form-input" value={tornoNotas}
+                onChange={e => setTornoNotas(e.target.value)}
+                placeholder="Ej. Urgente para servicio SRV-012..." />
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>Piezas a enviar al torno</p>
+                <button className="btn btn-secondary btn-sm" onClick={addTornoItem}>+ Agregar</button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {tornoItems.map((item, i) => (
+                  <div key={i} style={{ padding: "12px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 100px 28px", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                      <input className="form-input" value={item.descripcion}
+                        onChange={e => updateTornoItem(i, "descripcion", e.target.value)}
+                        placeholder="Ej. Eje trasero, engrane de 3a..." style={{ padding: "6px 10px" }} />
+                      <input className="form-input" type="number" min={1} value={item.cantidad}
+                        onChange={e => updateTornoItem(i, "cantidad", +e.target.value)}
+                        style={{ padding: "6px 8px", textAlign: "center" }} />
+                      <select className="form-select" value={item.unidad}
+                        onChange={e => updateTornoItem(i, "unidad", e.target.value)}
+                        style={{ padding: "6px 8px" }}>
+                        <option value="pieza">Pieza</option>
+                        <option value="juego">Juego</option>
+                        <option value="par">Par</option>
+                        <option value="metro">Metro</option>
+                        <option value="kg">Kg</option>
+                      </select>
+                      <button onClick={() => removeTornoItem(i)}
+                        disabled={tornoItems.length === 1}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", fontSize: "1rem", opacity: tornoItems.length === 1 ? 0.3 : 1 }}>✕</button>
+                    </div>
+                    <input className="form-input" value={item.notas ?? ""}
+                      onChange={e => updateTornoItem(i, "notas", e.target.value)}
+                      placeholder="Notas de la pieza (opcional) — trabajo a realizar, medidas, etc."
+                      style={{ padding: "6px 10px", fontSize: "0.82rem" }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setTornoModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarValeTorno}
+                disabled={saving || !tornoItems.some(i => i.descripcion.trim())}>
                 {saving ? "Guardando..." : "✅ Generar vale"}
               </button>
             </div>
