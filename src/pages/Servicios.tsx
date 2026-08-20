@@ -314,7 +314,7 @@ export default function Servicios() {
   const rol               = localStorage.getItem("rol") ?? "";
   const userId            = localStorage.getItem("userId") ?? "";
   const canCreate         = ["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol);
-  const canAsignarTecnico = ["developer", "gerencia", "oficina"].includes(rol);
+  const canAsignarTecnico = ["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol);
   const esTecnico         = rol === "tecnico";
   const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
 

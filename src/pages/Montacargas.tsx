@@ -1,6 +1,22 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 
+type ServicioHistorial = {
+  _id: string;
+  folio: string;
+  estatus: string;
+  fechaReporte: string;
+  problema?: string;
+  notasCierre?: string;
+  horometro?: number;
+  horometroCierre?: number;
+  horaInicio?: string;
+  horaFin?: string;
+  cliente?: { nombre: string };
+  tipoServicio?: { nombre: string };
+  tecnicoAsignado?: { nombre: string };
+};
+
 type Monta = {
   _id: string;
   numeroEconomico: string;
@@ -93,8 +109,9 @@ function SectionLabel({ text }: { text: string }) {
 }
 
 export default function Montacargas() {
-  const rol     = localStorage.getItem("rol") ?? "";
-  const canEdit = !["tecnico", "almacen"].includes(rol);
+  const rol             = localStorage.getItem("rol") ?? "";
+  const canEdit         = !["tecnico", "almacen"].includes(rol);
+  const canVerHistorial = ["developer", "gerencia", "supervisor_almacen"].includes(rol);
 
   const [montas, setMontas]         = useState<Monta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
@@ -115,6 +132,11 @@ export default function Montacargas() {
     numeroEconomico: "", marca: "", modelo: "", tipo: "electrico", estatus: "taller",
   });
   const [savingRapido, setSavingRapido] = useState(false);
+
+  // ── Historial de servicios ──
+  const [historialModal, setHistorialModal]         = useState<Monta | null>(null);
+  const [historialServicios, setHistorialServicios] = useState<ServicioHistorial[]>([]);
+  const [loadingHistorial, setLoadingHistorial]     = useState(false);
 
   const isElectrico = form.tipo === "electrico";
   const isGasDiesel = form.tipo === "gas" || form.tipo === "diesel";
@@ -209,6 +231,19 @@ export default function Montacargas() {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setSavingRapido(false); }
+  }
+
+  async function abrirHistorial(m: Monta) {
+    setHistorialModal(m);
+    setLoadingHistorial(true);
+    try {
+      const { data } = await api.get(`/servicios/por-montacargas/${m._id}`);
+      setHistorialServicios(data);
+    } catch {
+      setHistorialServicios([]);
+    } finally {
+      setLoadingHistorial(false);
+    }
   }
 
   function fmt(date?: string) {
@@ -308,6 +343,9 @@ export default function Montacargas() {
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
+                        {canVerHistorial && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => abrirHistorial(m)} title="Historial de servicios">📋</button>
+                        )}
                         {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>}
                         {canEdit && m.estatus === "disponible" && (
                           <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
@@ -535,6 +573,67 @@ export default function Montacargas() {
               {canEdit && (
                 <button className="btn btn-primary" onClick={() => { setDetalleModal(null); openEdit(detalleModal); }}>✏️ Editar</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal historial de servicios ── */}
+      {historialModal && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setHistorialModal(null); }}>
+          <div className="modal" style={{ maxWidth: 640 }}>
+            <button className="modal-close" onClick={() => setHistorialModal(null)}>✕</button>
+            <h2 className="modal-title">
+              📋 Historial — {historialModal.numeroEconomico} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>{historialModal.marca} {historialModal.modelo}</span>
+            </h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>
+              {historialServicios.length} servicio{historialServicios.length !== 1 ? "s" : ""} registrado{historialServicios.length !== 1 ? "s" : ""}
+            </p>
+
+            {loadingHistorial ? (
+              <div className="loading-state"><div className="spinner" /></div>
+            ) : historialServicios.length === 0 ? (
+              <div className="empty-state"><span className="empty-icon">🔧</span><p>Sin servicios registrados para este equipo</p></div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 480, overflowY: "auto" }}>
+                {historialServicios.map(s => (
+                  <div key={s._id} style={{
+                    background: "var(--surface2)", border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)", padding: "12px 14px",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontFamily: "var(--font-head)", fontWeight: 700, color: "var(--accent)" }}>{s.folio}</span>
+                      <span style={{
+                        fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
+                        color: s.estatus === "cerrado" ? "var(--green)" : s.estatus === "en_proceso" ? "var(--blue)" : s.estatus === "pausado" ? "var(--text-muted)" : "var(--red)",
+                      }}>
+                        {s.estatus === "en_proceso" ? "en proceso" : s.estatus}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 16, fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 6, flexWrap: "wrap" }}>
+                      <span>📅 {fmt(s.fechaReporte)}</span>
+                      {s.tipoServicio && <span>🔧 {s.tipoServicio.nombre}</span>}
+                      {s.tecnicoAsignado && <span>👷 {s.tecnicoAsignado.nombre}</span>}
+                      {s.cliente && <span>🏢 {s.cliente.nombre}</span>}
+                    </div>
+                    {s.problema && (
+                      <p style={{ fontSize: "0.82rem", color: "var(--text)", margin: "6px 0 0" }}>{s.problema}</p>
+                    )}
+                    {s.notasCierre && (
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: "6px 0 0", fontStyle: "italic" }}>✅ {s.notasCierre}</p>
+                    )}
+                    {(s.horometro || s.horometroCierre) && (
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "6px 0 0" }}>
+                        Horómetro: {s.horometro ?? "—"} → {s.horometroCierre ?? "—"} hr
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setHistorialModal(null)}>Cerrar</button>
             </div>
           </div>
         </div>
