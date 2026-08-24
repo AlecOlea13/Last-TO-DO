@@ -57,7 +57,6 @@ type Vale = {
   createdAt: string;
 };
 
-// ── Vale de torno ──
 type ValeTornoItem = { descripcion: string; cantidad: number; unidad: string; notas?: string };
 type ValeTorno = {
   _id: string; folio: string;
@@ -224,7 +223,6 @@ async function imprimirValeTermico(vale: Vale) {
   }
 }
 
-// ── Impresión térmica del vale de torno ──
 async function imprimirValeTorno(vale: ValeTorno) {
   const qz = (window as any).qz;
   if (!qz) { alert("QZ Tray no está instalado o no está corriendo"); return; }
@@ -405,7 +403,6 @@ export default function Almacen() {
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
 
-  // ── Filtro de solicitudes ──
   const [filtroSol, setFiltroSol] = useState<"sin_liberar" | "liberada" | "cancelada" | "todos">(
     canVerSinLiberar ? "sin_liberar" : "todos"
   );
@@ -422,7 +419,6 @@ export default function Almacen() {
   const [valeTecnico, setValeTecnico] = useState("");
   const [valeNotas, setValeNotas]     = useState("");
 
-  // ── Estados del vale de torno ──
   const [tornoModal, setTornoModal]   = useState(false);
   const [tornoItems, setTornoItems]   = useState<ValeTornoItem[]>([emptyTornoItem()]);
   const [tornoNotas, setTornoNotas]   = useState("");
@@ -449,6 +445,7 @@ export default function Almacen() {
   const [solicitudMoneda, setSolicitudMoneda]   = useState<"MXN" | "USD">("MXN");
   const [savingSolicitud, setSavingSolicitud]   = useState(false);
   const [verCotizacion, setVerCotizacion]       = useState<SolicitudCotizacion | null>(null);
+  const [editandoSolicitud, setEditandoSolicitud] = useState<Solicitud | null>(null);
   const [saving, setSaving] = useState(false);
 
   const evidenciaRef = useRef<HTMLInputElement>(null);
@@ -592,7 +589,6 @@ export default function Almacen() {
     finally { setSaving(false); }
   }
 
-  // ── Guardar vale de torno ──
   function openValeTorno() { setTornoItems([emptyTornoItem()]); setTornoNotas(""); setTornoModal(true); }
   function addTornoItem() { setTornoItems(prev => [...prev, emptyTornoItem()]); }
   function removeTornoItem(i: number) { setTornoItems(prev => prev.filter((_, idx) => idx !== i)); }
@@ -806,22 +802,44 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
+  function abrirEdicionSolicitud(s: Solicitud) {
+    setEditandoSolicitud(s);
+    setSolicitudItems(s.items.length ? s.items.map(i => ({ ...i })) : [emptySolicitudItem()]);
+    setSolicitudNotas(s.notas ?? "");
+    setSolicitudCotizId(s.cotizacion?._id ?? "");
+    setSolicitudMoneda(s.moneda ?? "MXN");
+    setSolicitudModal(true);
+  }
+
+  function cerrarModalSolicitud() {
+    setSolicitudModal(false);
+    setEditandoSolicitud(null);
+    setSolicitudItems([emptySolicitudItem()]);
+    setSolicitudNotas("");
+    setSolicitudCotizId("");
+    setSolicitudMoneda("MXN");
+  }
+
   async function guardarSolicitud() {
     if (!solicitudItems.some(i => i.nombre.trim())) return;
     setSavingSolicitud(true);
     try {
-      const { data } = await api.post("/solicitudes-compra", {
+      const payload = {
         items: solicitudItems.filter(i => i.nombre.trim()),
         notas: solicitudNotas,
         cotizacionId: solicitudCotizId || undefined,
         moneda: solicitudMoneda,
-      });
-      setSolicitudes(prev => [data, ...prev]);
-      setSolicitudModal(false);
-      setSolicitudItems([emptySolicitudItem()]);
-      setSolicitudNotas("");
-      setSolicitudCotizId("");
-      setSolicitudMoneda("MXN");
+      };
+
+      if (editandoSolicitud) {
+        const { data } = await api.put(`/solicitudes-compra/${editandoSolicitud._id}`, payload);
+        setSolicitudes(prev => prev.map(s => s._id === data._id ? data : s));
+      } else {
+        const { data } = await api.post("/solicitudes-compra", payload);
+        setSolicitudes(prev => [data, ...prev]);
+      }
+
+      cerrarModalSolicitud();
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
@@ -916,6 +934,7 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
           {canUsadas && tab === "usadas" && <button className="btn btn-primary" onClick={openNuevaUsada}>+ Registrar refacción usada</button>}
           {canVerSolicitudes && tab === "solicitudes" && (
             <button className="btn btn-primary" onClick={() => {
+              setEditandoSolicitud(null);
               setSolicitudItems([emptySolicitudItem()]);
               setSolicitudNotas("");
               setSolicitudCotizId("");
@@ -985,7 +1004,6 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                "Tipos de servicio"}
             </p>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              {/* ── Filtro de solicitudes solo para gerencia/developer ── */}
               {tab === "solicitudes" && canVerSinLiberar && (
                 <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                   {([
@@ -1190,12 +1208,17 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                       </td>
                       <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>{s.liberadaPor?.nombre ?? "—"}</td>
                       <td>
-                        {canLiberar && s.estatus === "sin_liberar" && (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn btn-primary btn-sm" onClick={() => liberarSolicitud(s._id)}>✅ Liberar</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => cancelarSolicitud(s._id)}>Cancelar</button>
-                          </div>
-                        )}
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {s.estatus === "sin_liberar" && (
+                            <button className="btn btn-secondary btn-sm" onClick={() => abrirEdicionSolicitud(s)}>✏️ Editar</button>
+                          )}
+                          {canLiberar && s.estatus === "sin_liberar" && (
+                            <>
+                              <button className="btn btn-primary btn-sm" onClick={() => liberarSolicitud(s._id)}>✅ Liberar</button>
+                              <button className="btn btn-danger btn-sm" onClick={() => cancelarSolicitud(s._id)}>Cancelar</button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1351,7 +1374,6 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
         </div>
       )}
 
-      {/* ── Modal vale de torno ── */}
       {tornoModal && canTorno && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setTornoModal(false)}>
           <div className="modal" style={{ maxWidth: 580 }}>
@@ -1559,12 +1581,12 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
         </div>
       )}
 
-      {/* ── Modal nueva solicitud ── */}
+      {/* ── Modal nueva/editar solicitud ── */}
       {solicitudModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSolicitudModal(false)}>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && cerrarModalSolicitud()}>
           <div className="modal" style={{ maxWidth: 660 }}>
-            <button className="modal-close" onClick={() => setSolicitudModal(false)}>✕</button>
-            <h2 className="modal-title">🛒 Nueva solicitud de compra</h2>
+            <button className="modal-close" onClick={cerrarModalSolicitud}>✕</button>
+            <h2 className="modal-title">🛒 {editandoSolicitud ? `Editar ${editandoSolicitud.folio}` : "Nueva solicitud de compra"}</h2>
             <div className="form-group">
               <label className="form-label">
                 Cotización relacionada (opcional)
@@ -1647,14 +1669,16 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                   </span>
                 </div>
               )}
-              <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                💡 La solicitud quedará <strong style={{ color: "var(--accent)" }}>Sin liberar</strong> hasta que gerencia o developer la apruebe.
-              </div>
+              {!editandoSolicitud && (
+                <div style={{ marginTop: 12, padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                  💡 La solicitud quedará <strong style={{ color: "var(--accent)" }}>Sin liberar</strong> hasta que gerencia o developer la apruebe.
+                </div>
+              )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSolicitudModal(false)}>Cancelar</button>
+              <button className="btn btn-secondary" onClick={cerrarModalSolicitud}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarSolicitud} disabled={savingSolicitud || !solicitudItems.some(i => i.nombre.trim())}>
-                {savingSolicitud ? "Enviando..." : "📤 Enviar solicitud"}
+                {savingSolicitud ? "Guardando..." : editandoSolicitud ? "💾 Guardar cambios" : "📤 Enviar solicitud"}
               </button>
             </div>
           </div>
