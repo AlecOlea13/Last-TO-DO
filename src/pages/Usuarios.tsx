@@ -5,11 +5,14 @@ type Usuario = {
   _id: string;
   username: string;
   nombre: string;
-  rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen" | "supervisor_almacen";
+  rol: "developer" | "gerencia" | "oficina" | "tecnico" | "almacen" | "supervisor_almacen" | "cliente";
   activo: boolean;
   permisos: string[];
+  clienteRef?: { _id: string; nombre: string } | null;
   createdAt: string;
 };
+
+type Cliente = { _id: string; nombre: string };
 
 const ROL_BADGE: Record<string, string> = {
   developer:          "badge-red",
@@ -18,14 +21,17 @@ const ROL_BADGE: Record<string, string> = {
   tecnico:            "badge-amber",
   almacen:            "badge-purple",
   supervisor_almacen: "badge-purple",
+  cliente:            "badge-gray",
 };
 
 const emptyForm = {
-  username: "", nombre: "", password: "", rol: "oficina", activo: true, permisos: [] as string[],
+  username: "", nombre: "", password: "", rol: "oficina",
+  activo: true, permisos: [] as string[], clienteRef: "",
 };
 
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading]   = useState(true);
   const [modal, setModal]       = useState(false);
   const [editing, setEditing]   = useState<Usuario | null>(null);
@@ -37,8 +43,9 @@ export default function Usuarios() {
 
   async function load() {
     try {
-      const { data } = await api.get("/users");
-      setUsuarios(data);
+      const [u, c] = await Promise.all([api.get("/users"), api.get("/clientes")]);
+      setUsuarios(u.data);
+      setClientes(c.data);
     } catch {}
     finally { setLoading(false); }
   }
@@ -53,8 +60,13 @@ export default function Usuarios() {
   function openEdit(u: Usuario) {
     setEditing(u);
     setForm({
-      username: u.username, nombre: u.nombre, password: "",
-      rol: u.rol, activo: u.activo, permisos: u.permisos ?? [],
+      username:   u.username,
+      nombre:     u.nombre,
+      password:   "",
+      rol:        u.rol,
+      activo:     u.activo,
+      permisos:   u.permisos ?? [],
+      clienteRef: u.clienteRef?._id ?? "",
     });
     setError("");
     setModal(true);
@@ -72,14 +84,19 @@ export default function Usuarios() {
   async function save() {
     if (!form.username || !form.nombre || !form.rol) return;
     if (!editing && !form.password) { setError("La contraseña es requerida"); return; }
+    if (form.rol === "cliente" && !form.clienteRef) { setError("Debes seleccionar un cliente"); return; }
     setSaving(true);
     setError("");
     try {
+      const payload = {
+        ...form,
+        clienteRef: form.clienteRef || null,
+      };
       if (editing) {
-        const { data } = await api.put(`/users/${editing._id}`, form);
+        const { data } = await api.put(`/users/${editing._id}`, payload);
         setUsuarios(prev => prev.map(u => u._id === editing._id ? data : u));
       } else {
-        const { data } = await api.post("/users", form);
+        const { data } = await api.post("/users", payload);
         setUsuarios(prev => [data, ...prev]);
       }
       setModal(false);
@@ -109,7 +126,8 @@ export default function Usuarios() {
     { key: "flota", label: "🚗 Flota", desc: "Acceso al módulo de camionetas y flota vehicular" },
   ];
 
-  const mostrarPermisos = ["oficina", "tecnico", "almacen", "supervisor_almacen"].includes(form.rol);
+  const mostrarPermisos  = ["oficina", "tecnico", "almacen", "supervisor_almacen"].includes(form.rol);
+  const mostrarCliente   = form.rol === "cliente";
 
   return (
     <>
@@ -138,6 +156,7 @@ export default function Usuarios() {
                   <th>Usuario</th>
                   <th>Nombre</th>
                   <th>Rol</th>
+                  <th>Cliente vinculado</th>
                   <th>Permisos extra</th>
                   <th>Estatus</th>
                   <th>Creado</th>
@@ -153,6 +172,9 @@ export default function Usuarios() {
                       <span className={`badge ${ROL_BADGE[u.rol] ?? "badge-gray"}`}>
                         {u.rol === "supervisor_almacen" ? "sup. almacén" : u.rol}
                       </span>
+                    </td>
+                    <td style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                      {u.clienteRef?.nombre ?? "—"}
                     </td>
                     <td>
                       {(u.permisos ?? []).length > 0 ? (
@@ -204,30 +226,59 @@ export default function Usuarios() {
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Nombre completo *</label>
-                <input className="form-input" value={form.nombre} onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))} placeholder="Juan Pérez" />
+                <input className="form-input" value={form.nombre}
+                  onChange={e => setForm((p: any) => ({ ...p, nombre: e.target.value }))}
+                  placeholder="Juan Pérez" />
               </div>
               <div className="form-group">
                 <label className="form-label">Username *</label>
-                <input className="form-input" value={form.username} onChange={e => setForm((p: any) => ({ ...p, username: e.target.value }))} placeholder="juan.perez" />
+                <input className="form-input" value={form.username}
+                  onChange={e => setForm((p: any) => ({ ...p, username: e.target.value }))}
+                  placeholder="juan.perez" />
               </div>
               <div className="form-group">
-                <label className="form-label">{editing ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña *"}</label>
-                <input className="form-input" type="password" value={form.password} onChange={e => setForm((p: any) => ({ ...p, password: e.target.value }))} placeholder="••••••••" />
+                <label className="form-label">
+                  {editing ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña *"}
+                </label>
+                <input className="form-input" type="password" value={form.password}
+                  onChange={e => setForm((p: any) => ({ ...p, password: e.target.value }))}
+                  placeholder="••••••••" />
               </div>
               <div className="form-group">
                 <label className="form-label">Rol *</label>
-                <select className="form-select" value={form.rol} onChange={e => setForm((p: any) => ({ ...p, rol: e.target.value }))}>
+                <select className="form-select" value={form.rol}
+                  onChange={e => setForm((p: any) => ({ ...p, rol: e.target.value, clienteRef: "" }))}>
                   <option value="tecnico">Técnico</option>
                   <option value="almacen">Almacén</option>
                   <option value="supervisor_almacen">Supervisor de almacén</option>
                   <option value="oficina">Oficina</option>
                   <option value="gerencia">Gerencia</option>
+                  <option value="cliente">Cliente (portal externo)</option>
                 </select>
               </div>
+
+              {/* ── Cliente vinculado — solo aparece cuando rol = cliente ── */}
+              {mostrarCliente && (
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                  <label className="form-label">Cliente vinculado *</label>
+                  <select className="form-select" value={form.clienteRef}
+                    onChange={e => setForm((p: any) => ({ ...p, clienteRef: e.target.value }))}>
+                    <option value="">Selecciona un cliente...</option>
+                    {clientes.map(c => (
+                      <option key={c._id} value={c._id}>{c.nombre}</option>
+                    ))}
+                  </select>
+                  <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    Este usuario solo verá los datos y montacargas del cliente seleccionado.
+                  </p>
+                </div>
+              )}
+
               {editing && (
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Estatus</label>
-                  <select className="form-select" value={form.activo ? "true" : "false"} onChange={e => setForm((p: any) => ({ ...p, activo: e.target.value === "true" }))}>
+                  <select className="form-select" value={form.activo ? "true" : "false"}
+                    onChange={e => setForm((p: any) => ({ ...p, activo: e.target.value === "true" }))}>
                     <option value="true">Activo</option>
                     <option value="false">Inactivo</option>
                   </select>
@@ -240,12 +291,9 @@ export default function Usuarios() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
                     {PERMISOS_DISPONIBLES.map(p => (
                       <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 14px", background: form.permisos.includes(p.key) ? "rgba(79,124,255,0.08)" : "var(--surface2)", border: `1px solid ${form.permisos.includes(p.key) ? "rgba(79,124,255,0.3)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", transition: "all 0.15s" }}>
-                        <input
-                          type="checkbox"
-                          checked={form.permisos.includes(p.key)}
+                        <input type="checkbox" checked={form.permisos.includes(p.key)}
                           onChange={() => togglePermiso(p.key)}
-                          style={{ width: 16, height: 16, accentColor: "var(--blue)", cursor: "pointer", flexShrink: 0 }}
-                        />
+                          style={{ width: 16, height: 16, accentColor: "var(--blue)", cursor: "pointer", flexShrink: 0 }} />
                         <div>
                           <p style={{ margin: 0, fontWeight: 600, fontSize: "0.88rem", color: "var(--text)" }}>{p.label}</p>
                           <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--text-muted)" }}>{p.desc}</p>
@@ -256,10 +304,14 @@ export default function Usuarios() {
                 </div>
               )}
             </div>
+
             {error && <p className="alert" style={{ marginTop: 8 }}>{error}</p>}
+
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                {saving ? "Guardando..." : "Guardar"}
+              </button>
             </div>
           </div>
         </div>
