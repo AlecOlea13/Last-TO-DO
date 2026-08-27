@@ -30,12 +30,12 @@ export default function Auditoria() {
   const rol = localStorage.getItem("rol") ?? "";
   const puedeEditar = ["developer", "gerencia"].includes(rol);
 
-  const [hallazgos, setHallazgos]         = useState<Hallazgo[]>([]);
-  const [loading, setLoading]             = useState(true);
-  const [expandido, setExpandido]         = useState<string | null>(null);
-  const [subiendo, setSubiendo]           = useState<string | null>(null);
-  const [notaTemp, setNotaTemp]           = useState<Record<string, string>>({});
-  const fileRefs                          = useRef<Record<string, HTMLInputElement | null>>({});
+  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [expandido, setExpandido] = useState<string | null>(null);
+  const [subiendo, setSubiendo]   = useState<string | null>(null);
+  const [notaTemp, setNotaTemp]   = useState<Record<string, string>>({});
+  const fileRefs                  = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => { load(); }, []);
 
@@ -82,12 +82,43 @@ export default function Auditoria() {
   }
 
   function iconTipo(tipo: string) {
-  if (tipo.includes("pdf"))                             return "📄";
-  if (tipo.includes("image"))                           return "🖼️";
-  if (tipo.includes("excel") || tipo.includes("sheet")) return "📊";
-  if (tipo.includes("spreadsheet"))                     return "📊";
-  return "📎";
-}
+    if (tipo.includes("pdf"))                              return "📄";
+    if (tipo.includes("image"))                            return "🖼️";
+    if (tipo.includes("excel") || tipo.includes("sheet"))  return "📊";
+    if (tipo.includes("spreadsheet"))                      return "📊";
+    return "📎";
+  }
+
+  // PDF → fuerza descarga con fl_attachment; imagen → abre inline; resto → descarga directo
+  function urlVer(doc: Version): string {
+    if (doc.tipo.includes("pdf")) {
+      return doc.url.replace("/upload/", "/upload/fl_attachment/");
+    }
+    return doc.url;
+  }
+
+  function botonDoc(doc: Version) {
+    const esPdf    = doc.tipo.includes("pdf");
+    const esImagen = doc.tipo.includes("image");
+
+    if (esImagen) {
+      return (
+        <a href={doc.url} target="_blank" rel="noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: "none", flexShrink: 0 }}>
+          👁️ Ver
+        </a>
+      );
+    }
+
+    return (
+      <a href={urlVer(doc)} target="_blank" rel="noreferrer"
+        className="btn btn-secondary btn-sm"
+        style={{ textDecoration: "none", flexShrink: 0 }}>
+        {esPdf ? "⬇️ Descargar" : "⬇️ Descargar"}
+      </a>
+    );
+  }
 
   if (loading) return <div className="loading-state"><div className="spinner" /></div>;
 
@@ -103,7 +134,7 @@ export default function Auditoria() {
       <div className="page-content">
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {hallazgos.map(h => {
-            const abierto = expandido === h._id;
+            const abierto   = expandido === h._id;
             const ultimoDoc = h.documentos[h.documentos.length - 1];
             return (
               <div key={h._id} style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
@@ -138,7 +169,7 @@ export default function Auditoria() {
                       </span>
                       <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{h.clave} · {h.proceso}</span>
                     </div>
-                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 2, display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 2 }}>
                       {h.documentos.length === 0
                         ? <span style={{ color: "var(--red)" }}>⚠ Sin documentos</span>
                         : <span style={{ color: "var(--green)" }}>✓ {h.documentos.length} documento{h.documentos.length > 1 ? "s" : ""} · v{ultimoDoc?.version}</span>
@@ -173,10 +204,7 @@ export default function Auditoria() {
                                   {fmtFecha(doc.fecha)}{doc.subidoPor ? ` · ${doc.subidoPor.nombre}` : ""}{doc.nota ? ` · ${doc.nota}` : ""}
                                 </div>
                               </div>
-                              <a href={doc.url} target="_blank" rel="noreferrer"
-                                className="btn btn-secondary btn-sm" style={{ textDecoration: "none", flexShrink: 0 }}>
-                                👁️ Ver
-                              </a>
+                              {botonDoc(doc)}
                               {puedeEditar && (
                                 <button className="btn btn-secondary btn-sm" style={{ color: "var(--red)", flexShrink: 0 }}
                                   onClick={() => eliminarDocumento(h._id, doc._id)}>
