@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 
 const SUPABASE_URL    = "https://qhcvngcgajlodyoeckfz.supabase.co";
-const SUPABASE_KEY    = "sb_publishable_ICaO1LC13OZOR5dOy6wcyA_mB3bZ2H7";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoY3ZuZ2NnYWpsb2R5b2Vja2Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4NjM4NzMsImV4cCI6MjEwMzQzOTg3M30.RbyUwqaoGn1-aJhljURFNmFIqAOWWcvBBT49abV4fE8";
 const SUPABASE_BUCKET = "documentos";
 
 type Version = {
