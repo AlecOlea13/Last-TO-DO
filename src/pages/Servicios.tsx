@@ -557,21 +557,26 @@ export default function Servicios() {
   }
 
   async function enviarEncuestaManual() {
-    if (!encuestaModal) return;
-    const emailsValidos = encuestaEmails.map(e => e.trim()).filter(Boolean);
-    if (emailsValidos.length === 0) return;
-    setEnviandoEncuesta(true);
-    try {
-      for (const email of emailsValidos) {
-        await api.post(`/encuestas/enviar/${encuestaModal._id}`, { emailDestino: email });
-      }
-      alert(`✅ Encuesta enviada a ${emailsValidos.length} correo${emailsValidos.length > 1 ? "s" : ""}`);
-      setEncuestaModal(null);
-    } catch (e: any) {
-      alert(e?.response?.data?.message ?? "Error al enviar la encuesta");
+  if (!encuestaModal) return;
+  const emailsValidos = encuestaEmails.map(e => e.trim()).filter(Boolean);
+  if (emailsValidos.length === 0) return;
+  setEnviandoEncuesta(true);
+  try {
+    for (const email of emailsValidos) {
+      await api.post(`/encuestas/enviar/${encuestaModal._id}`, { emailDestino: email });
     }
-    finally { setEnviandoEncuesta(false); }
+    alert(`✅ Encuesta enviada a ${emailsValidos.length} correo${emailsValidos.length > 1 ? "s" : ""}`);
+    setEncuestaModal(null);
+  } catch (e: any) {
+    const msg = e?.response?.data?.message ?? "Error al enviar la encuesta";
+    if (e?.response?.data?.estatus === "respondida") {
+      alert("⚠️ " + msg);
+    } else {
+      alert("Error: " + msg);
+    }
   }
+  finally { setEnviandoEncuesta(false); }
+}
 
   function onMontaChange(montaId: string) {
     const monta = montas.find(m => m._id === montaId);
