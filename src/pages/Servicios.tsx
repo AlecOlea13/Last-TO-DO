@@ -29,7 +29,7 @@ type Servicio = {
   _id: string;
   folio: string;
   montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string };
-  cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string };
+  cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; email?: string };
   tipoServicio?: { _id: string; nombre: string };
   tecnicoAsignado?: { _id: string; nombre: string };
   fechaReporte: string;
@@ -79,7 +79,6 @@ function nanoid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// ── Botón micrófono reutilizable ──
 function BtnMic({ onResult, style }: { onResult: (t: string) => void; style?: React.CSSProperties }) {
   const { escuchando, iniciar, detener } = useSpeechRecognition(onResult);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -94,36 +93,17 @@ function BtnMic({ onResult, style }: { onResult: (t: string) => void; style?: Re
 
   if (!isOnline) {
     return (
-      <button
-        type="button"
-        disabled
-        title="El micrófono requiere internet"
-        style={{
-          background: "var(--surface2)", border: "1.5px solid var(--border)",
-          borderRadius: 8, padding: "8px 12px", cursor: "not-allowed",
-          fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, opacity: 0.4,
-          ...style,
-        }}
-      >
+      <button type="button" disabled title="El micrófono requiere internet"
+        style={{ background: "var(--surface2)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 12px", cursor: "not-allowed", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, opacity: 0.4, ...style }}>
         🎙️
       </button>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={escuchando ? detener : iniciar}
-      style={{
-        background: escuchando ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.1)",
-        border: `1.5px solid ${escuchando ? "var(--red)" : "rgba(245,158,11,0.3)"}`,
-        borderRadius: 8, padding: "8px 12px", cursor: "pointer",
-        fontSize: "1.2rem", lineHeight: 1, flexShrink: 0,
-        animation: escuchando ? "pulse 1s infinite" : "none",
-        ...style,
-      }}
-      title={escuchando ? "Toca para detener" : "Toca para dictar"}
-    >
+    <button type="button" onClick={escuchando ? detener : iniciar}
+      style={{ background: escuchando ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.1)", border: `1.5px solid ${escuchando ? "var(--red)" : "rgba(245,158,11,0.3)"}`, borderRadius: 8, padding: "8px 12px", cursor: "pointer", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, animation: escuchando ? "pulse 1s infinite" : "none", ...style }}
+      title={escuchando ? "Toca para detener" : "Toca para dictar"}>
       {escuchando ? "🔴" : "🎙️"}
     </button>
   );
@@ -151,16 +131,12 @@ function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas
   const h = Math.floor(elapsed / 3600);
   const m = Math.floor((elapsed % 3600) / 60);
   const s = elapsed % 60;
-  const texto = h > 0
-    ? `${h}h ${String(m).padStart(2, "0")}m`
-    : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  const texto = h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 
   if (grande) {
     return (
       <div style={{ textAlign: "center", margin: "16px 0" }}>
-        <div style={{ fontSize: "3rem", fontWeight: 900, fontFamily: "var(--font-head)", color: "var(--accent)", letterSpacing: 2 }}>
-          ⏱️ {texto}
-        </div>
+        <div style={{ fontSize: "3rem", fontWeight: 900, fontFamily: "var(--font-head)", color: "var(--accent)", letterSpacing: 2 }}>⏱️ {texto}</div>
         <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginTop: 4 }}>Tiempo trabajado</div>
       </div>
     );
@@ -228,9 +204,7 @@ function VistaTecnicoMovil({
             </span>
             <span style={{ fontSize: "0.78rem", fontWeight: 700, fontFamily: "var(--font-head)", color: "var(--text-muted)" }}>{activo.folio}</span>
           </div>
-          <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>
-            #{activo.montacargas?.numeroEconomico} {activo.montacargas?.marca}
-          </div>
+          <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>#{activo.montacargas?.numeroEconomico} {activo.montacargas?.marca}</div>
           <div style={{ fontSize: "0.92rem", color: "var(--text-muted)", marginBottom: 4 }}>{activo.cliente?.nombre ?? "Sin cliente"}</div>
           {activo.problema && (
             <div style={{ fontSize: "0.85rem", color: "var(--text)", background: "var(--surface2)", borderRadius: 8, padding: "8px 12px", marginBottom: 8 }}>{activo.problema}</div>
@@ -341,6 +315,13 @@ export default function Servicios() {
   const [pausandoId, setPausandoId]     = useState<string | null>(null);
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
+
+  // ── Encuestas ──
+  const [encuestaModal, setEncuestaModal]           = useState<Servicio | null>(null);
+  const [encuestaDatos, setEncuestaDatos]           = useState<any>(null);
+  const [loadingEncuesta, setLoadingEncuesta]       = useState(false);
+  const [encuestaEmails, setEncuestaEmails]         = useState<string[]>([""]);
+  const [enviandoEncuesta, setEnviandoEncuesta]     = useState(false);
 
   const [modalReporte, setModalReporte]                 = useState(false);
   const [reportePeriodo, setReportePeriodo]             = useState<"semana" | "mes" | "custom">("mes");
@@ -558,6 +539,38 @@ export default function Servicios() {
   async function cambiarEstatus(s: Servicio, estatus: string) {
     await api.put(`/servicios/${s._id}`, { estatus });
     setServicios(prev => prev.map(sv => sv._id === s._id ? { ...sv, estatus: estatus as any } : sv));
+  }
+
+  // ── Encuestas ──
+  async function verEncuesta(s: Servicio) {
+    setEncuestaModal(s);
+    setEncuestaDatos(null);
+    setLoadingEncuesta(true);
+    // Precarga el email del cliente si existe
+    setEncuestaEmails(s.cliente?.email ? [s.cliente.email] : [""]);
+    try {
+      const { data } = await api.get("/encuestas?estatus=respondida");
+      const enc = data.find((e: any) => (e.servicio?._id ?? e.servicio) === s._id);
+      setEncuestaDatos(enc ?? null);
+    } catch {}
+    finally { setLoadingEncuesta(false); }
+  }
+
+  async function enviarEncuestaManual() {
+    if (!encuestaModal) return;
+    const emailsValidos = encuestaEmails.map(e => e.trim()).filter(Boolean);
+    if (emailsValidos.length === 0) return;
+    setEnviandoEncuesta(true);
+    try {
+      for (const email of emailsValidos) {
+        await api.post(`/encuestas/enviar/${encuestaModal._id}`, { emailDestino: email });
+      }
+      alert(`✅ Encuesta enviada a ${emailsValidos.length} correo${emailsValidos.length > 1 ? "s" : ""}`);
+      setEncuestaModal(null);
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? "Error al enviar la encuesta");
+    }
+    finally { setEnviandoEncuesta(false); }
   }
 
   function onMontaChange(montaId: string) {
@@ -851,15 +864,12 @@ export default function Servicios() {
                   {iniciandoId === confirmarIniciarModal._id ? "Iniciando..." : "✅ Sí, iniciar"}
                 </button>
                 <button style={{ width: "100%", padding: "14px", borderRadius: 12, background: "transparent", border: "1.5px solid var(--border)", color: "var(--text)", fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
-                  onClick={() => setConfirmarIniciarModal(null)}>
-                  Cancelar
-                </button>
+                  onClick={() => setConfirmarIniciarModal(null)}>Cancelar</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Modal pausar técnico — CON DICTADO DE VOZ ── */}
         {pausarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
             <div className="modal" style={{ maxWidth: 440 }}>
@@ -870,22 +880,12 @@ export default function Servicios() {
               </p>
               <div className="form-group">
                 <label className="form-label" style={{ fontSize: "1rem" }}>¿Por qué pausas el servicio?</label>
-                {/* ── Dictado de voz ── */}
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <textarea
-                    className="form-textarea"
-                    rows={4}
-                    value={razonPausa}
-                    onChange={e => setRazonPausa(e.target.value)}
-                    placeholder="Escribe o usa el micrófono 🎙️..."
-                    style={{ fontSize: "1rem", flex: 1 }}
-                    autoFocus
-                  />
+                  <textarea className="form-textarea" rows={4} value={razonPausa} onChange={e => setRazonPausa(e.target.value)}
+                    placeholder="Escribe o usa el micrófono 🎙️..." style={{ fontSize: "1rem", flex: 1 }} autoFocus />
                   <BtnMic onResult={texto => setRazonPausa(p => p ? p + " " + texto : texto)} />
                 </div>
-                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
-                  🎙️ Toca el micrófono para dictar en lugar de escribir
-                </p>
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>🎙️ Toca el micrófono para dictar en lugar de escribir</p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--surface2)", color: "var(--text)", fontSize: "1.05rem", fontWeight: 700, cursor: "pointer", opacity: !razonPausa.trim() ? 0.5 : 1 }}
@@ -899,7 +899,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* ── Modal cerrar técnico — CON DICTADO, HORÓMETRO OPCIONAL, BOTONES ESTATUS ── */}
         {cerrarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
             <div className="modal" style={{ maxWidth: 520 }}>
@@ -919,83 +918,41 @@ export default function Servicios() {
                 </div>
               )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
-
               <div className="form-grid">
-                {/* ── Horómetro opcional ── */}
                 <div className="form-group">
-                  <label className="form-label">
-                    Horómetro al cierre
-                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(opcional — dejar en 0 si no aplica)</span>
-                  </label>
-                  <input
-                    className="form-input"
-                    type="number"
-                    value={cerrarForm.horometro}
-                    onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))}
-                    placeholder="0"
-                  />
+                  <label className="form-label">Horómetro al cierre <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(opcional)</span></label>
+                  <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} placeholder="0" />
                 </div>
-
                 <div className="form-group">
                   <label className="form-label">Próximo servicio</label>
                   <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
                 </div>
-
-                {/* ── Estatus como botones grandes ── */}
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label" style={{ marginBottom: 8 }}>¿Cómo queda el equipo?</label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <button
-                      type="button"
-                      onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "disponible" }))}
-                      style={{
-                        padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--border)"}`,
-                        background: cerrarForm.estatusMonta === "disponible" ? "rgba(34,197,94,0.15)" : "var(--surface2)",
-                        color: cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--text-muted)",
-                        fontSize: "1rem", fontWeight: 700, cursor: "pointer", textAlign: "center",
-                      }}
-                    >
+                    <button type="button" onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "disponible" }))}
+                      style={{ padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--border)"}`, background: cerrarForm.estatusMonta === "disponible" ? "rgba(34,197,94,0.15)" : "var(--surface2)", color: cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--text-muted)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}>
                       ✅ Disponible
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "rentado" }))}
-                      style={{
-                        padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--border)"}`,
-                        background: cerrarForm.estatusMonta === "rentado" ? "rgba(59,130,246,0.15)" : "var(--surface2)",
-                        color: cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--text-muted)",
-                        fontSize: "1rem", fontWeight: 700, cursor: "pointer", textAlign: "center",
-                      }}
-                    >
+                    <button type="button" onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "rentado" }))}
+                      style={{ padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--border)"}`, background: cerrarForm.estatusMonta === "rentado" ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--text-muted)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}>
                       🏭 Rentado
                     </button>
                   </div>
                 </div>
-
-                {/* ── Notas con dictado de voz ── */}
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Notas / trabajos realizados</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <textarea
-                      className="form-textarea"
-                      value={cerrarForm.notasCierre}
-                      onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))}
-                      placeholder="Escribe o usa el micrófono 🎙️ para dictar los trabajos realizados..."
-                      rows={4}
-                      style={{ fontSize: "1rem", flex: 1 }}
-                    />
+                    <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))}
+                      placeholder="Escribe o usa el micrófono 🎙️ para dictar los trabajos realizados..." rows={4} style={{ fontSize: "1rem", flex: 1 }} />
                     <BtnMic onResult={texto => setCerrarForm((p: any) => ({ ...p, notasCierre: p.notasCierre ? p.notasCierre + " " + texto : texto }))} />
                   </div>
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
-                    🎙️ Toca el micrófono y habla — el texto aparece solo
-                  </p>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>🎙️ Toca el micrófono y habla — el texto aparece solo</p>
                 </div>
-
                 <div className="form-group"><FotoUpload label="📋 Foto de hoja firmada" fotoKey="fotoHojaFirmada" tipo="hoja" /></div>
                 <div className="form-group"><FotoUpload label="📸 Foto del equipo finalizado" fotoKey="fotoEquipoFinal" tipo="equipo" /></div>
                 <div className="form-group"><FotoUpload label="🔩 Foto de refacciones utilizadas" fotoKey="fotoRefacciones" tipo="refacciones" /></div>
               </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
                   onClick={cerrar} disabled={saving}>
@@ -1008,7 +965,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* animación pulso para micrófono activo */}
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
       </>
     );
@@ -1118,6 +1074,9 @@ export default function Servicios() {
                           )}
                           {s.ubicacionCierre && (
                             <a className="btn btn-secondary btn-sm" href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng} target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>🏁</a>
+                          )}
+                          {["developer", "gerencia", "oficina"].includes(rol) && s.estatus === "cerrado" && (
+                            <button className="btn btn-secondary btn-sm" title="Encuesta de satisfacción" onClick={() => verEncuesta(s)}>📋</button>
                           )}
                           {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
                             <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
@@ -1265,7 +1224,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal pausar vista normal — CON DICTADO ── */}
+      {/* ── Modal pausar vista normal ── */}
       {pausarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
           <div className="modal" style={{ maxWidth: 440 }}>
@@ -1291,7 +1250,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* ── Modal cerrar vista normal — CON DICTADO Y HORÓMETRO OPCIONAL ── */}
+      {/* ── Modal cerrar vista normal ── */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1317,10 +1276,7 @@ export default function Servicios() {
             )}
             <div className="form-grid">
               <div className="form-group">
-                <label className="form-label">
-                  Horómetro al cierre
-                  <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(dejar en 0 si no aplica)</span>
-                </label>
+                <label className="form-label">Horómetro al cierre <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>(dejar en 0 si no aplica)</span></label>
                 <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
               </div>
               <div className="form-group">
@@ -1348,6 +1304,133 @@ export default function Servicios() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={cerrar} disabled={saving}>{saving ? "Cerrando..." : "Cerrar servicio"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal encuesta ── */}
+      {encuestaModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEncuestaModal(null)}>
+          <div className="modal" style={{ maxWidth: 500 }}>
+            <button className="modal-close" onClick={() => setEncuestaModal(null)}>✕</button>
+            <h2 className="modal-title">📋 Encuesta — {encuestaModal.folio}</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: 16 }}>
+              {encuestaModal.cliente?.nombre ?? "Sin cliente"}
+            </p>
+
+            {loadingEncuesta && (
+              <div style={{ textAlign: "center", padding: 32 }}><div className="spinner" /></div>
+            )}
+
+            {/* ── Sin respuesta: formulario de envío ── */}
+            {!loadingEncuesta && !encuestaDatos && (
+              <div>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
+                  <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>📨</div>
+                  <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>Enviar encuesta de satisfacción</p>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Agrega uno o más correos y te llegará la notificación cuando el cliente responda.</p>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Correos destinatarios</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {encuestaEmails.map((email, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          className="form-input"
+                          type="email"
+                          value={email}
+                          placeholder="correo@empresa.com"
+                          onChange={e => {
+                            const copy = [...encuestaEmails];
+                            copy[i] = e.target.value;
+                            setEncuestaEmails(copy);
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        {encuestaEmails.length > 1 && (
+                          <button type="button"
+                            onClick={() => setEncuestaEmails(prev => prev.filter((_, idx) => idx !== i))}
+                            style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "1.1rem", padding: "4px 8px" }}>
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button"
+                      onClick={() => setEncuestaEmails(prev => [...prev, ""])}
+                      style={{ alignSelf: "flex-start", background: "none", border: "1.5px dashed var(--border)", borderRadius: 8, padding: "6px 14px", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.82rem" }}>
+                      + Agregar correo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Con respuesta: resultados ── */}
+            {!loadingEncuesta && encuestaDatos && (() => {
+              const est = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
+              const labelOp: Record<string, string> = { si: "Sí ✅", no: "No ❌", parcialmente: "Parcialmente ⚠️" };
+              const rows = [
+                { label: "1. Atención del técnico",        val: est(encuestaDatos.p1_atencion),      isStars: true },
+                { label: "2. Servicio en tiempo acordado",  val: labelOp[encuestaDatos.p2_tiempoAcordado] ?? "—", isStars: false },
+                { label: "3. Satisfacción con la solución", val: est(encuestaDatos.p3_satisfaccion),  isStars: true },
+                { label: "4. Técnico explicó el trabajo",   val: labelOp[encuestaDatos.p4_comunicacion] ?? "—", isStars: false },
+                { label: "5. Calificación general",         val: est(encuestaDatos.p5_general),       isStars: true },
+              ];
+              return (
+                <div>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                    <div style={{ flex: 1, background: "var(--surface2)", borderRadius: 10, padding: 14, textAlign: "center" }}>
+                      <p style={{ margin: 0, fontSize: "2rem", fontWeight: 900, color: "var(--accent)" }}>{encuestaDatos.p5_general}/5</p>
+                      <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>General</p>
+                    </div>
+                    <div style={{ flex: 1, background: "var(--surface2)", borderRadius: 10, padding: 14, textAlign: "center" }}>
+                      <p style={{ margin: 0, fontSize: "2rem", fontWeight: 900, color: encuestaDatos.recomendaria ? "var(--green)" : "var(--red)" }}>
+                        {encuestaDatos.recomendaria ? "👍" : "👎"}
+                      </p>
+                      <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                        {encuestaDatos.recomendaria ? "Recomienda" : "No recomienda"}
+                      </p>
+                    </div>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                    <tbody>
+                      {rows.map((r, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td style={{ padding: "10px 0", color: "var(--text-muted)" }}>{r.label}</td>
+                          <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 700, color: r.isStars ? "var(--accent)" : "var(--text)", fontSize: r.isStars ? "1rem" : "0.85rem" }}>
+                            {r.val}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {encuestaDatos.comentarios && (
+                    <div style={{ marginTop: 16, background: "var(--surface2)", borderRadius: 10, padding: "12px 14px" }}>
+                      <p style={{ margin: "0 0 4px", fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Comentarios</p>
+                      <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text)", fontStyle: "italic" }}>"{encuestaDatos.comentarios}"</p>
+                    </div>
+                  )}
+                  <p style={{ textAlign: "right", fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 12 }}>
+                    Respondida el {new Date(encuestaDatos.fechaRespuesta).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                  </p>
+                </div>
+              );
+            })()}
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setEncuestaModal(null)}>Cerrar</button>
+              {!loadingEncuesta && !encuestaDatos && (
+                <button
+                  className="btn btn-primary"
+                  disabled={enviandoEncuesta || encuestaEmails.every(e => !e.trim())}
+                  onClick={enviarEncuestaManual}
+                >
+                  {enviandoEncuesta ? "Enviando..." : "📨 Enviar encuesta"}
+                </button>
+              )}
             </div>
           </div>
         </div>
