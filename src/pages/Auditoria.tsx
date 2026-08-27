@@ -60,7 +60,7 @@ export default function Auditoria() {
                       file.name.endsWith(".xls");
       const endpoint = esExcel
         ? `${CLOUDINARY_BASE}/raw/upload`
-        : `${CLOUDINARY_BASE}/image/upload`;
+        : `${CLOUDINARY_BASE}/auto/upload`;
 
       const res  = await fetch(endpoint, { method: "POST", body: fd });
       const data = await res.json();
