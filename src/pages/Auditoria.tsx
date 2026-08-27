@@ -99,41 +99,38 @@ export default function Auditoria() {
   }
 
   function botonDoc(doc: Version) {
-    const esPdf    = doc.tipo.includes("pdf");
-    const esImagen = doc.tipo.includes("image");
+  const esPdf    = doc.tipo.includes("pdf");
+  const esImagen = doc.tipo.includes("image");
 
-    if (esImagen) {
-      // Imágenes: abrir en nueva pestaña normal
-      return (
-        <a href={doc.url} target="_blank" rel="noreferrer"
-          className="btn btn-secondary btn-sm"
-          style={{ textDecoration: "none", flexShrink: 0 }}>
-          👁️ Ver
-        </a>
-      );
-    }
-
-    if (esPdf) {
-      // PDF subido con /image/upload → fl_attachment fuerza descarga
-      const urlDescarga = doc.url.replace("/upload/", "/upload/fl_attachment/");
-      return (
-        <a href={urlDescarga} target="_blank" rel="noreferrer"
-          className="btn btn-secondary btn-sm"
-          style={{ textDecoration: "none", flexShrink: 0 }}>
-          ⬇️ Descargar
-        </a>
-      );
-    }
-
-    // Excel y otros: descarga directa
+  if (esImagen) {
     return (
       <a href={doc.url} target="_blank" rel="noreferrer"
+        className="btn btn-secondary btn-sm"
+        style={{ textDecoration: "none", flexShrink: 0 }}>
+        👁️ Ver
+      </a>
+    );
+  }
+
+  if (esPdf) {
+    const urlProxy = `https://pipsa-back.vercel.app/api/descargar?url=${encodeURIComponent(doc.url)}&nombre=${encodeURIComponent(doc.nombre)}`;
+    return (
+      <a href={urlProxy} target="_blank" rel="noreferrer"
         className="btn btn-secondary btn-sm"
         style={{ textDecoration: "none", flexShrink: 0 }}>
         ⬇️ Descargar
       </a>
     );
   }
+
+  return (
+    <a href={doc.url} target="_blank" rel="noreferrer"
+      className="btn btn-secondary btn-sm"
+      style={{ textDecoration: "none", flexShrink: 0 }}>
+      ⬇️ Descargar
+    </a>
+  );
+}
 
   if (loading) return <div className="loading-state"><div className="spinner" /></div>;
 
