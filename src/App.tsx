@@ -20,6 +20,7 @@ import Flota        from "./pages/Flota";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import IAWidget from "./components/IAWidget";
 import Cartera from "./pages/Cartera";
+import EncuestaPublica from "./pages/EncuestaPublica";
 import { useInactivityLogout } from "./hooks/useInactivityHook";
 
 // ── Componente interno para poder usar useNavigate dentro de BrowserRouter ──
@@ -36,6 +37,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
+      <Route path="/encuesta/:token" element={<EncuestaPublica />} />
 
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}>
 
