@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
-const UPLOAD_PRESET  = "pipsa-docs";
+const CLOUDINARY_BASE = "https://api.cloudinary.com/v1_1/dijxgoytw";
+const UPLOAD_PRESET   = "pipsa-docs";
 
 type Version = {
   _id: string;
@@ -27,7 +27,7 @@ type Hallazgo = {
 };
 
 export default function Auditoria() {
-  const rol = localStorage.getItem("rol") ?? "";
+  const rol         = localStorage.getItem("rol") ?? "";
   const puedeEditar = ["developer", "gerencia"].includes(rol);
 
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
@@ -53,7 +53,16 @@ export default function Auditoria() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("upload_preset", UPLOAD_PRESET);
-      const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
+
+      // Excel → raw/upload; PDF e imagen → image/upload (soporta fl_attachment)
+      const esExcel = file.type.includes("excel") || file.type.includes("sheet") ||
+                      file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") ||
+                      file.name.endsWith(".xls");
+      const endpoint = esExcel
+        ? `${CLOUDINARY_BASE}/raw/upload`
+        : `${CLOUDINARY_BASE}/image/upload`;
+
+      const res  = await fetch(endpoint, { method: "POST", body: fd });
       const data = await res.json();
 
       await api.post(`/hallazgos/${hallazgoId}/documentos`, {
@@ -82,19 +91,11 @@ export default function Auditoria() {
   }
 
   function iconTipo(tipo: string) {
-    if (tipo.includes("pdf"))                              return "📄";
-    if (tipo.includes("image"))                            return "🖼️";
-    if (tipo.includes("excel") || tipo.includes("sheet"))  return "📊";
-    if (tipo.includes("spreadsheet"))                      return "📊";
+    if (tipo.includes("pdf"))                             return "📄";
+    if (tipo.includes("image"))                           return "🖼️";
+    if (tipo.includes("excel") || tipo.includes("sheet")) return "📊";
+    if (tipo.includes("spreadsheet"))                     return "📊";
     return "📎";
-  }
-
-  // PDF → fuerza descarga con fl_attachment; imagen → abre inline; resto → descarga directo
-  function urlVer(doc: Version): string {
-    if (doc.tipo.includes("pdf")) {
-      return doc.url.replace("/upload/", "/upload/fl_attachment/");
-    }
-    return doc.url;
   }
 
   function botonDoc(doc: Version) {
@@ -102,6 +103,7 @@ export default function Auditoria() {
     const esImagen = doc.tipo.includes("image");
 
     if (esImagen) {
+      // Imágenes: abrir en nueva pestaña normal
       return (
         <a href={doc.url} target="_blank" rel="noreferrer"
           className="btn btn-secondary btn-sm"
@@ -111,11 +113,24 @@ export default function Auditoria() {
       );
     }
 
+    if (esPdf) {
+      // PDF subido con /image/upload → fl_attachment fuerza descarga
+      const urlDescarga = doc.url.replace("/upload/", "/upload/fl_attachment/");
+      return (
+        <a href={urlDescarga} target="_blank" rel="noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: "none", flexShrink: 0 }}>
+          ⬇️ Descargar
+        </a>
+      );
+    }
+
+    // Excel y otros: descarga directa
     return (
-      <a href={urlVer(doc)} target="_blank" rel="noreferrer"
+      <a href={doc.url} target="_blank" rel="noreferrer"
         className="btn btn-secondary btn-sm"
         style={{ textDecoration: "none", flexShrink: 0 }}>
-        {esPdf ? "⬇️ Descargar" : "⬇️ Descargar"}
+        ⬇️ Descargar
       </a>
     );
   }
