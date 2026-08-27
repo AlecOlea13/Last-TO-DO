@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/auto/upload";
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/raw/upload";
 const UPLOAD_PRESET  = "pipsa-docs";
 
 type Version = {
@@ -82,10 +82,12 @@ export default function Auditoria() {
   }
 
   function iconTipo(tipo: string) {
-    if (tipo.includes("pdf"))   return "📄";
-    if (tipo.includes("image")) return "🖼️";
-    return "📎";
-  }
+  if (tipo.includes("pdf"))                             return "📄";
+  if (tipo.includes("image"))                           return "🖼️";
+  if (tipo.includes("excel") || tipo.includes("sheet")) return "📊";
+  if (tipo.includes("spreadsheet"))                     return "📊";
+  return "📎";
+}
 
   if (loading) return <div className="loading-state"><div className="spinner" /></div>;
 
@@ -211,7 +213,7 @@ export default function Auditoria() {
                         </div>
                         <input
                           type="file"
-                          accept=".pdf,image/*"
+                          accept=".pdf,.xlsx,.xls,image/*"
                           style={{ display: "none" }}
                           ref={el => { fileRefs.current[h._id] = el; }}
                           onChange={e => { const f = e.target.files?.[0]; if (f) subirDocumento(h._id, f); e.target.value = ""; }}
