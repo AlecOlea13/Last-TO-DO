@@ -11,6 +11,7 @@ const ROL_LABEL: Record<string, string> = {
   tecnico:            "Técnico",
   almacen:            "Almacén",
   supervisor_almacen: "Sup. Almacén",
+  cliente: "Cliente",
 };
 
 function getSaludo(nombre: string) {
@@ -233,6 +234,8 @@ export default function Dashboard() {
     { to: "/dashboard/cartera",      icon: "📊", label: "Cartera", roles: ["developer","gerencia", "oficina"] },
     { to: "/dashboard/facturacion",  icon: "🧾", label: "Facturación", roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/proveedores",  icon: "🏭", label: "Proveedores",  roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/auditoria",        icon: "📁", label: "Auditoría",       roles: ["developer","gerencia","cliente"] },
+    { to: "/dashboard/reportes-cliente", icon: "📝", label: "Reportes Clientes", roles: ["developer", "gerencia", "cliente"] },
     { to: "/dashboard/portales",     icon: "🔑", label: "Portales",     roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/flota",        icon: "🚗", label: "Flota",        roles: ["developer","gerencia","oficina"], permiso: "flota" },
   ];

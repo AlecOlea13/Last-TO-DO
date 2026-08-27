@@ -15,6 +15,8 @@ import Almacen      from "./pages/Almacen";
 import Gastos       from "./pages/Gastos";
 import CxC          from "./pages/CxC";
 import Proveedores  from "./pages/Proveedores";
+import Auditoria       from "./pages/Auditoria";
+import ReportesCliente from "./pages/ReportesCliente";
 import Portales     from "./pages/Portales";
 import Flota        from "./pages/Flota";
 import ProtectedRoute from "./routes/ProtectedRoute";
@@ -74,6 +76,12 @@ function AppRoutes() {
         } />
         <Route path="proveedores" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Proveedores /></ProtectedRoute>
+        } />
+        <Route path="auditoria" element={
+          <ProtectedRoute roles={["developer","gerencia","cliente"]}><Auditoria /></ProtectedRoute>
+        } />
+        <Route path="reportes-cliente" element={
+          <ProtectedRoute roles={["developer","gerencia","cliente"]}><ReportesCliente /></ProtectedRoute>
         } />
         <Route path="portales" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Portales /></ProtectedRoute>
