@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 
-const CLOUDINARY_BASE = "https://api.cloudinary.com/v1_1/dijxgoytw";
-const UPLOAD_PRESET   = "pipsa-docs";
+const SUPABASE_URL    = "https://qhcvngcgajlodyoeckfz.supabase.co";
+const SUPABASE_KEY    = "sb_publishable_ICaO1LC13OZOR5dOy6wcyA_mB3bZ2H7";
+const SUPABASE_BUCKET = "documentos";
 
 type Version = {
   _id: string;
@@ -50,23 +51,31 @@ export default function Auditoria() {
   async function subirDocumento(hallazgoId: string, file: File) {
     setSubiendo(hallazgoId);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", UPLOAD_PRESET);
+      const ext      = file.name.split(".").pop();
+      const fileName = `${hallazgoId}_${Date.now()}.${ext}`;
 
-      // Excel → raw/upload; PDF e imagen → image/upload (soporta fl_attachment)
-      const esExcel = file.type.includes("excel") || file.type.includes("sheet") ||
-                      file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") ||
-                      file.name.endsWith(".xls");
-      const endpoint = esExcel
-        ? `${CLOUDINARY_BASE}/raw/upload`
-        : `${CLOUDINARY_BASE}/auto/upload`;
+      const res = await fetch(
+        `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${fileName}`,
+        {
+          method:  "POST",
+          headers: {
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+            "Content-Type":  file.type,
+            "x-upsert":      "true",
+          },
+          body: file,
+        }
+      );
 
-      const res  = await fetch(endpoint, { method: "POST", body: fd });
-      const data = await res.json();
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message ?? "Error al subir");
+      }
+
+      const url = `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${fileName}`;
 
       await api.post(`/hallazgos/${hallazgoId}/documentos`, {
-        url:    data.secure_url,
+        url,
         nombre: file.name,
         tipo:   file.type,
         nota:   notaTemp[hallazgoId] ?? "",
@@ -74,8 +83,11 @@ export default function Auditoria() {
 
       setNotaTemp(p => ({ ...p, [hallazgoId]: "" }));
       await load();
-    } catch { alert("Error al subir el documento"); }
-    finally { setSubiendo(null); }
+    } catch (e: any) {
+      alert("Error al subir el documento: " + e.message);
+    } finally {
+      setSubiendo(null);
+    }
   }
 
   async function eliminarDocumento(hallazgoId: string, docId: string) {
@@ -83,7 +95,9 @@ export default function Auditoria() {
     try {
       await api.delete(`/hallazgos/${hallazgoId}/documentos/${docId}`);
       await load();
-    } catch { alert("Error al eliminar"); }
+    } catch {
+      alert("Error al eliminar");
+    }
   }
 
   function fmtFecha(d: string) {
@@ -99,38 +113,37 @@ export default function Auditoria() {
   }
 
   function botonDoc(doc: Version) {
-  const esPdf    = doc.tipo.includes("pdf");
-  const esImagen = doc.tipo.includes("image");
+    const esPdf    = doc.tipo.includes("pdf");
+    const esImagen = doc.tipo.includes("image");
 
-  if (esImagen) {
-    return (
-      <a href={doc.url} target="_blank" rel="noreferrer"
-        className="btn btn-secondary btn-sm"
-        style={{ textDecoration: "none", flexShrink: 0 }}>
-        👁️ Ver
-      </a>
-    );
-  }
+    if (esImagen) {
+      return (
+        <a href={doc.url} target="_blank" rel="noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: "none", flexShrink: 0 }}>
+          👁️ Ver
+        </a>
+      );
+    }
 
-  if (esPdf) {
-    const urlProxy = `https://pipsa-back.vercel.app/api/descargar?url=${encodeURIComponent(doc.url)}&nombre=${encodeURIComponent(doc.nombre)}`;
+    if (esPdf) {
+      return (
+        <a href={doc.url} download={doc.nombre} target="_blank" rel="noreferrer"
+          className="btn btn-secondary btn-sm"
+          style={{ textDecoration: "none", flexShrink: 0 }}>
+          ⬇️ Descargar
+        </a>
+      );
+    }
+
     return (
-      <a href={urlProxy} target="_blank" rel="noreferrer"
+      <a href={doc.url} download={doc.nombre} target="_blank" rel="noreferrer"
         className="btn btn-secondary btn-sm"
         style={{ textDecoration: "none", flexShrink: 0 }}>
         ⬇️ Descargar
       </a>
     );
   }
-
-  return (
-    <a href={doc.url} target="_blank" rel="noreferrer"
-      className="btn btn-secondary btn-sm"
-      style={{ textDecoration: "none", flexShrink: 0 }}>
-      ⬇️ Descargar
-    </a>
-  );
-}
 
   if (loading) return <div className="loading-state"><div className="spinner" /></div>;
 
@@ -151,7 +164,6 @@ export default function Auditoria() {
             return (
               <div key={h._id} style={{ background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
 
-                {/* ── Header hallazgo ── */}
                 <div
                   onClick={() => setExpandido(abierto ? null : h._id)}
                   style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", cursor: "pointer", userSelect: "none" }}
@@ -191,16 +203,13 @@ export default function Auditoria() {
                   <span style={{ color: "var(--text-muted)", fontSize: "1rem" }}>{abierto ? "▲" : "▼"}</span>
                 </div>
 
-                {/* ── Contenido expandido ── */}
                 {abierto && (
                   <div style={{ borderTop: "1px solid var(--border)", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-                    {/* Descripción */}
                     <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "12px 14px", fontSize: "0.85rem", color: "var(--text-muted)", lineHeight: 1.6 }}>
                       {h.descripcion}
                     </div>
 
-                    {/* Documentos */}
                     {h.documentos.length > 0 && (
                       <div>
                         <p style={{ margin: "0 0 8px", fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Versiones</p>
@@ -229,7 +238,6 @@ export default function Auditoria() {
                       </div>
                     )}
 
-                    {/* Subir nuevo documento */}
                     {puedeEditar && (
                       <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "14px 16px", border: "1.5px dashed var(--border)" }}>
                         <p style={{ margin: "0 0 10px", fontSize: "0.78rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
