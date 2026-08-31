@@ -57,6 +57,8 @@ export type OrdenTrabajoReporte = {
   manoDeObra?: string; notasCierre?: string;
   refacciones?: { cantidad: number; descripcion: string; precio?: number }[];
   costoRefacciones?: number; costoManoObra?: number; observaciones?: string;
+  firmaCliente?: string;
+  fotoEquipoFinal?: string[]; // ← nuevo
 };
 
 // ── Helper moneda ──
@@ -672,6 +674,23 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 
   const totalCosto = (ot.costoRefacciones ?? 0) + (ot.costoManoObra ?? 0);
 
+  // ── Bloque de firma del cliente: imagen si existe, línea en blanco si no ──
+  const firmaClienteHtml = ot.firmaCliente
+    ? `<img src="${ot.firmaCliente}" style="max-height:44px;max-width:200px;object-fit:contain;display:block;margin:0 auto 2px;" alt="Firma del cliente" />`
+    : "";
+
+  // ── Cuadrícula de fotos del equipo (hasta 5) ──
+  const fotosEquipoHtml = (ot.fotoEquipoFinal && ot.fotoEquipoFinal.length > 0)
+    ? `<div class="ref-section">
+        <div class="ref-title">📸 Fotos del equipo</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:6px;">
+          ${ot.fotoEquipoFinal.map(url =>
+            `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:3px;border:1px solid #ccc;" />`
+          ).join("")}
+        </div>
+      </div>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -730,6 +749,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
   .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
   .firma-box { text-align: center; }
   .firma-line { border-top: 1.5px solid #111; margin-top: 40px; padding-top: 4px; font-size: 9pt; font-weight: 700; text-transform: uppercase; }
+  .firma-box.cliente .firma-line { margin-top: 4px; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
@@ -841,6 +861,8 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
       <div class="total-item">Total: <strong>$${totalCosto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
     </div>` : ""}
 
+    ${fotosEquipoHtml}
+
     <div class="obs-section">
       <div class="obs-label">Observaciones:</div>
       <div class="obs-value">${ot.observaciones ?? ""}</div>
@@ -848,7 +870,10 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 
     <div class="firmas">
       <div class="firma-box"><div class="firma-line">Técnico: ${ot.tecnico ?? "_____________________"}</div></div>
-      <div class="firma-box"><div class="firma-line">Cliente: _____________________</div></div>
+      <div class="firma-box cliente">
+        ${firmaClienteHtml}
+        <div class="firma-line">Cliente: ${ot.firmaCliente ? (ot.cliente?.nombre ?? "") : "_____________________"}</div>
+      </div>
     </div>
   </div>
 </div>
