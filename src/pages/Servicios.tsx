@@ -232,7 +232,7 @@ function FirmaCanvas({ onFirma, onCancelar }: { onFirma: (base64: string) => voi
 
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 500,
+      position: "fixed", inset: 0, zIndex: 10000,
       background: "rgba(0,0,0,0.92)",
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       padding: 20,
