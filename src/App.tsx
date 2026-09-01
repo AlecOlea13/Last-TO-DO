@@ -7,6 +7,7 @@ import Clientes     from "./pages/Clientes";
 import Montacargas  from "./pages/Montacargas";
 import Rentas       from "./pages/Rentas";
 import Servicios    from "./pages/Servicios";
+import Pendientes from "./pages/Pendientes";
 import Facturacion from "./pages/Facturacion";
 import Cotizaciones from "./pages/Cotizaciones";
 import Asesores     from "./pages/Asesores";
@@ -50,6 +51,8 @@ function AppRoutes() {
         <Route path="clientes" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Clientes /></ProtectedRoute>
         } />
+        <Route path="pendientes" element={
+          <ProtectedRoute><Pendientes /></ProtectedRoute>} />
         <Route path="rentas" element={
           <ProtectedRoute roles={["developer","gerencia","oficina","supervisor_almacen"]}><Rentas /></ProtectedRoute>
         } />

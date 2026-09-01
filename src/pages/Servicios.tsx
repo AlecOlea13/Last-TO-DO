@@ -530,6 +530,7 @@ export default function Servicios() {
   const [razonPausa, setRazonPausa]     = useState("");
   const [form, setForm]                 = useState<any>(emptyForm);
   const [cerrarForm, setCerrarForm]     = useState<any>(emptyCerrarForm);
+  const [pendientesTexto, setPendientesTexto] = useState<string[]>([""]);
   const [saving, setSaving]             = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState<"equipo" | "refacciones" | null>(null);
   const [iniciandoId, setIniciandoId]   = useState<string | null>(null);
@@ -556,15 +557,15 @@ export default function Servicios() {
   const [reporteFiltroTecnico, setReporteFiltroTecnico] = useState("todos");
 
   useEffect(() => {
-  load();
-  // Polling cada 15 segundos — solo si no es técnico para no sobrecargar móviles
-  if (!esTecnico) {
-    const interval = setInterval(() => {
-      load();
-    }, 15000);
-    return () => clearInterval(interval);
-  }
-}, []);
+    load();
+    // Polling cada 15 segundos — solo si no es técnico, para no sobrecargar móviles
+    if (!esTecnico) {
+      const interval = setInterval(() => {
+        load();
+      }, 15000);
+      return () => clearInterval(interval);
+    }
+  }, []);
 
   useEffect(() => {
     if (rol !== "tecnico") return;
@@ -636,7 +637,7 @@ export default function Servicios() {
     finally { setSaving(false); }
   }
 
-  // ── Subida de foto de equipo (múltiple, hasta 5) ──
+  // ── Subida de foto de equipo (múltiple, hasta 25) ──
   async function subirFotoEquipo(file: File, accionId?: string) {
     setUploadingFoto("equipo");
     try {
@@ -778,14 +779,37 @@ export default function Servicios() {
 
   const [cerrarAccionId] = useState(() => nanoid());
 
+  async function guardarPendientes(servicioId: string, montacargasId?: string, clienteId?: string, tecnicoId?: string) {
+    const descripciones = pendientesTexto.map(p => p.trim()).filter(Boolean);
+    if (descripciones.length === 0) return;
+    try {
+      await api.post("/pendientes", {
+        servicioId,
+        montacargasId,
+        clienteId,
+        tecnicoId,
+        descripciones,
+      });
+    } catch (e) {
+      console.error("Error guardando pendientes", e);
+    }
+  }
+
   async function cerrar() {
     if (!cerrarModal) return;
     setSaving(true);
     try {
       const ubicacion = await obtenerUbicacion();
-      const payload   = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
+      const payload: any = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
+      if (esTecnico) delete payload.estatusMonta; // el técnico no cambia el estatus del equipo
       if (online) {
         await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
+        await guardarPendientes(
+          cerrarModal._id,
+          cerrarModal.montacargas?._id,
+          cerrarModal.cliente?._id,
+          cerrarModal.tecnicoAsignado?._id ?? userId
+        );
         load();
       } else {
         await guardarAccion({
@@ -801,6 +825,7 @@ export default function Servicios() {
         await actualizarPendientes();
       }
       setCerrarModal(null);
+      setPendientesTexto([""]);
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
@@ -1043,7 +1068,7 @@ export default function Servicios() {
     return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
-  // ── Componente de subida MÚLTIPLE de fotos del equipo (hasta 5) ──
+  // ── Componente de subida MÚLTIPLE de fotos del equipo (hasta 25) ──
   function FotosEquipoUpload() {
     const refCamara  = useRef<HTMLInputElement>(null);
     const refGaleria = useRef<HTMLInputElement>(null);
@@ -1197,6 +1222,55 @@ export default function Servicios() {
     );
   }
 
+  // ── Componente de captura de pendientes ──
+  function PendientesInline() {
+    return (
+      <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+        <label className="form-label">
+          📝 Pendientes de este servicio
+          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+            (opcional)
+          </span>
+        </label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {pendientesTexto.map((texto, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <textarea
+                className="form-textarea"
+                rows={2}
+                value={texto}
+                onChange={e => {
+                  const copy = [...pendientesTexto];
+                  copy[i] = e.target.value;
+                  setPendientesTexto(copy);
+                }}
+                placeholder="Ej: Fuga pequeña en motor, hay que empacar..."
+                style={{ flex: 1 }}
+              />
+              <BtnMic onResult={txt => {
+                const copy = [...pendientesTexto];
+                copy[i] = copy[i] ? copy[i] + " " + txt : txt;
+                setPendientesTexto(copy);
+              }} />
+              {pendientesTexto.length > 1 && (
+                <button type="button"
+                  onClick={() => setPendientesTexto(prev => prev.filter((_, idx) => idx !== i))}
+                  style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "1.1rem", padding: "4px 8px" }}>
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button"
+            onClick={() => setPendientesTexto(prev => [...prev, ""])}
+            style={{ alignSelf: "flex-start", background: "none", border: "1.5px dashed var(--border)", borderRadius: 8, padding: "6px 14px", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.82rem" }}>
+            + Agregar otro pendiente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Vista técnico ──
   if (esTecnico) {
     return (
@@ -1241,7 +1315,7 @@ export default function Servicios() {
             onIniciarConfirm={s => setConfirmarIniciarModal(s)}
             onPausar={s => { setPausarModal(s); setRazonPausa(""); }}
             onReanudar={reanudar}
-            onCerrar={s => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}
+            onCerrar={s => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setPendientesTexto([""]); }}
           />
         )}
 
@@ -1307,7 +1381,7 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* Modal cerrar técnico */}
+        {/* Modal cerrar técnico — SIN el selector Disponible/Rentado */}
         {cerrarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
             <div className="modal" style={{ maxWidth: 520 }}>
@@ -1337,19 +1411,6 @@ export default function Servicios() {
                   <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
                 </div>
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                  <label className="form-label" style={{ marginBottom: 8 }}>¿Cómo queda el equipo?</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <button type="button" onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "disponible" }))}
-                      style={{ padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--border)"}`, background: cerrarForm.estatusMonta === "disponible" ? "rgba(34,197,94,0.15)" : "var(--surface2)", color: cerrarForm.estatusMonta === "disponible" ? "var(--green)" : "var(--text-muted)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}>
-                      ✅ Disponible
-                    </button>
-                    <button type="button" onClick={() => setCerrarForm((p: any) => ({ ...p, estatusMonta: "rentado" }))}
-                      style={{ padding: "16px 12px", borderRadius: 12, border: `2px solid ${cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--border)"}`, background: cerrarForm.estatusMonta === "rentado" ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: cerrarForm.estatusMonta === "rentado" ? "var(--blue)" : "var(--text-muted)", fontSize: "1rem", fontWeight: 700, cursor: "pointer" }}>
-                      🏭 Rentado
-                    </button>
-                  </div>
-                </div>
-                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Notas / trabajos realizados</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     <textarea className="form-textarea" value={cerrarForm.notasCierre} onChange={e => setCerrarForm((p: any) => ({ ...p, notasCierre: e.target.value }))}
@@ -1360,6 +1421,7 @@ export default function Servicios() {
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
                 <div className="form-group"><FotoRefaccionesUpload /></div>
                 <FirmaInline />
+                <PendientesInline />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
@@ -1514,7 +1576,7 @@ export default function Servicios() {
                           )}
                           {!soloVer && s.estatus !== "cerrado" && puedeOperar && (
                             <button className="btn btn-amber btn-sm"
-                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); }}>
+                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setPendientesTexto([""]); }}>
                               Cerrar
                             </button>
                           )}
@@ -1667,7 +1729,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* Modal cerrar vista normal */}
+      {/* Modal cerrar vista normal — con el selector Disponible/Rentado */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1717,6 +1779,7 @@ export default function Servicios() {
               <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
               <div className="form-group"><FotoRefaccionesUpload /></div>
               <FirmaInline />
+              <PendientesInline />
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>

@@ -200,9 +200,10 @@ export default function Dashboard() {
   }
 
   const allNav = [
-    { to: "/dashboard",              icon: "📊", label: "Dashboard",         roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard",              icon: "📊", label: "Dashboard",          roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
     { to: "/dashboard/montacargas",  icon: "🏗️",  label: "Montacargas",       roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
     { to: "/dashboard/servicios",    icon: "🔧", label: "Servicios",          roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/pendientes",   icon: "📝", label: "Pendientes",         roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
     { to: "/dashboard/almacen",      icon: "📦", label: "Almacén",            roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
     { to: "/dashboard/clientes",     icon: "🏢", label: "Clientes",           roles: ["developer","gerencia","oficina"] },
     { to: "/dashboard/rentas",       icon: "📋", label: "Rentas",             roles: ["developer","gerencia","oficina","supervisor_almacen"] },
