@@ -680,14 +680,19 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
     : "";
 
   // ── Cuadrícula de fotos del equipo (hasta 5) ──
-  const fotosEquipoHtml = (ot.fotoEquipoFinal && ot.fotoEquipoFinal.length > 0)
+  const MAX_FOTOS_REPORTE = 6;
+  const totalFotos = ot.fotoEquipoFinal?.length ?? 0;
+  const fotosAMostrar = (ot.fotoEquipoFinal ?? []).slice(0, MAX_FOTOS_REPORTE);
+
+  const fotosEquipoHtml = totalFotos > 0
     ? `<div class="ref-section">
-        <div class="ref-title">📸 Fotos del equipo</div>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:6px;">
-          ${ot.fotoEquipoFinal.map(url =>
+        <div class="ref-title">📸 Fotos del equipo${totalFotos > MAX_FOTOS_REPORTE ? ` (mostrando ${MAX_FOTOS_REPORTE} de ${totalFotos})` : ""}</div>
+        <div style="display:grid;grid-template-columns:repeat(${Math.min(fotosAMostrar.length, 6)},1fr);gap:4px;padding:6px;">
+          ${fotosAMostrar.map(url =>
             `<img src="${url}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:3px;border:1px solid #ccc;" />`
           ).join("")}
         </div>
+        ${totalFotos > MAX_FOTOS_REPORTE ? `<p style="font-size:8pt;color:#888;text-align:center;padding:4px;">+ ${totalFotos - MAX_FOTOS_REPORTE} foto${totalFotos - MAX_FOTOS_REPORTE > 1 ? "s" : ""} más disponible${totalFotos - MAX_FOTOS_REPORTE > 1 ? "s" : ""} en el sistema</p>` : ""}
       </div>`
     : "";
 

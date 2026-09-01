@@ -10,7 +10,7 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
-const MAX_FOTOS_EQUIPO = 5;
+const MAX_FOTOS_EQUIPO = 25;
 
 type OrdenRefaccionItem = {
   refaccion: { _id: string; nombre: string; numeroParte?: string; unidad: string; precio?: number };
@@ -555,7 +555,16 @@ export default function Servicios() {
   const [reporteHasta, setReporteHasta]                 = useState("");
   const [reporteFiltroTecnico, setReporteFiltroTecnico] = useState("todos");
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+  load();
+  // Polling cada 15 segundos — solo si no es técnico para no sobrecargar móviles
+  if (!esTecnico) {
+    const interval = setInterval(() => {
+      load();
+    }, 15000);
+    return () => clearInterval(interval);
+  }
+}, []);
 
   useEffect(() => {
     if (rol !== "tecnico") return;
@@ -652,6 +661,15 @@ export default function Servicios() {
       }
     } catch { alert("Error al procesar la imagen"); }
     finally { setUploadingFoto(null); }
+  }
+
+  // ── Sube múltiples archivos en secuencia (uno tras otro para no saturar) ──
+  async function subirVariasFotosEquipo(files: FileList, accionId?: string) {
+    const disponibles = MAX_FOTOS_EQUIPO - (cerrarForm.fotoEquipoFinal?.length ?? 0);
+    const lista = Array.from(files).slice(0, disponibles);
+    for (const file of lista) {
+      await subirFotoEquipo(file, accionId);
+    }
   }
 
   function quitarFotoEquipo(index: number) {
@@ -1027,9 +1045,10 @@ export default function Servicios() {
 
   // ── Componente de subida MÚLTIPLE de fotos del equipo (hasta 5) ──
   function FotosEquipoUpload() {
-    const ref    = useRef<HTMLInputElement>(null);
+    const refCamara  = useRef<HTMLInputElement>(null);
+    const refGaleria = useRef<HTMLInputElement>(null);
     const fotos: string[] = cerrarForm.fotoEquipoFinal ?? [];
-    const lleno  = fotos.length >= MAX_FOTOS_EQUIPO;
+    const lleno = fotos.length >= MAX_FOTOS_EQUIPO;
 
     return (
       <div>
@@ -1058,28 +1077,48 @@ export default function Servicios() {
           ))}
         </div>
         {!lleno && (
-          <div
-            onClick={() => ref.current?.click()}
-            style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
-          >
-            {uploadingFoto === "equipo" ? (
-              <div className="spinner" style={{ width: 24, height: 24, margin: "auto" }} />
-            ) : (
-              <div>
-                <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>📷 Agregar foto</p>
-                <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>Cámara o galería</p>
-              </div>
-            )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => refCamara.current?.click()}
+              disabled={uploadingFoto === "equipo"}
+              style={{
+                flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)",
+                background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600,
+                cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              }}
+            >
+              {uploadingFoto === "equipo" ? <div className="spinner" style={{ width: 20, height: 20 }} /> : (<>📷<span style={{ fontSize: "0.78rem" }}>Cámara</span></>)}
+            </button>
+            <button
+              type="button"
+              onClick={() => refGaleria.current?.click()}
+              disabled={uploadingFoto === "equipo"}
+              style={{
+                flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)",
+                background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600,
+                cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+              }}
+            >
+              {uploadingFoto === "equipo" ? <div className="spinner" style={{ width: 20, height: 20 }} /> : (<>🖼️<span style={{ fontSize: "0.78rem" }}>Galería (varias)</span></>)}
+            </button>
           </div>
         )}
         <input
-          ref={ref}
+          ref={refCamara}
           type="file"
           accept="image/*"
+          capture="environment"
           style={{ display: "none" }}
           onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoEquipo(f, cerrarAccionId); e.target.value = ""; }}
+        />
+        <input
+          ref={refGaleria}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={e => { const files = e.target.files; if (files && files.length > 0) subirVariasFotosEquipo(files, cerrarAccionId); e.target.value = ""; }}
         />
       </div>
     );
