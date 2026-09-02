@@ -567,6 +567,7 @@ export default function Servicios() {
   const userId            = localStorage.getItem("userId") ?? "";
   const canCreate         = ["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol);
   const canAsignarTecnico = ["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol);
+  const canEditar         = ["developer", "gerencia", "supervisor_almacen"].includes(rol);
   const esTecnico         = rol === "tecnico";
   const soloVer           = ["oficina", "supervisor_almacen"].includes(rol);
 
@@ -597,6 +598,11 @@ export default function Servicios() {
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
   const [mostrarFirma, setMostrarFirma] = useState(false);
 
+  // ── Estados edición ──
+  const [editarModal, setEditarModal]   = useState<Servicio | null>(null);
+  const [editarForm, setEditarForm]     = useState<any>({});
+  const [editandoId, setEditandoId]     = useState<string | null>(null);
+
   // ── Encuestas ──
   const [encuestaModal, setEncuestaModal]           = useState<Servicio | null>(null);
   const [encuestaDatos, setEncuestaDatos]           = useState<any>(null);
@@ -616,11 +622,8 @@ export default function Servicios() {
 
   useEffect(() => {
     load();
-    // Polling cada 15 segundos — solo si no es técnico, para no sobrecargar móviles
     if (!esTecnico) {
-      const interval = setInterval(() => {
-        load();
-      }, 15000);
+      const interval = setInterval(() => { load(); }, 15000);
       return () => clearInterval(interval);
     }
   }, []);
@@ -695,6 +698,43 @@ export default function Servicios() {
     finally { setSaving(false); }
   }
 
+  // ── Editar servicio ──
+  function abrirEditar(s: Servicio) {
+    setEditarForm({
+      cliente:         s.cliente?._id         ?? "",
+      montacargas:     s.montacargas?._id      ?? "",
+      tipoServicio:    s.tipoServicio?._id     ?? "",
+      tecnicoAsignado: s.tecnicoAsignado?._id  ?? "",
+      fechaReporte:    s.fechaReporte ? s.fechaReporte.split("T")[0] : "",
+      problema:        s.problema              ?? "",
+      horometro:       s.horometro             ?? 0,
+      estatus:         s.estatus,
+      costoRefacciones: s.costoRefacciones     ?? 0,
+      costoManoObra:   s.costoManoObra         ?? 0,
+      notasCierre:     s.notasCierre           ?? "",
+    });
+    setEditarModal(s);
+  }
+
+  async function guardarEdicion() {
+    if (!editarModal) return;
+    setEditandoId(editarModal._id);
+    try {
+      const payload: any = { ...editarForm };
+      if (!payload.tipoServicio)     delete payload.tipoServicio;
+      if (!payload.tecnicoAsignado)  delete payload.tecnicoAsignado;
+      if (!payload.cliente)          delete payload.cliente;
+      if (!payload.montacargas)      delete payload.montacargas;
+      await api.put(`/servicios/${editarModal._id}`, payload);
+      setEditarModal(null);
+      load();
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? "Error al guardar cambios");
+    } finally {
+      setEditandoId(null);
+    }
+  }
+
   // ── Subida de foto de equipo (múltiple, hasta 25) ──
   async function subirFotoEquipo(file: File, accionId?: string) {
     setUploadingFoto("equipo");
@@ -722,7 +762,6 @@ export default function Servicios() {
     finally { setUploadingFoto(null); }
   }
 
-  // ── Sube múltiples archivos en secuencia (uno tras otro para no saturar) ──
   async function subirVariasFotosEquipo(files: FileList, accionId?: string) {
     const disponibles = MAX_FOTOS_EQUIPO - (cerrarForm.fotoEquipoFinal?.length ?? 0);
     const lista = Array.from(files).slice(0, disponibles);
@@ -854,13 +893,7 @@ export default function Servicios() {
     const descripciones = pendientesTexto.map(p => p.trim()).filter(Boolean);
     if (descripciones.length === 0) return;
     try {
-      await api.post("/pendientes", {
-        servicioId,
-        montacargasId,
-        clienteId,
-        tecnicoId,
-        descripciones,
-      });
+      await api.post("/pendientes", { servicioId, montacargasId, clienteId, tecnicoId, descripciones });
     } catch (e) {
       console.error("Error guardando pendientes", e);
     }
@@ -872,7 +905,7 @@ export default function Servicios() {
     try {
       const ubicacion = await obtenerUbicacion();
       const payload: any = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
-      if (esTecnico) delete payload.estatusMonta; // el técnico no cambia el estatus del equipo
+      if (esTecnico) delete payload.estatusMonta;
       if (online) {
         await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
         await guardarPendientes(
@@ -888,7 +921,7 @@ export default function Servicios() {
           payload: {
             ...payload,
             fotoEquipoFinal: (payload.fotoEquipoFinal ?? []).filter((f: string) => !f.startsWith("data:")),
-            fotoRefacciones: payload.fotoRefacciones?.startsWith("data:")  ? "" : payload.fotoRefacciones,
+            fotoRefacciones: payload.fotoRefacciones?.startsWith("data:") ? "" : payload.fotoRefacciones,
           },
           timestamp: Date.now(),
         });
@@ -1166,56 +1199,26 @@ export default function Servicios() {
                   background: "rgba(0,0,0,0.7)", color: "#fff", border: "none", fontSize: "0.8rem",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                 }}
-              >
-                ✕
-              </button>
+              >✕</button>
             </div>
           ))}
         </div>
         {!lleno && (
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => refCamara.current?.click()}
-              disabled={uploadingFoto === "equipo"}
-              style={{
-                flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)",
-                background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600,
-                cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              }}
-            >
+            <button type="button" onClick={() => refCamara.current?.click()} disabled={uploadingFoto === "equipo"}
+              style={{ flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)", background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
               {uploadingFoto === "equipo" ? <div className="spinner" style={{ width: 20, height: 20 }} /> : (<>📷<span style={{ fontSize: "0.78rem" }}>Cámara</span></>)}
             </button>
-            <button
-              type="button"
-              onClick={() => refGaleria.current?.click()}
-              disabled={uploadingFoto === "equipo"}
-              style={{
-                flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)",
-                background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600,
-                cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-              }}
-            >
+            <button type="button" onClick={() => refGaleria.current?.click()} disabled={uploadingFoto === "equipo"}
+              style={{ flex: 1, padding: "14px", borderRadius: "var(--radius-sm)", border: "2px dashed var(--border)", background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
               {uploadingFoto === "equipo" ? <div className="spinner" style={{ width: 20, height: 20 }} /> : (<>🖼️<span style={{ fontSize: "0.78rem" }}>Galería (varias)</span></>)}
             </button>
           </div>
         )}
-        <input
-          ref={refCamara}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoEquipo(f, cerrarAccionId); e.target.value = ""; }}
-        />
-        <input
-          ref={refGaleria}
-          type="file"
-          accept="image/*"
-          multiple
-          style={{ display: "none" }}
-          onChange={e => { const files = e.target.files; if (files && files.length > 0) subirVariasFotosEquipo(files, cerrarAccionId); e.target.value = ""; }}
-        />
+        <input ref={refCamara} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoEquipo(f, cerrarAccionId); e.target.value = ""; }} />
+        <input ref={refGaleria} type="file" accept="image/*" multiple style={{ display: "none" }}
+          onChange={e => { const files = e.target.files; if (files && files.length > 0) subirVariasFotosEquipo(files, cerrarAccionId); e.target.value = ""; }} />
       </div>
     );
   }
@@ -1229,12 +1232,10 @@ export default function Servicios() {
           🔩 Foto de refacciones utilizadas
           {!online && <span style={{ fontSize: "0.68rem", color: "var(--accent)", marginLeft: 6 }}>📵 se guardará offline</span>}
         </label>
-        <div
-          onClick={() => ref.current?.click()}
+        <div onClick={() => ref.current?.click()}
           style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
           onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
-        >
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
           {url ? (
             <img src={url} alt="Refacciones" style={{ width: "100%", maxHeight: 140, objectFit: "cover", borderRadius: 6 }} />
           ) : uploadingFoto === "refacciones" ? (
@@ -1246,18 +1247,12 @@ export default function Servicios() {
             </div>
           )}
         </div>
-        <input
-          ref={ref}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoRefacciones(f, cerrarAccionId); }}
-        />
+        <input ref={ref} type="file" accept="image/*" style={{ display: "none" }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoRefacciones(f, cerrarAccionId); }} />
       </div>
     );
   }
 
-  // ── Componente de firma inline ──
   function FirmaInline() {
     const firma = cerrarForm.firmaCliente;
     return (
@@ -1267,25 +1262,13 @@ export default function Servicios() {
           <div style={{ position: "relative" }}>
             <img src={firma} alt="Firma del cliente" style={{ width: "100%", maxHeight: 120, objectFit: "contain", background: "#fff", borderRadius: 8, border: "1.5px solid var(--green)", padding: 8 }} />
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCerrarForm((p: any) => ({ ...p, firmaCliente: "" }))}>
-                🗑️ Borrar firma
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMostrarFirma(true)}>
-                ✏️ Volver a firmar
-              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCerrarForm((p: any) => ({ ...p, firmaCliente: "" }))}>🗑️ Borrar firma</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMostrarFirma(true)}>✏️ Volver a firmar</button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setMostrarFirma(true)}
-            style={{
-              width: "100%", padding: "20px", borderRadius: 12,
-              border: "2px dashed var(--border)", background: "var(--surface2)",
-              color: "var(--text-muted)", fontSize: "1rem", fontWeight: 600,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-            }}
-          >
+          <button type="button" onClick={() => setMostrarFirma(true)}
+            style={{ width: "100%", padding: "20px", borderRadius: 12, border: "2px dashed var(--border)", background: "var(--surface2)", color: "var(--text-muted)", fontSize: "1rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
             ✍️ Toca aquí para que el cliente firme
           </button>
         )}
@@ -1341,7 +1324,6 @@ export default function Servicios() {
           />
         )}
 
-        {/* Modal confirmar iniciar */}
         {confirmarIniciarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmarIniciarModal(null)}>
             <div className="modal" style={{ maxWidth: 360 }}>
@@ -1374,7 +1356,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* Modal pausar */}
         {pausarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setPausarModal(null)}>
             <div className="modal" style={{ maxWidth: 440 }}>
@@ -1403,7 +1384,6 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* Modal cerrar técnico — SIN el selector Disponible/Rentado */}
         {cerrarModal && (
           <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
             <div className="modal" style={{ maxWidth: 520 }}>
@@ -1457,14 +1437,12 @@ export default function Servicios() {
           </div>
         )}
 
-        {/* Canvas de firma */}
         {mostrarFirma && (
           <FirmaCanvas
             onFirma={base64 => { setCerrarForm((p: any) => ({ ...p, firmaCliente: base64 })); setMostrarFirma(false); }}
             onCancelar={() => setMostrarFirma(false)}
           />
         )}
-
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
       </>
     );
@@ -1567,6 +1545,10 @@ export default function Servicios() {
                       </td>
                       <td>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {/* ── Editar — developer, gerencia, supervisor_almacen ── */}
+                          {canEditar && (
+                            <button className="btn btn-secondary btn-sm" title="Editar servicio" onClick={() => abrirEditar(s)}>✏️</button>
+                          )}
                           <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
                           <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
                           {s.ubicacionInicio && (
@@ -1602,6 +1584,7 @@ export default function Servicios() {
                               Cerrar
                             </button>
                           )}
+                          {/* ── Eliminar — solo developer ── */}
                           {rol === "developer" && (
                             <button className="btn btn-danger btn-sm" title="Eliminar servicio"
                               onClick={() => eliminarServicio(s)} disabled={eliminandoId === s._id}>
@@ -1618,6 +1601,100 @@ export default function Servicios() {
           )}
         </div>
       </div>
+
+      {/* ── Modal editar servicio ── */}
+      {editarModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setEditarModal(null)}>
+          <div className="modal" style={{ maxWidth: 600 }}>
+            <button className="modal-close" onClick={() => setEditarModal(null)}>✕</button>
+            <h2 className="modal-title">✏️ Editar servicio — {editarModal.folio}</h2>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Cliente</label>
+                <BuscadorCliente
+                  clientes={clientes}
+                  value={editarForm.cliente}
+                  onChange={id => setEditarForm((p: any) => ({ ...p, cliente: id }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Montacargas</label>
+                <select className="form-select" value={editarForm.montacargas}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
+                  <option value="">Selecciona equipo...</option>
+                  {montas.map(m => (
+                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tipo de servicio</label>
+                <select className="form-select" value={editarForm.tipoServicio}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, tipoServicio: e.target.value }))}>
+                  <option value="">Sin tipo</option>
+                  {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Técnico asignado</label>
+                <select className="form-select" value={editarForm.tecnicoAsignado}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
+                  <option value="">Sin asignar</option>
+                  {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fecha reporte</label>
+                <input className="form-input" type="date" value={editarForm.fechaReporte}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, fechaReporte: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Horómetro</label>
+                <input className="form-input" type="number" value={editarForm.horometro}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Estatus</label>
+                <select className="form-select" value={editarForm.estatus}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, estatus: e.target.value }))}>
+                  <option value="abierto">Abierto</option>
+                  <option value="en_proceso">En proceso</option>
+                  <option value="pausado">Pausado</option>
+                  <option value="cerrado">Cerrado</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Costo mano de obra ($)</label>
+                <input className="form-input" type="number" value={editarForm.costoManoObra}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, costoManoObra: +e.target.value }))} />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Costo refacciones ($)</label>
+                <input className="form-input" type="number" value={editarForm.costoRefacciones}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, costoRefacciones: +e.target.value }))} />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Problema / descripción</label>
+                <textarea className="form-textarea" rows={3} value={editarForm.problema}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, problema: e.target.value }))}
+                  placeholder="Describe el problema..." />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Notas de cierre</label>
+                <textarea className="form-textarea" rows={3} value={editarForm.notasCierre}
+                  onChange={e => setEditarForm((p: any) => ({ ...p, notasCierre: e.target.value }))}
+                  placeholder="Trabajos realizados, observaciones..." />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setEditarModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarEdicion} disabled={!!editandoId}>
+                {editandoId ? "Guardando..." : "💾 Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal reporte */}
       {modalReporte && (
@@ -1672,11 +1749,7 @@ export default function Servicios() {
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Cliente</label>
-                <BuscadorCliente
-                  clientes={clientes}
-                  value={form.cliente}
-                  onChange={onClienteChange}
-                />
+                <BuscadorCliente clientes={clientes} value={form.cliente} onChange={onClienteChange} />
               </div>
               <div className="form-group">
                 <label className="form-label">Montacargas *</label>
@@ -1757,7 +1830,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* Modal cerrar vista normal — con el selector Disponible/Rentado (queda solo aquí) */}
+      {/* Modal cerrar vista normal */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
