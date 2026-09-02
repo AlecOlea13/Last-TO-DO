@@ -874,13 +874,16 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
     </div>
 
     <div class="firmas">
-      <div class="firma-box"><div class="firma-line">Técnico: ${ot.tecnico ?? "_____________________"}</div></div>
+      <div class="firma-box">
+        <div style="font-size:9pt;font-weight:700;text-transform:uppercase;border-top:1.5px solid #111;padding-top:4px;">
+          Técnico: ${ot.tecnico ?? "—"}
+        </div>
+      </div>
       <div class="firma-box cliente">
         ${firmaClienteHtml}
         <div class="firma-line">Cliente: ${ot.firmaCliente ? (ot.cliente?.nombre ?? "") : "_____________________"}</div>
       </div>
     </div>
-  </div>
 </div>
 <script>window.onload = function() { document.title = '${ot.folio}'; };</script>
 </body>

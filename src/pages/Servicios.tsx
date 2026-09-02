@@ -330,6 +330,63 @@ function BtnMic({ onResult, style }: { onResult: (t: string) => void; style?: Re
   );
 }
 
+// ── Pendientes: FUERA del componente principal para que no pierda el foco ──
+function PendientesInline({
+  pendientesTexto,
+  setPendientesTexto,
+}: {
+  pendientesTexto: string[];
+  setPendientesTexto: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  return (
+    <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+      <label className="form-label">
+        📝 Pendientes de este servicio
+        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+          (opcional)
+        </span>
+      </label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {pendientesTexto.map((texto, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <textarea
+              className="form-textarea"
+              rows={2}
+              value={texto}
+              onChange={e => {
+                const copy = [...pendientesTexto];
+                copy[i] = e.target.value;
+                setPendientesTexto(copy);
+              }}
+              placeholder="Ej: Fuga pequeña en motor, hay que empacar..."
+              style={{ flex: 1 }}
+            />
+            <BtnMic onResult={txt => {
+              setPendientesTexto(prev => {
+                const copy = [...prev];
+                copy[i] = copy[i] ? copy[i] + " " + txt : txt;
+                return copy;
+              });
+            }} />
+            {pendientesTexto.length > 1 && (
+              <button type="button"
+                onClick={() => setPendientesTexto(prev => prev.filter((_, idx) => idx !== i))}
+                style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "1.1rem", padding: "4px 8px" }}>
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+        <button type="button"
+          onClick={() => setPendientesTexto(prev => [...prev, ""])}
+          style={{ alignSelf: "flex-start", background: "none", border: "1.5px dashed var(--border)", borderRadius: 8, padding: "6px 14px", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.82rem" }}>
+          + Agregar otro pendiente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Cronometro({ horaInicio, pausas, grande }: { horaInicio: string; pausas?: Pausa[]; grande?: boolean }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -536,6 +593,7 @@ export default function Servicios() {
   const [iniciandoId, setIniciandoId]   = useState<string | null>(null);
   const [pausandoId, setPausandoId]     = useState<string | null>(null);
   const [reanudandoId, setReanudandoId] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
   const [mostrarFirma, setMostrarFirma] = useState(false);
 
@@ -775,6 +833,19 @@ export default function Servicios() {
       if (e?.response?.data?.message) alert(e.response.data.message);
     }
     finally { setReanudandoId(null); }
+  }
+
+  async function eliminarServicio(s: Servicio) {
+    if (!confirm(`¿Eliminar el servicio ${s.folio}? Esta acción no se puede deshacer.`)) return;
+    setEliminandoId(s._id);
+    try {
+      await api.delete(`/servicios/${s._id}`);
+      setServicios(prev => prev.filter(sv => sv._id !== s._id));
+    } catch {
+      alert("Error al eliminar el servicio");
+    } finally {
+      setEliminandoId(null);
+    }
   }
 
   const [cerrarAccionId] = useState(() => nanoid());
@@ -1222,55 +1293,6 @@ export default function Servicios() {
     );
   }
 
-  // ── Componente de captura de pendientes ──
-  function PendientesInline() {
-    return (
-      <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-        <label className="form-label">
-          📝 Pendientes de este servicio
-          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
-            (opcional)
-          </span>
-        </label>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {pendientesTexto.map((texto, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <textarea
-                className="form-textarea"
-                rows={2}
-                value={texto}
-                onChange={e => {
-                  const copy = [...pendientesTexto];
-                  copy[i] = e.target.value;
-                  setPendientesTexto(copy);
-                }}
-                placeholder="Ej: Fuga pequeña en motor, hay que empacar..."
-                style={{ flex: 1 }}
-              />
-              <BtnMic onResult={txt => {
-                const copy = [...pendientesTexto];
-                copy[i] = copy[i] ? copy[i] + " " + txt : txt;
-                setPendientesTexto(copy);
-              }} />
-              {pendientesTexto.length > 1 && (
-                <button type="button"
-                  onClick={() => setPendientesTexto(prev => prev.filter((_, idx) => idx !== i))}
-                  style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "1.1rem", padding: "4px 8px" }}>
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
-          <button type="button"
-            onClick={() => setPendientesTexto(prev => [...prev, ""])}
-            style={{ alignSelf: "flex-start", background: "none", border: "1.5px dashed var(--border)", borderRadius: 8, padding: "6px 14px", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.82rem" }}>
-            + Agregar otro pendiente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ── Vista técnico ──
   if (esTecnico) {
     return (
@@ -1421,7 +1443,7 @@ export default function Servicios() {
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
                 <div className="form-group"><FotoRefaccionesUpload /></div>
                 <FirmaInline />
-                <PendientesInline />
+                <PendientesInline pendientesTexto={pendientesTexto} setPendientesTexto={setPendientesTexto} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
                 <button style={{ width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "var(--accent)", color: "#000", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer" }}
@@ -1580,6 +1602,12 @@ export default function Servicios() {
                               Cerrar
                             </button>
                           )}
+                          {rol === "developer" && (
+                            <button className="btn btn-danger btn-sm" title="Eliminar servicio"
+                              onClick={() => eliminarServicio(s)} disabled={eliminandoId === s._id}>
+                              {eliminandoId === s._id ? "..." : "🗑️"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1729,7 +1757,7 @@ export default function Servicios() {
         </div>
       )}
 
-      {/* Modal cerrar vista normal — con el selector Disponible/Rentado */}
+      {/* Modal cerrar vista normal — con el selector Disponible/Rentado (queda solo aquí) */}
       {cerrarModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCerrarModal(null)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -1779,7 +1807,7 @@ export default function Servicios() {
               <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
               <div className="form-group"><FotoRefaccionesUpload /></div>
               <FirmaInline />
-              <PendientesInline />
+              <PendientesInline pendientesTexto={pendientesTexto} setPendientesTexto={setPendientesTexto} />
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setCerrarModal(null)}>Cancelar</button>
