@@ -96,7 +96,7 @@ function getByTag(root: Document | Element, tag: string): Element[] {
 export default function CuentasCobrar() {
   const rol           = localStorage.getItem("rol") ?? "";
   const canDelete     = ["developer", "gerencia"].includes(rol);
-  const canCancel     = ["developer", "gerencia"].includes(rol);
+  const canCancel     = ["developer", "gerencia", "oficina"].includes(rol);
   const canVerTotales = ["developer", "gerencia"].includes(rol);
 
   const [cxcs, setCxcs]         = useState<CxC[]>([]);
