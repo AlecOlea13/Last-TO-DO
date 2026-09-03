@@ -969,7 +969,7 @@ input[type="file"] { display: none; }
   background-size: 48px 48px !important;
 }
 
-/* 🇲🇽 GUIRNALDA DE PAPEL PICADO COLGANTE (MÁS GRANDE Y VIBRANTE) 🇲🇽 */
+/* 🇲🇽 GUIRNALDA DE PAPEL PICADO HIGH-CONTRAST (NEÓN PATRIO) 🇲🇽 */
 
 .dash-root::after {
   content: '' !important;
@@ -977,16 +977,17 @@ input[type="file"] { display: none; }
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  height: 60px !important;
-  z-index: 9999 !important;
+  height: 70px !important;
+  z-index: 99999 !important;
   pointer-events: none !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60'%3E%3Cpath d='M0 4 Q 100 12 200 4' stroke='%23ffffff' stroke-width='1.5' stroke-dasharray='4,2' fill='none' opacity='0.75'/%3E%3Cg fill='%2300e676'%3E%3Cpath d='M4 5 h42 v34 Q25 52 4 40 Z'/%3E%3Cpolygon points='25,16 32,24 25,32 18,24' fill='%230a0c10'/%3E%3Ccircle cx='14' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='36' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='14' cy='30' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='36' cy='30' r='2.5' fill='%230a0c10'/%3E%3C/g%3E%3Cg fill='%23ffffff'%3E%3Cpath d='M53 5 h42 v34 Q74 52 53 40 Z'/%3E%3Cpolygon points='74,16 81,24 74,32 67,24' fill='%230a0c10'/%3E%3Ccircle cx='63' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='85' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='63' cy='30' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='85' cy='30' r='2.5' fill='%230a0c10'/%3E%3C/g%3E%3Cg fill='%23ff1744'%3E%3Cpath d='M102 5 h42 v34 Q123 52 102 40 Z'/%3E%3Cpolygon points='123,16 130,24 123,32 116,24' fill='%230a0c10'/%3E%3Ccircle cx='112' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='134' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='112' cy='30' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='134' cy='30' r='2.5' fill='%230a0c10'/%3E%3C/g%3E%3Cg fill='%23ffc107'%3E%3Cpath d='M151 5 h42 v34 Q172 52 151 40 Z'/%3E%3Cpolygon points='172,16 179,24 172,32 165,24' fill='%230a0c10'/%3E%3Ccircle cx='161' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='183' cy='18' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='161' cy='30' r='2.5' fill='%230a0c10'/%3E%3Ccircle cx='183' cy='30' r='2.5' fill='%230a0c10'/%3E%3C/g%3E%3C/svg%3E") !important;
+  opacity: 1 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 70'%3E%3Cpath d='M0 4 Q 100 16 200 4' stroke='%23ffffff' stroke-width='2' stroke-dasharray='4,2' fill='none' opacity='0.9'/%3E%3Cg fill='%2300ff66'%3E%3Cpath d='M4 5 h42 v40 Q25 60 4 48 Z'/%3E%3Cpolygon points='25,18 33,28 25,38 17,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='14' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='36' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='14' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='36' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ffffff'%3E%3Cpath d='M53 5 h42 v40 Q74 60 53 48 Z'/%3E%3Cpolygon points='74,18 82,28 74,38 66,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='63' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='85' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='63' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='85' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ff1744'%3E%3Cpath d='M102 5 h42 v40 Q123 60 102 48 Z'/%3E%3Cpolygon points='123,18 131,28 123,38 115,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='112' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='134' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='112' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='134' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ffb700'%3E%3Cpath d='M151 5 h42 v40 Q172 60 151 48 Z'/%3E%3Cpolygon points='172,18 180,28 172,38 164,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='161' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='183' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='161' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='183' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3C/svg%3E") !important;
   background-repeat: repeat-x !important;
-  background-size: 200px 60px !important;
-  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.85)) !important;
+  background-size: 220px 70px !important;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.2)) !important;
 }
 
-/* Espaciado superior para que las banderitas no encimen los títulos */
+/* Compensación de espacio en el encabezado principal */
 .page-header {
-  padding-top: 68px !important;
+  padding-top: 76px !important;
 }
