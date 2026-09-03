@@ -991,3 +991,8 @@ input[type="file"] { display: none; }
 .page-header {
   padding-top: 76px !important;
 }
+
+/* Baja el contenido del sidebar para que no se empalme con la guirnalda */
+.sidebar {
+  padding-top: 65px !important;
+}
