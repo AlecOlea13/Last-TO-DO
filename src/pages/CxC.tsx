@@ -152,22 +152,22 @@ export default function CuentasCobrar() {
   const [renovacionItems, setRenovacionItems] = useState<RenovacionItem[]>([]);
   const [renovandoDesde, setRenovandoDesde]   = useState(false);
 
-  const [modalReportes, setModalReportes]     = useState(false);
-  const [reportePeriodo, setReportePeriodo]   = useState<"semana" | "mes" | "año" | "custom">("mes");
+  const [modalReportes, setModalReportes] = useState(false);
+  const [reporteTipo, setReporteTipo]     = useState<"facturado" | "cobrado">("facturado");
   const [reporteMesDesde, setReporteMesDesde] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [reporteMesHasta, setReporteMesHasta] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
-  const [reporteAnio, setReporteAnio]     = useState(() => new Date().getFullYear());
-  const [reporteSemana, setReporteSemana] = useState(() => {
-    const now   = new Date();
-    const start = new Date(now.getFullYear(), 0, 1);
-    return Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
-  });
+  // const [reporteMesHasta, setReporteMesHasta] = useState(() => {
+  //   const now = new Date();
+  //   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // });
+  // const [reporteAnio, setReporteAnio]     = useState(() => new Date().getFullYear());
+  // const [reporteSemana, setReporteSemana] = useState(() => {
+  //   const now   = new Date();
+  //   const start = new Date(now.getFullYear(), 0, 1);
+  //   return Math.ceil(((now.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+  // });
 
   useEffect(() => { load(); }, []);
   useEffect(() => { setPagina(1); }, [search, filtroEstatus, fechaDesde, fechaHasta]);
@@ -498,136 +498,253 @@ export default function CuentasCobrar() {
     }
   }
 
-  function getLunesDeSemana(semana: number, anio: number): Date {
-    const enero1 = new Date(anio, 0, 1);
-    const lunes  = new Date(enero1);
-    lunes.setDate(enero1.getDate() + (semana - 1) * 7 - enero1.getDay() + 1);
-    lunes.setHours(0, 0, 0, 0);
-    return lunes;
-  }
+  // function getLunesDeSemana(semana: number, anio: number): Date {
+  //   const enero1 = new Date(anio, 0, 1);
+  //   const lunes  = new Date(enero1);
+  //   lunes.setDate(enero1.getDate() + (semana - 1) * 7 - enero1.getDay() + 1);
+  //   lunes.setHours(0, 0, 0, 0);
+  //   return lunes;
+  // }
 
-  function getFechaReporte(c: CxC): Date | null {
-    const dateStr = c.estatus === "cobrada" ? (c.fechaPago ?? c.fechaEmision) : c.fechaEmision;
-    if (!dateStr) return null;
-    return new Date(dateStr.split("T")[0] + "T12:00:00");
-  }
+  // function getFechaReporte(c: CxC): Date | null {
+  //   const dateStr = c.estatus === "cobrada" ? (c.fechaPago ?? c.fechaEmision) : c.fechaEmision;
+  //   if (!dateStr) return null;
+  //   return new Date(dateStr.split("T")[0] + "T12:00:00");
+  // }
 
-  function filtrarPorPeriodo(c: CxC): boolean {
-    const d = getFechaReporte(c);
-    if (!d) return false;
-    if (reportePeriodo === "semana") {
-      const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
-      const domingo = new Date(lunes);
-      domingo.setDate(lunes.getDate() + 6);
-      domingo.setHours(23, 59, 59, 999);
-      return d >= lunes && d <= domingo;
-    }
-    if (reportePeriodo === "mes") {
-      const [y, m] = reporteMesDesde.split("-").map(Number);
-      return d.getFullYear() === y && d.getMonth() === m - 1;
-    }
-    if (reportePeriodo === "año") return d.getFullYear() === reporteAnio;
-    if (reportePeriodo === "custom") {
-      if (reporteMesDesde) {
-        const [y, m] = reporteMesDesde.split("-").map(Number);
-        if (d < new Date(y, m - 1, 1)) return false;
-      }
-      if (reporteMesHasta) {
-        const [y, m] = reporteMesHasta.split("-").map(Number);
-        if (d > new Date(y, m, 0, 23, 59, 59)) return false;
-      }
-      return true;
-    }
-    return true;
-  }
+  // function filtrarPorPeriodo(c: CxC): boolean {
+  //   const d = getFechaReporte(c);
+  //   if (!d) return false;
+  //   if (reportePeriodo === "semana") {
+  //     const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
+  //     const domingo = new Date(lunes);
+  //     domingo.setDate(lunes.getDate() + 6);
+  //     domingo.setHours(23, 59, 59, 999);
+  //     return d >= lunes && d <= domingo;
+  //   }
+  //   if (reportePeriodo === "mes") {
+  //     const [y, m] = reporteMesDesde.split("-").map(Number);
+  //     return d.getFullYear() === y && d.getMonth() === m - 1;
+  //   }
+  //   if (reportePeriodo === "año") return d.getFullYear() === reporteAnio;
+  //   if (reportePeriodo === "custom") {
+  //     if (reporteMesDesde) {
+  //       const [y, m] = reporteMesDesde.split("-").map(Number);
+  //       if (d < new Date(y, m - 1, 1)) return false;
+  //     }
+  //     if (reporteMesHasta) {
+  //       const [y, m] = reporteMesHasta.split("-").map(Number);
+  //       if (d > new Date(y, m, 0, 23, 59, 59)) return false;
+  //     }
+  //     return true;
+  //   }
+  //   return true;
+  // }
 
-  function labelPeriodo(): string {
-    if (reportePeriodo === "semana") {
-      const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
-      const domingo = new Date(lunes);
-      domingo.setDate(lunes.getDate() + 6);
-      const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
-      return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
-    }
-    if (reportePeriodo === "mes") {
-      const [y, m] = reporteMesDesde.split("-").map(Number);
-      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-      return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-    if (reportePeriodo === "año") return `Año ${reporteAnio}`;
-    const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
-    const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
-    return desde === hasta ? desde : `${desde} — ${hasta}`;
-  }
+  // function labelPeriodo(): string {
+  //   if (reportePeriodo === "semana") {
+  //     const lunes   = getLunesDeSemana(reporteSemana, reporteAnio);
+  //     const domingo = new Date(lunes);
+  //     domingo.setDate(lunes.getDate() + 6);
+  //     const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+  //     return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
+  //   }
+  //   if (reportePeriodo === "mes") {
+  //     const [y, m] = reporteMesDesde.split("-").map(Number);
+  //     const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  //     return s.charAt(0).toUpperCase() + s.slice(1);
+  //   }
+  //   if (reportePeriodo === "año") return `Año ${reporteAnio}`;
+  //   const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+  //   const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+  //   return desde === hasta ? desde : `${desde} — ${hasta}`;
+  // }
 
-  function generarReporte() {
+  function generarReporteFacturado() {
     const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
-    const datos   = cxcs.filter(filtrarPorPeriodo).filter(c => c.estatus !== "cancelada");
-    const rows    = [...datos]
-      .sort((a, b) => (getFechaReporte(a)?.getTime() ?? 0) - (getFechaReporte(b)?.getTime() ?? 0))
+    const [y, m] = reporteMesDesde.split("-").map(Number);
+
+    // Facturas cuya fecha de emisión cae en el mes
+    const datos = cxcs.filter(c => {
+      if (c.estatus === "cancelada") return false;
+      if (!c.fechaEmision) return false;
+      const d = new Date(c.fechaEmision.split("T")[0] + "T12:00:00");
+      return d.getFullYear() === y && d.getMonth() === m - 1;
+    });
+
+    const rows = [...datos]
+      .sort((a, b) => (a.fechaEmision ?? "").localeCompare(b.fechaEmision ?? ""))
       .map(c => {
-        const pendiente = c.total - (c.montoPagado ?? 0);
+        const saldo = c.total - (c.montoPagado ?? 0);
+        const badge = c.estatus === "cobrada" ? "Cobrada" : c.estatus === "parcial" ? "Parcial" : "Pendiente";
+        const color = c.estatus === "cobrada" ? "#16a34a" : c.estatus === "parcial" ? "#f59e0b" : "#dc2626";
         return `<tr>
           <td>${c.nombreReceptor ?? "—"}</td>
           <td>${c.folioFactura ?? "—"}</td>
-          <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
           <td>${fmtCorto(c.fechaEmision)}</td>
-          <td>${c.conceptos[0]?.descripcion?.slice(0, 40) ?? "—"}</td>
-          <td>${fmtCorto(c.fechaPago)}</td>
-          <td style="text-align:center">${c.complementoPago ? '<a href="' + fixCloudinaryUrl(c.complementoPago) + '">Ver</a>' : "—"}</td>
-          <td style="text-align:right;color:${c.estatus === "cobrada" ? "#16a34a" : c.estatus === "parcial" ? "#f59e0b" : "#dc2626"}">$${pendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right">$${c.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right;color:${color}">$${(c.montoPagado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right;color:${color}">$${saldo.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+          <td style="color:${color};font-weight:700">${badge}</td>
           <td>${c.comentarios ?? "—"}</td>
         </tr>`;
       }).join("");
 
-    const pendiente = datos.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + (c.total - (c.montoPagado ?? 0)), 0);
-    const cobrado   = datos.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
-    const subtitulo = labelPeriodo();
+    const totalFacturado = datos.reduce((a, c) => a + c.total, 0);
+    const totalCobradoMes = datos.filter(c => c.estatus === "cobrada").reduce((a, c) => a + c.total, 0);
+    const totalParcial = datos.filter(c => c.estatus === "parcial").reduce((a, c) => a + (c.montoPagado ?? 0), 0);
+    const totalPendienteMes = datos.filter(c => c.estatus !== "cobrada").reduce((a, c) => a + (c.total - (c.montoPagado ?? 0)), 0);
+    const label = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
 
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Cuentas por Cobrar — ${subtitulo}</title>
-<style>
-  * { margin:0;padding:0;box-sizing:border-box; }
-  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px; }
-  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
-  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
-  h1 { font-size:13pt;font-weight:900; }
-  p { font-size:8.5pt;color:#555; }
-  table { width:100%;border-collapse:collapse;font-size:8.5pt; }
-  thead { background:#222;color:#fff; }
-  thead th { padding:5px 7px;text-align:left; }
-  tbody tr:nth-child(even) { background:#f5f5f5; }
-  td { padding:4px 7px;border-bottom:1px solid #ddd; }
-  .totales { margin-top:12px;text-align:right;font-size:9.5pt; }
-  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15); }
-  @media print { .print-btn { display:none; } body { padding:10px; } }
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header">
-  <img src="${logoUrl}" class="logo" alt="Pipsa" />
-  <div>
-    <h1>Cuentas por Cobrar — ${subtitulo}</h1>
-    <p>Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+  <title>Facturado — ${label}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}
+    .header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}
+    .logo{width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px}
+    h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}
+    table{width:100%;border-collapse:collapse;font-size:8.5pt}
+    thead{background:#222;color:#fff}thead th{padding:5px 7px;text-align:left}
+    tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 7px;border-bottom:1px solid #ddd}
+    .resumen{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+    .box{border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center}
+    .box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7pt;color:#666;text-transform:uppercase;margin-top:2px}
+    .print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer}
+    @media print{.print-btn{display:none}}
+  </style></head><body>
+  <button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+  <div class="header">
+    <img src="${logoUrl}" class="logo" alt="Pipsa"/>
+    <div>
+      <h1>Facturado en el mes — ${label.charAt(0).toUpperCase() + label.slice(1)}</h1>
+      <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+      <p class="sub">Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+    </div>
   </div>
-</div>
-<table>
-  <thead><tr>
-    <th>Cliente</th><th>No. Factura</th><th style="text-align:right">Importe</th><th>Fecha factura</th>
-    <th>Concepto</th><th>Fecha pago</th><th>Complemento</th><th style="text-align:right">Pendiente</th><th>Comentarios</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<div class="totales">
-  <div>Total pendiente: <strong style="color:#dc2626">$${pendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
-  <div>Total cobrado: <strong style="color:#16a34a">$${cobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</strong></div>
-</div>
-</body></html>`;
+  <div class="resumen">
+    <div class="box"><div class="val">${datos.length}</div><div class="lbl">Facturas emitidas</div></div>
+    <div class="box"><div class="val" style="color:#1d4ed8">$${totalFacturado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Total facturado</div></div>
+    <div class="box"><div class="val" style="color:#16a34a">$${(totalCobradoMes + totalParcial).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Cobrado</div></div>
+    <div class="box"><div class="val" style="color:#dc2626">$${totalPendienteMes.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Pendiente</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Cliente</th><th>No. Factura</th><th>Fecha emisión</th>
+      <th style="text-align:right">Total</th><th style="text-align:right">Cobrado</th>
+      <th style="text-align:right">Pendiente</th><th>Estatus</th><th>Comentarios</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#aaa">Sin facturas en este mes</td></tr>'}</tbody>
+  </table>
+  </body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
-    const url  = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    window.open(URL.createObjectURL(blob), "_blank");
+    setModalReportes(false);
+  }
+
+  function generarReporteCobrado() {
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const [y, m] = reporteMesDesde.split("-").map(Number);
+    const inicioMes = new Date(y, m - 1, 1);
+    const finMes    = new Date(y, m, 0, 23, 59, 59);
+
+    // Todos los pagos (del array pagos[]) cuya fechaPago cae en el mes
+    const filas: { receptor: string; folio: string; fechaFactura: string; fechaPago: string; monto: number; comentarios: string }[] = [];
+
+    for (const c of cxcs) {
+      if (c.estatus === "cancelada") continue;
+
+      // Pagos del historial
+      if (c.pagos && c.pagos.length > 0) {
+        for (const p of c.pagos) {
+          if (!p.fechaPago) continue;
+          const dp = new Date(p.fechaPago.split("T")[0] + "T12:00:00");
+          if (dp >= inicioMes && dp <= finMes) {
+            filas.push({
+              receptor:    c.nombreReceptor ?? "—",
+              folio:       c.folioFactura ?? "—",
+              fechaFactura: fmtCorto(c.fechaEmision),
+              fechaPago:   fmtCorto(p.fechaPago),
+              monto:       p.monto,
+              comentarios: p.comentarios ?? c.comentarios ?? "—",
+            });
+          }
+        }
+      } else if (c.estatus === "cobrada" && c.fechaPago) {
+        // Facturas sin historial detallado — usar fechaPago del campo raíz
+        const dp = new Date(c.fechaPago.split("T")[0] + "T12:00:00");
+        if (dp >= inicioMes && dp <= finMes) {
+          filas.push({
+            receptor:    c.nombreReceptor ?? "—",
+            folio:       c.folioFactura ?? "—",
+            fechaFactura: fmtCorto(c.fechaEmision),
+            fechaPago:   fmtCorto(c.fechaPago),
+            monto:       c.total,
+            comentarios: c.comentarios ?? "—",
+          });
+        }
+      }
+    }
+
+    filas.sort((a, b) => a.fechaPago.localeCompare(b.fechaPago));
+    const totalCobrado = filas.reduce((a, f) => a + f.monto, 0);
+    const label = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+
+    const rows = filas.map(f => `<tr>
+      <td>${f.receptor}</td>
+      <td>${f.folio}</td>
+      <td>${f.fechaFactura}</td>
+      <td>${f.fechaPago}</td>
+      <td style="text-align:right;font-weight:700;color:#16a34a">$${f.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td>${f.comentarios}</td>
+    </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Cobrado — ${label}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}
+    .header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}
+    .logo{width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px}
+    h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}
+    table{width:100%;border-collapse:collapse;font-size:8.5pt}
+    thead{background:#222;color:#fff}thead th{padding:5px 7px;text-align:left}
+    tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 7px;border-bottom:1px solid #ddd}
+    .resumen{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;max-width:400px}
+    .box{border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center}
+    .box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7pt;color:#666;text-transform:uppercase;margin-top:2px}
+    .print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer}
+    @media print{.print-btn{display:none}}
+  </style></head><body>
+  <button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+  <div class="header">
+    <img src="${logoUrl}" class="logo" alt="Pipsa"/>
+    <div>
+      <h1>Cobrado en el mes — ${label.charAt(0).toUpperCase() + label.slice(1)}</h1>
+      <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+      <p class="sub">Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+      <p class="sub" style="color:#555;margin-top:4px">Incluye pagos de cualquier mes cuya fecha de cobro sea ${label}</p>
+    </div>
+  </div>
+  <div class="resumen">
+    <div class="box"><div class="val">${filas.length}</div><div class="lbl">Pagos recibidos</div></div>
+    <div class="box"><div class="val" style="color:#16a34a">$${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Total cobrado</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Cliente</th><th>No. Factura</th><th>Fecha factura</th>
+      <th>Fecha pago</th><th style="text-align:right">Monto cobrado</th><th>Comentarios</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#aaa">Sin cobros en este mes</td></tr>'}</tbody>
+  </table>
+  <div style="text-align:right;margin-top:10px;font-size:10pt">
+    <strong>Total cobrado: <span style="color:#16a34a">$${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></strong>
+  </div>
+  </body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    window.open(URL.createObjectURL(blob), "_blank");
     setModalReportes(false);
   }
 
@@ -877,50 +994,43 @@ export default function CuentasCobrar() {
 
       {/* ── Modal Reportes ── */}
       {modalReportes && (
-        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReportes(false); }}>
-          <div className="modal" style={{ maxWidth: 500 }}>
-            <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
-            <h2 className="modal-title">🖨️ Generar reporte</h2>
-            <div className="form-group" style={{ marginTop: 8 }}>
-              <label className="form-label">Periodo</label>
-              <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
-                {([["semana", "Semana"], ["mes", "Mes"], ["año", "Año"], ["custom", "Rango"]] as const).map(([val, label], i, arr) => (
-                  <button key={val} onClick={() => setReportePeriodo(val as any)}
-                    style={{ flex: 1, padding: "10px 6px", border: "none", borderRight: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reportePeriodo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reportePeriodo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reportePeriodo === val ? 700 : 400, fontSize: "0.78rem" }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {reportePeriodo === "semana" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group"><label className="form-label">Semana del año</label><input className="form-input" type="number" min={1} max={53} value={reporteSemana} onChange={e => setReporteSemana(+e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
-              </div>
-            )}
-            {reportePeriodo === "mes" && (
-              <div className="form-group"><label className="form-label">Mes y año</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
-            )}
-            {reportePeriodo === "año" && (
-              <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
-            )}
-            {reportePeriodo === "custom" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group"><label className="form-label">Desde</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
-                <div className="form-group"><label className="form-label">Hasta</label><input className="form-input" type="month" value={reporteMesHasta} onChange={e => setReporteMesHasta(e.target.value)} /></div>
-              </div>
-            )}
-            <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong><br />
-              <span style={{ fontSize: "0.75rem" }}>Cobradas: filtradas por fecha de pago. Pendientes: por fecha de factura.</span>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={generarReporte}>📄 Ver reporte</button>
-            </div>
-          </div>
-        </div>
-      )}
+  <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReportes(false); }}>
+    <div className="modal" style={{ maxWidth: 480 }}>
+      <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
+      <h2 className="modal-title">🖨️ Reporte CxC</h2>
+
+      {/* Pestañas */}
+      <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden", marginBottom: 16 }}>
+        {([["facturado", "📄 Facturado en el mes"] , ["cobrado", "💰 Cobrado en el mes"]] as const).map(([val, label], i) => (
+          <button key={val} onClick={() => setReporteTipo(val)}
+            style={{ flex: 1, padding: "11px 8px", border: "none", borderRight: i === 0 ? "1px solid var(--border)" : "none", cursor: "pointer", background: reporteTipo === val ? "rgba(245,158,11,0.15)" : "var(--surface2)", color: reporteTipo === val ? "var(--accent)" : "var(--text-muted)", fontWeight: reporteTipo === val ? 700 : 400, fontSize: "0.85rem" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Descripción según pestaña */}
+      <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
+        {reporteTipo === "facturado"
+          ? <>Facturas cuya <strong>fecha de emisión</strong> cae en el mes. Muestra lo cobrado de cada una.</>
+          : <>Todos los <strong>pagos recibidos</strong> en el mes, sin importar de qué mes es la factura. Útil para cuadrar caja.</>}
+      </div>
+
+      {/* Selector de mes */}
+      <div className="form-group">
+        <label className="form-label">Mes</label>
+        <input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} />
+      </div>
+
+      <div className="modal-footer">
+        <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
+        <button className="btn btn-primary" onClick={reporteTipo === "facturado" ? generarReporteFacturado : generarReporteCobrado}>
+          📄 Ver reporte
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ── Modal recibo de pago REP ── */}
       {modalRep && (
