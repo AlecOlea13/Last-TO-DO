@@ -748,6 +748,77 @@ export default function CuentasCobrar() {
     setModalReportes(false);
   }
 
+  function descargarCSVFacturado() {
+  const [y, m] = reporteMesDesde.split("-").map(Number);
+  const datos = cxcs.filter(c => {
+    if (c.estatus === "cancelada") return false;
+    if (!c.fechaEmision) return false;
+    const d = new Date(c.fechaEmision.split("T")[0] + "T12:00:00");
+    return d.getFullYear() === y && d.getMonth() === m - 1;
+  }).sort((a, b) => (a.fechaEmision ?? "").localeCompare(b.fechaEmision ?? ""));
+
+  const encabezado = ["Cliente", "No. Factura", "Fecha emisión", "Total", "Cobrado", "Pendiente", "Estatus", "Comentarios"];
+  const filas = datos.map(c => [
+    c.nombreReceptor ?? "",
+    c.folioFactura ?? "",
+    fmtCorto(c.fechaEmision),
+    c.total,
+    c.montoPagado ?? 0,
+    c.total - (c.montoPagado ?? 0),
+    c.estatus === "cobrada" ? "Cobrada" : c.estatus === "parcial" ? "Parcial" : "Pendiente",
+    c.comentarios ?? "",
+  ]);
+
+  const label = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  descargarCSV([encabezado, ...filas], `Facturado_${label}`);
+}
+
+  function descargarCSVCobrado() {
+    const [y, m] = reporteMesDesde.split("-").map(Number);
+    const inicioMes = new Date(y, m - 1, 1);
+    const finMes    = new Date(y, m, 0, 23, 59, 59);
+    const filas: any[][] = [["Cliente", "No. Factura", "Fecha factura", "Fecha pago", "Monto cobrado", "Comentarios"]];
+
+    for (const c of cxcs) {
+      if (c.estatus === "cancelada") continue;
+      if (c.pagos && c.pagos.length > 0) {
+        for (const p of c.pagos) {
+          if (!p.fechaPago) continue;
+          const dp = new Date(p.fechaPago.split("T")[0] + "T12:00:00");
+          if (dp >= inicioMes && dp <= finMes) {
+            filas.push([c.nombreReceptor ?? "", c.folioFactura ?? "", fmtCorto(c.fechaEmision), fmtCorto(p.fechaPago), p.monto, p.comentarios ?? c.comentarios ?? ""]);
+          }
+        }
+      } else if (c.estatus === "cobrada" && c.fechaPago) {
+        const dp = new Date(c.fechaPago.split("T")[0] + "T12:00:00");
+        if (dp >= inicioMes && dp <= finMes) {
+          filas.push([c.nombreReceptor ?? "", c.folioFactura ?? "", fmtCorto(c.fechaEmision), fmtCorto(c.fechaPago), c.total, c.comentarios ?? ""]);
+        }
+      }
+    }
+
+    const label = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+    descargarCSV(filas, `Cobrado_${label}`);
+  }
+
+  function descargarCSV(filas: any[][], nombre: string) {
+    const contenido = filas.map(fila =>
+      fila.map(celda => {
+        const s = String(celda ?? "").replace(/"/g, '""');
+        return `"${s}"`;
+      }).join(",")
+    ).join("\n");
+
+    const bom  = "\uFEFF"; // BOM para que Excel abra bien los acentos
+    const blob = new Blob([bom + contenido], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${nombre}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   const filtered = cxcs.filter(c => {
     const matchSearch =
       (c.nombreReceptor ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -1024,7 +1095,12 @@ export default function CuentasCobrar() {
 
       <div className="modal-footer">
         <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
-        <button className="btn btn-primary" onClick={reporteTipo === "facturado" ? generarReporteFacturado : generarReporteCobrado}>
+        <button className="btn btn-secondary"
+          onClick={reporteTipo === "facturado" ? descargarCSVFacturado : descargarCSVCobrado}>
+          📥 Excel (CSV)
+        </button>
+        <button className="btn btn-primary"
+          onClick={reporteTipo === "facturado" ? generarReporteFacturado : generarReporteCobrado}>
           📄 Ver reporte
         </button>
       </div>
