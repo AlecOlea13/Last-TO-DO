@@ -21,6 +21,11 @@
   --sidebar-w:  260px;
   --font-head:  'Syne', sans-serif;
   --font-body:  'DM Sans', sans-serif;
+
+  /* Variables Temáticas Patrias */
+  --patrio-green: #00875a;
+  --patrio-red:   #e11d48;
+  --patrio-white: #f8fafc;
 }
 
 /* ── TEMA CLARO ── */
@@ -44,9 +49,9 @@
 
 [data-theme="light"] .dash-root::before {
   background:
-    radial-gradient(ellipse 70% 50% at 15% 50%, rgba(180,120,0,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 70% at 85% 25%, rgba(30,60,120,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 50% 95%, rgba(100,50,0,0.03) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 50% at 15% 50%, rgba(0,135,90,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 70% at 85% 25%, rgba(225,29,72,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 50% 95%, rgba(217,119,6,0.04) 0%, transparent 60%);
 }
 
 [data-theme="light"] .dash-root::after {
@@ -134,9 +139,9 @@ html { transition: background-color 0.25s ease; }
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 70% 50% at 15% 50%, rgba(200,130,0,0.35) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 70% at 85% 25%, rgba(30,60,140,0.35) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 50% 95%, rgba(120,60,0,0.25) 0%, transparent 60%);
+    radial-gradient(ellipse 70% 50% at 10% 20%, rgba(0, 135, 90, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 70% at 90% 80%, rgba(225, 29, 72, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 50% 50%, rgba(245, 158, 11, 0.12) 0%, transparent 60%);
 }
 
 .dash-root::after {
@@ -221,17 +226,19 @@ html { transition: background-color 0.25s ease; }
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-bottom: 8px;
+  position: relative;
 }
 .sidebar-avatar-placeholder {
   width: 38px; height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--orange));
+  background: linear-gradient(135deg, var(--patrio-green), var(--accent), var(--patrio-red));
   display: flex; align-items: center; justify-content: center;
   font-family: var(--font-head);
   font-weight: 700;
   font-size: 1rem;
   color: white;
   flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(0, 135, 90, 0.3);
 }
 .sidebar-user-name {
   font-weight: 600;
@@ -411,6 +418,7 @@ html { transition: background-color 0.25s ease; }
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  position: relative;
 }
 .page-title {
   font-family: var(--font-head);
@@ -522,7 +530,7 @@ html { transition: background-color 0.25s ease; }
   font-weight: 700;
   cursor: pointer;
   letter-spacing: 0.02em;
-  transition: background 0.2s, transform 0.15s;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
   white-space: nowrap;
 }
 .btn:active { transform: scale(0.97); }
@@ -835,4 +843,80 @@ input[type="file"] { display: none; }
 .sidebar {
   scrollbar-width: thin;
   scrollbar-color: rgba(255,180,0,0.2) transparent;
+}
+
+
+/* ────────────────────────────────────────────────
+   🇲🇽 EDICIÓN MES PATRIO (16 DE SEPTIEMBRE) 🇲🇽
+──────────────────────────────────────────────── */
+
+/* 1. Línea Tricolor Fina Superior */
+.dash-root::before {
+  border-top: 3px solid transparent;
+  border-image: linear-gradient(90deg, var(--patrio-green) 0%, #ffffff 50%, var(--patrio-red) 100%) 1;
+}
+
+/* 2. Banner Papel Picado SVG en el Top del Sidebar */
+.sidebar::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 16px;
+  margin-bottom: 4px;
+  opacity: 0.85;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 18'%3E%3Cpath fill='%2300875A' d='M0,0 L20,0 L10,14 Z'/%3E%3Cpath fill='%23F8FAFC' d='M20,0 L40,0 L30,14 Z'/%3E%3Cpath fill='%23E11D48' d='M40,0 L60,0 L50,14 Z'/%3E%3Cpath fill='%23F59E0B' d='M60,0 L80,0 L70,14 Z'/%3E%3Cpath fill='%2300875A' d='M80,0 L100,0 L90,14 Z'/%3E%3Cpath fill='%23E11D48' d='M100,0 L120,0 L110,14 Z'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-size: 60px 16px;
+}
+
+/* 3. Badge Banderita en la Card de Usuario */
+.sidebar-user::after {
+  content: '🇲🇽';
+  font-size: 0.85rem;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.9;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.5));
+}
+
+/* 4. Secuencia Tricolor en las Stat Cards (Verde, Blanco/Dorado, Rojo) */
+.stats-grid .stat-card:nth-child(1) {
+  border-bottom: 2px solid var(--patrio-green);
+}
+.stats-grid .stat-card:nth-child(1) .stat-card-accent {
+  background: var(--patrio-green);
+  box-shadow: 0 0 12px rgba(0, 135, 90, 0.6);
+}
+
+.stats-grid .stat-card:nth-child(2) {
+  border-bottom: 2px solid var(--accent);
+}
+.stats-grid .stat-card:nth-child(2) .stat-card-accent {
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+}
+
+.stats-grid .stat-card:nth-child(3) {
+  border-bottom: 2px solid var(--patrio-red);
+}
+.stats-grid .stat-card:nth-child(3) .stat-card-accent {
+  background: var(--patrio-red);
+  box-shadow: 0 0 12px rgba(225, 29, 72, 0.6);
+}
+
+/* 5. Glow Festivo en Botones Principales (+ Nueva Cotización) */
+.btn-primary {
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.3);
+  position: relative;
+}
+.btn-primary:hover {
+  box-shadow: 0 0 18px rgba(0, 135, 90, 0.4), 0 0 8px rgba(225, 29, 72, 0.4);
+}
+
+/* 6. Indicador de Menú Activo Tricolor */
+.nav-item.active {
+  border-left-color: var(--patrio-green);
+  box-shadow: inset 3px 0 0 var(--patrio-red);
 }
