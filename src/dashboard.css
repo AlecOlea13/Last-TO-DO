@@ -847,76 +847,111 @@ input[type="file"] { display: none; }
 
 
 /* ────────────────────────────────────────────────
-   🇲🇽 EDICIÓN MES PATRIO (16 DE SEPTIEMBRE) 🇲🇽
+   🇲🇽 EDICIÓN MES PATRIO (16 DE SEPTIEMBRE) - CORREGIDO
 ──────────────────────────────────────────────── */
 
-/* 1. Línea Tricolor Fina Superior */
+/* 1. Barrita Tricolor Neón Superior Fija */
 .dash-root::before {
-  border-top: 3px solid transparent;
-  border-image: linear-gradient(90deg, var(--patrio-green) 0%, #ffffff 50%, var(--patrio-red) 100%) 1;
+  content: '' !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 4px !important;
+  z-index: 99999 !important;
+  background: linear-gradient(90deg, #00c853 0%, #00c853 33.3%, #ffffff 33.3%, #ffffff 66.6%, #ff1744 66.6%, #ff1744 100%) !important;
+  box-shadow: 0 2px 12px rgba(0, 200, 83, 0.5), 0 2px 12px rgba(255, 23, 68, 0.5) !important;
 }
 
-/* 2. Banner Papel Picado SVG en el Top del Sidebar */
+/* 2. Banner de Papel Picado SVG en Sidebar */
 .sidebar::before {
-  content: '';
-  display: block;
-  width: 100%;
-  height: 16px;
-  margin-bottom: 4px;
-  opacity: 0.85;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 18'%3E%3Cpath fill='%2300875A' d='M0,0 L20,0 L10,14 Z'/%3E%3Cpath fill='%23F8FAFC' d='M20,0 L40,0 L30,14 Z'/%3E%3Cpath fill='%23E11D48' d='M40,0 L60,0 L50,14 Z'/%3E%3Cpath fill='%23F59E0B' d='M60,0 L80,0 L70,14 Z'/%3E%3Cpath fill='%2300875A' d='M80,0 L100,0 L90,14 Z'/%3E%3Cpath fill='%23E11D48' d='M100,0 L120,0 L110,14 Z'/%3E%3C/svg%3E");
-  background-repeat: repeat-x;
-  background-size: 60px 16px;
+  content: '' !important;
+  display: block !important;
+  width: 100% !important;
+  height: 20px !important;
+  margin-bottom: 8px !important;
+  flex-shrink: 0 !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 20'%3E%3Cpath fill='%2300c853' d='M0,0 L20,0 L10,16 Z'/%3E%3Cpath fill='%23ffffff' d='M20,0 L40,0 L30,16 Z'/%3E%3Cpath fill='%23ff1744' d='M40,0 L60,0 L50,16 Z'/%3E%3Cpath fill='%23f59e0b' d='M60,0 L80,0 L70,16 Z'/%3E%3Cpath fill='%2300c853' d='M80,0 L100,0 L90,16 Z'/%3E%3Cpath fill='%23ff1744' d='M100,0 L120,0 L110,16 Z'/%3E%3C/svg%3E") !important;
+  background-repeat: repeat-x !important;
+  background-size: 60px 20px !important;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)) !important;
 }
 
-/* 3. Badge Banderita en la Card de Usuario */
+/* 3. Banderita Mexicana Real (CSS Vectorial) en la Card de Usuario */
+.sidebar-user {
+  position: relative !important;
+}
 .sidebar-user::after {
-  content: '🇲🇽';
-  font-size: 0.85rem;
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0.9;
-  filter: drop-shadow(0 0 4px rgba(0,0,0,0.5));
+  content: '' !important;
+  display: block !important;
+  width: 20px !important;
+  height: 12px !important;
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  border-radius: 2px !important;
+  box-shadow: 0 0 6px rgba(0,0,0,0.6) !important;
+  background: linear-gradient(90deg, #006847 33.3%, #ffffff 33.3%, #ffffff 66.6%, #ce1126 66.6%) !important;
 }
 
-/* 4. Secuencia Tricolor en las Stat Cards (Verde, Blanco/Dorado, Rojo) */
+/* 4. Tarjetas de Métricas (Verde, Blanco, Rojo) con Alto Contraste */
+/* Card 1: Verde (Activas) */
 .stats-grid .stat-card:nth-child(1) {
-  border-bottom: 2px solid var(--patrio-green);
+  border: 1px solid rgba(0, 200, 83, 0.4) !important;
+  background: linear-gradient(180deg, rgba(0, 200, 83, 0.1) 0%, var(--surface) 100%) !important;
+}
+.stats-grid .stat-card:nth-child(1) .stat-card-value {
+  color: #00e676 !important;
+  text-shadow: 0 0 10px rgba(0, 230, 118, 0.3) !important;
 }
 .stats-grid .stat-card:nth-child(1) .stat-card-accent {
-  background: var(--patrio-green);
-  box-shadow: 0 0 12px rgba(0, 135, 90, 0.6);
+  background: #00c853 !important;
+  box-shadow: 0 0 12px #00c853 !important;
 }
 
+/* Card 2: Blanco / Plateado (Facturadas) */
 .stats-grid .stat-card:nth-child(2) {
-  border-bottom: 2px solid var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, var(--surface) 100%) !important;
+}
+.stats-grid .stat-card:nth-child(2) .stat-card-value {
+  color: #ffffff !important;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3) !important;
 }
 .stats-grid .stat-card:nth-child(2) .stat-card-accent {
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+  background: #ffffff !important;
+  box-shadow: 0 0 12px #ffffff !important;
 }
 
+/* Card 3: Rojo (Canceladas) */
 .stats-grid .stat-card:nth-child(3) {
-  border-bottom: 2px solid var(--patrio-red);
+  border: 1px solid rgba(255, 23, 68, 0.4) !important;
+  background: linear-gradient(180deg, rgba(255, 23, 68, 0.1) 0%, var(--surface) 100%) !important;
+}
+.stats-grid .stat-card:nth-child(3) .stat-card-value {
+  color: #ff1744 !important;
+  text-shadow: 0 0 10px rgba(255, 23, 68, 0.3) !important;
 }
 .stats-grid .stat-card:nth-child(3) .stat-card-accent {
-  background: var(--patrio-red);
-  box-shadow: 0 0 12px rgba(225, 29, 72, 0.6);
+  background: #ff1744 !important;
+  box-shadow: 0 0 12px #ff1744 !important;
 }
 
-/* 5. Glow Festivo en Botones Principales (+ Nueva Cotización) */
+/* 5. Botón Principal con Resplandor Tricolor al pasar el mouse */
 .btn-primary {
-  box-shadow: 0 0 14px rgba(245, 158, 11, 0.3);
-  position: relative;
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
+  transition: all 0.25s ease !important;
 }
 .btn-primary:hover {
-  box-shadow: 0 0 18px rgba(0, 135, 90, 0.4), 0 0 8px rgba(225, 29, 72, 0.4);
+  box-shadow: -4px 0 12px rgba(0, 200, 83, 0.6), 4px 0 12px rgba(255, 23, 68, 0.6) !important;
+  transform: translateY(-1px) !important;
 }
 
-/* 6. Indicador de Menú Activo Tricolor */
+/* 6. Elemento de Menú Activo */
 .nav-item.active {
-  border-left-color: var(--patrio-green);
-  box-shadow: inset 3px 0 0 var(--patrio-red);
+  border-left: 4px solid #00c853 !important;
+  background: linear-gradient(90deg, rgba(0, 200, 83, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%) !important;
+  color: #ffffff !important;
 }
