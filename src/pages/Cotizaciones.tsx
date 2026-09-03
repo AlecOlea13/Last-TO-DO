@@ -88,6 +88,39 @@ const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
+function MenuAcciones({ items }: { items: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ background: open ? "var(--surface2)" : "transparent", border: "1.5px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: "1rem", color: "var(--text-muted)", lineHeight: 1 }}
+        title="Más acciones">⋯</button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 300, background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, overflow: "hidden" }}>
+          {items.map((item, i) => (
+            <button key={i} disabled={item.disabled}
+              onClick={() => { if (!item.disabled) { item.onClick(); setOpen(false); } }}
+              style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", display: "flex", alignItems: "center", gap: 10, cursor: item.disabled ? "not-allowed" : "pointer", color: item.danger ? "var(--red)" : "var(--text)", fontSize: "0.88rem", fontWeight: 500, textAlign: "left", opacity: item.disabled ? 0.4 : 1, borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none" }}
+              onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = "var(--surface2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+              <span style={{ fontSize: "1rem", width: 20, textAlign: "center" }}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getMartes(date: Date): Date {
   const d = new Date(date);
   d.setHours(12, 0, 0, 0);
@@ -1132,24 +1165,21 @@ export default function Cotizaciones() {
                         )}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          <button className="btn btn-secondary btn-sm"
-                            onClick={() => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}
-                            title="Ver reporte">👁️</button>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {/* Botón PDF siempre visible */}
                           <button className="btn btn-primary btn-sm"
                             onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}
                             title="Descargar PDF">📥 PDF</button>
-                          <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} title="Editar">✏️</button>
-                          <button className="btn btn-secondary btn-sm" onClick={() => clonar(c)} title="Clonar" disabled={saving}>📋</button>
-                          {c.estatus !== "facturada" && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(79,124,255,0.3)" }}
-                              onClick={() => { setFacturaModal(c); setNumeroFacturaInput(""); }} title="Marcar como facturada">🧾</button>
-                          )}
-                          {c.estatus === "activa" && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)" }}
-                              onClick={() => cambiarEstatus(c._id, "cancelada")} title="Cancelar">🚫</button>
-                          )}
-                          {canDelete && <button className="btn btn-danger btn-sm" onClick={() => remove(c._id)}>🗑️</button>}
+
+                          {/* Menú ⋯ */}
+                          <MenuAcciones items={[
+                            { label: "Ver cotización",  icon: "👁️", onClick: () => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda }) },
+                            { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
+                            { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
+                            ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); } }] : []),
+                            ...( c.estatus === "activa"    ? [{ label: "Cancelar",         icon: "🚫", onClick: () => cambiarEstatus(c._id, "cancelada") }] : []),
+                            ...( canDelete                 ? [{ label: "Eliminar",         icon: "🗑️", onClick: () => remove(c._id), danger: true }] : []),
+                          ]} />
                         </div>
                       </td>
                     </tr>

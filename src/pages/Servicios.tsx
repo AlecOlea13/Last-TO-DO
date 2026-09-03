@@ -82,6 +82,39 @@ function nanoid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function MenuAcciones({ items }: { items: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen(v => !v)}
+        style={{ background: open ? "var(--surface2)" : "transparent", border: "1.5px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: "1rem", color: "var(--text-muted)", lineHeight: 1 }}
+        title="Más acciones">⋯</button>
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 300, background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 190, overflow: "hidden" }}>
+          {items.map((item, i) => (
+            <button key={i} disabled={item.disabled}
+              onClick={() => { if (!item.disabled) { item.onClick(); setOpen(false); } }}
+              style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", display: "flex", alignItems: "center", gap: 10, cursor: item.disabled ? "not-allowed" : "pointer", color: item.danger ? "var(--red)" : "var(--text)", fontSize: "0.88rem", fontWeight: 500, textAlign: "left", opacity: item.disabled ? 0.4 : 1, borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none" }}
+              onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = "var(--surface2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+              <span style={{ fontSize: "1rem", width: 20, textAlign: "center" }}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Componente de búsqueda de cliente ─────────────────────────────────────────
 function BuscadorCliente({
   clientes, value, onChange, disabled,
@@ -1544,53 +1577,47 @@ export default function Servicios() {
                         )}
                       </td>
                       <td>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {/* ── Editar — developer, gerencia, supervisor_almacen ── */}
-                          {canEditar && (
-                            <button className="btn btn-secondary btn-sm" title="Editar servicio" onClick={() => abrirEditar(s)}>✏️</button>
-                          )}
-                          <button className="btn btn-secondary btn-sm" onClick={() => generarOrdenTrabajo(buildOrdenTrabajo(s))} title="Ver orden">👁️</button>
-                          <button className="btn btn-primary btn-sm" onClick={() => imprimirOrdenTrabajo(buildOrdenTrabajo(s))} title="Imprimir">🖨️</button>
-                          {s.ubicacionInicio && (
-                            <a className="btn btn-secondary btn-sm" href={"https://www.google.com/maps?q=" + s.ubicacionInicio.lat + "," + s.ubicacionInicio.lng} target="_blank" rel="noreferrer" title="Ubicación inicio" style={{ textDecoration: "none" }}>📍</a>
-                          )}
-                          {s.ubicacionCierre && (
-                            <a className="btn btn-secondary btn-sm" href={"https://www.google.com/maps?q=" + s.ubicacionCierre.lat + "," + s.ubicacionCierre.lng} target="_blank" rel="noreferrer" title="Ubicación cierre" style={{ textDecoration: "none" }}>🏁</a>
-                          )}
-                          {["developer", "gerencia", "oficina"].includes(rol) && s.estatus === "cerrado" && (
-                            <button className="btn btn-secondary btn-sm" title="Encuesta de satisfacción" onClick={() => verEncuesta(s)}>📋</button>
-                          )}
+                        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                          {/* Acciones principales visibles */}
                           {!soloVer && s.estatus === "abierto" && !s.horaInicio && puedeOperar && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)" }}
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--blue)", borderColor: "rgba(59,130,246,0.3)", whiteSpace: "nowrap" }}
                               onClick={() => iniciar(s)} disabled={iniciandoId === s._id}>
                               {iniciandoId === s._id ? "..." : "▶️ Iniciar"}
                             </button>
                           )}
                           {!soloVer && s.estatus === "en_proceso" && puedeOperar && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", borderColor: "var(--border)" }}
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}
                               onClick={() => { setPausarModal(s); setRazonPausa(""); }} disabled={pausandoId === s._id}>
                               ⏸️ Pausar
                             </button>
                           )}
                           {!soloVer && s.estatus === "pausado" && puedeOperar && (
-                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                            <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)", whiteSpace: "nowrap" }}
                               onClick={() => reanudar(s)} disabled={reanudandoId === s._id}>
                               {reanudandoId === s._id ? "..." : "▶️ Reanudar"}
                             </button>
                           )}
                           {!soloVer && s.estatus !== "cerrado" && puedeOperar && (
-                            <button className="btn btn-amber btn-sm"
+                            <button className="btn btn-amber btn-sm" style={{ whiteSpace: "nowrap" }}
                               onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setPendientesTexto([""]); }}>
                               Cerrar
                             </button>
                           )}
-                          {/* ── Eliminar — solo developer ── */}
-                          {rol === "developer" && (
-                            <button className="btn btn-danger btn-sm" title="Eliminar servicio"
-                              onClick={() => eliminarServicio(s)} disabled={eliminandoId === s._id}>
-                              {eliminandoId === s._id ? "..." : "🗑️"}
-                            </button>
-                          )}
+
+                          {/* Menú ⋯ secundario */}
+                          <MenuAcciones items={[
+                            { label: "Ver orden",    icon: "👁️", onClick: () => generarOrdenTrabajo(buildOrdenTrabajo(s)) },
+                            { label: "Imprimir",    icon: "🖨️", onClick: () => imprimirOrdenTrabajo(buildOrdenTrabajo(s)) },
+                            ...(canEditar ? [{ label: "Editar servicio", icon: "✏️", onClick: () => abrirEditar(s) }] : []),
+                            ...(["developer","gerencia","oficina"].includes(rol) && s.estatus === "cerrado"
+                              ? [{ label: "Encuesta", icon: "📋", onClick: () => verEncuesta(s) }] : []),
+                            ...(s.ubicacionInicio
+                              ? [{ label: "Ubicación inicio", icon: "📍", onClick: () => window.open("https://www.google.com/maps?q=" + s.ubicacionInicio!.lat + "," + s.ubicacionInicio!.lng, "_blank") }] : []),
+                            ...(s.ubicacionCierre
+                              ? [{ label: "Ubicación cierre", icon: "🏁", onClick: () => window.open("https://www.google.com/maps?q=" + s.ubicacionCierre!.lat + "," + s.ubicacionCierre!.lng, "_blank") }] : []),
+                            ...(rol === "developer"
+                              ? [{ label: eliminandoId === s._id ? "Eliminando..." : "Eliminar", icon: "🗑️", onClick: () => eliminarServicio(s), danger: true, disabled: eliminandoId === s._id }] : []),
+                          ]} />
                         </div>
                       </td>
                     </tr>
