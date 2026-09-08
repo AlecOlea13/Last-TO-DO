@@ -372,7 +372,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     equipoSerie  ? `<strong>Serie:</strong> ${equipoSerie}`   : "",
   ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
-  // ── Layout de tarjetas: imagen + descripción arriba, barra de cantidades/precios abajo ──
   const itemsHtml = cot.items.map(item => {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
@@ -380,23 +379,18 @@ function htmlServicio(cot: CotizacionReporte): string {
         <span>${fmtMoneda(s.precio, moneda)}</span>
       </div>`
     ).join("");
-    const imagenHtml = item.imagen
-      ? `<img src="${item.imagen}" style="width:56px;height:56px;object-fit:cover;border-radius:4px;flex-shrink:0" />`
-      : "";
-    return `<div class="item-card">
-      <div class="item-body">
-        ${imagenHtml}
-        <div class="item-desc">
-          <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
-          ${subHtml}
-        </div>
-      </div>
-      <div class="item-footer">
-        <span>Cant.: <strong>${item.cantidad}</strong></span>
-        <span>Precio U.: <strong>${fmtMoneda(item.precioUnitario, moneda)}</strong></span>
-        <span class="item-subtotal">Total: <strong>${fmtMoneda(item.total, moneda)}</strong></span>
-      </div>
-    </div>`;
+    return `<tr>
+      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:34px">${item.cantidad}</td>
+      <td style="padding:4px 6px;border:1px solid #ddd;width:44px;text-align:center">
+        ${item.imagen ? `<img src="${item.imagen}" style="width:38px;height:38px;object-fit:cover;border-radius:3px" />` : ""}
+      </td>
+      <td style="padding:4px 6px;border:1px solid #ddd">
+        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+        ${subHtml}
+      </td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:82px;white-space:nowrap">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:82px;white-space:nowrap">${fmtMoneda(item.total, moneda)}</td>
+    </tr>`;
   }).join("");
 
   return [
@@ -404,35 +398,34 @@ function htmlServicio(cot: CotizacionReporte): string {
     `<title>${cot.folio}</title>`,
     "<style>",
     "* { margin: 0; padding: 0; box-sizing: border-box; }",
-    "body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 820px; margin: auto; }",
-    ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px solid #222; }",
-    ".header-left { display: flex; align-items: center; gap: 14px; }",
-    ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
-    ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
-    ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
-    ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
-    ".equipo-info { font-size: 10pt; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; padding: 7px 12px; margin-bottom: 10px; color: #333; }",
-    ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; white-space: pre-wrap; }",
-    ".intro { margin-bottom: 10px; font-size: 10pt; }",
-    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
-    ".totals { margin-top: 8px; text-align: right; font-size: 10pt; }",
-    ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
-    ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
-    ".conditions { margin-top: 18px; font-size: 9pt; line-height: 1.7; color: #444; }",
+    "body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; padding: 24px; max-width: 820px; margin: auto; line-height: 1.3; }",
+    ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #222; }",
+    ".header-left { display: flex; align-items: center; gap: 10px; }",
+    ".logo { width: 56px; height: 56px; object-fit: contain; background: #000; border-radius: 5px; }",
+    ".company-name { font-size: 10pt; font-weight: bold; max-width: 320px; line-height: 1.2; }",
+    ".header-right { text-align: right; font-size: 8.5pt; line-height: 1.45; }",
+    ".client-info { font-size: 8.8pt; line-height: 1.5; margin: 8px 0; padding-bottom: 6px; border-bottom: 1px solid #ccc; }",
+    ".equipo-info { font-size: 8.8pt; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; padding: 5px 10px; margin-bottom: 8px; color: #333; }",
+    ".subject { background: #f5f5f5; padding: 7px 10px; margin: 8px 0; font-weight: bold; border-left: 3px solid #222; font-size: 8.8pt; white-space: pre-wrap; }",
+    ".intro { margin-bottom: 6px; font-size: 8.8pt; }",
+    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 5px; padding: 2px 8px; font-size: 8pt; font-weight: 700; margin-bottom: 6px; }",
+    "table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 8.7pt; table-layout: fixed; }",
+    "thead { background: #222; color: white; }",
+    "thead th { padding: 5px 6px; text-align: left; font-size: 8pt; }",
+    "thead th:last-child, thead th:nth-child(4) { text-align: right; }",
+    "td { word-wrap: break-word; overflow-wrap: break-word; }",
+    ".totals { margin-top: 6px; text-align: right; font-size: 8.8pt; }",
+    ".total-row { display: flex; justify-content: flex-end; gap: 30px; padding: 1px 0; }",
+    ".grand-total { font-weight: bold; font-size: 10.5pt; border-top: 2px solid #222; padding-top: 3px; margin-top: 3px; }",
+    ".conditions { margin-top: 12px; font-size: 8pt; line-height: 1.45; color: #444; }",
     ".conditions strong { color: #222; }",
-    ".conditions ul { margin-top: 6px; padding-left: 18px; }",
-    ".conditions li { margin-bottom: 2px; }",
-    ".signature { margin-top: 28px; text-align: center; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
-    ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
-    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
-    ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
-    ".item-card { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }",
-    ".item-body { display: flex; gap: 12px; padding: 10px 12px; }",
-    ".item-desc { flex: 1; font-size: 10pt; line-height: 1.5; }",
-    ".item-footer { display: flex; justify-content: flex-end; gap: 22px; background: #f5f5f5; border-top: 1px solid #ddd; padding: 6px 12px; font-size: 9.5pt; color: #444; flex-wrap: wrap; }",
-    ".item-footer strong { color: #222; }",
-    ".item-subtotal { color: #111; }",
-    "@media print { body { padding: 16px; } }",
+    ".conditions ul { margin-top: 4px; padding-left: 16px; }",
+    ".conditions li { margin-bottom: 1px; }",
+    ".signature { margin-top: 18px; text-align: center; font-size: 8.8pt; page-break-inside: avoid; break-inside: avoid; }",
+    ".signature .name { font-weight: bold; font-size: 9.5pt; margin-top: 4px; }",
+    ".folio-ref { text-align: center; font-size: 7.5pt; color: #888; margin-bottom: 4px; letter-spacing: 0.08em; }",
+    ".subconcept { font-size: 7.8pt; color: #555; padding: 1px 0 1px 10px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 2px; }",
+    "@media print { body { padding: 14px; } }",
     "</style>", "</head>", "<body>",
 
     `<p class="folio-ref">${cot.folio}</p>`,
@@ -462,7 +455,12 @@ function htmlServicio(cot: CotizacionReporte): string {
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
 
-    itemsHtml,
+    "<table>",
+    "<thead><tr>",
+    "<th style='width:34px'>CANT.</th><th style='width:44px'>IMG</th><th>DESCRIPCIÓN</th><th style='width:82px;text-align:right'>PRECIO U.</th><th style='width:82px;text-align:right'>TOTAL</th>",
+    "</tr></thead>",
+    "<tbody>", itemsHtml, "</tbody>",
+    "</table>",
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
@@ -473,7 +471,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     '<div class="conditions">',
     "<strong>Condiciones comerciales:</strong>",
     "<ul>", condicionesHtml(cot), "</ul>",
-    "<p style='margin-top:8px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
+    "<p style='margin-top:6px;font-style:italic;'>En espera de vernos favorecidos con su pedido, quedamos a sus órdenes, para cualquier duda o comentario.</p>",
     "</div>",
 
     '<div class="signature">',
@@ -525,7 +523,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     m?.capacidad   ? `<strong>Capacidad:</strong> ${m.capacidad}` : "",
   ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
-  // ── Layout de tarjetas: imagen + descripción arriba, barra de cantidades/precios abajo ──
   const itemsHtml = cot.items.map((item, idx) => {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
@@ -534,26 +531,23 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
       </div>`
     ).join("");
     const equipoExtra = idx === 0 && equipoDatos
-      ? `<div style="margin-top:6px;font-size:9pt;color:#555;border-top:1px dotted #ddd;padding-top:4px;">${equipoDatos}</div>`
+      ? `<div style="margin-top:4px;font-size:7.8pt;color:#555;border-top:1px dotted #ddd;padding-top:3px;">${equipoDatos}</div>`
       : "";
-    const imagenHtml = item.imagen
-      ? `<img src="${item.imagen}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;flex-shrink:0" />`
-      : "";
-    return `<div class="item-card">
-      <div class="item-body">
-        ${imagenHtml}
-        <div class="item-desc">
-          <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
-          ${equipoExtra}
-          ${subHtml}
-        </div>
-      </div>
-      <div class="item-footer">
-        <span>Cant.: <strong>${item.cantidad}</strong></span>
-        <span>Precio U.: <strong>${fmtMoneda(item.precioUnitario, moneda)}</strong></span>
-        <span class="item-subtotal">Subtotal: <strong>${fmtMoneda(item.total, moneda)}</strong></span>
-      </div>
-    </div>`;
+    return `<tr>
+      <td style="padding:4px 6px;border:1px solid #ddd;width:56px;text-align:center;vertical-align:middle">
+        ${item.imagen
+          ? `<img src="${item.imagen}" style="width:48px;height:48px;object-fit:cover;border-radius:3px;display:block;margin:auto" />`
+          : `<span style="color:#aaa;font-size:8pt">—</span>`}
+      </td>
+      <td style="padding:4px 6px;border:1px solid #ddd">
+        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+        ${equipoExtra}
+        ${subHtml}
+      </td>
+      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:34px">${item.cantidad}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:84px;white-space:nowrap">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:84px;white-space:nowrap">${fmtMoneda(item.total, moneda)}</td>
+    </tr>`;
   }).join("");
 
   return [
@@ -561,35 +555,33 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     `<title>${cot.folio}</title>`,
     "<style>",
     "* { margin: 0; padding: 0; box-sizing: border-box; }",
-    "body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 820px; margin: auto; }",
-    ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px solid #222; }",
-    ".header-left { display: flex; align-items: center; gap: 14px; }",
-    ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
-    ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
-    ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
-    ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
-    ".saludo { font-size: 10pt; margin: 12px 0; line-height: 1.7; }",
-    ".section-title { font-weight: bold; font-size: 11pt; margin: 12px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
-    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
-    ".totals { margin-top: 12px; text-align: right; font-size: 10pt; }",
-    ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
-    ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
-    ".precio-nota { margin-top: 8px; font-size: 9pt; color: #555; font-style: italic; }",
-    ".conditions { margin-top: 16px; font-size: 9pt; line-height: 1.7; color: #444; }",
+    "body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; padding: 24px; max-width: 820px; margin: auto; line-height: 1.3; }",
+    ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #222; }",
+    ".header-left { display: flex; align-items: center; gap: 10px; }",
+    ".logo { width: 56px; height: 56px; object-fit: contain; background: #000; border-radius: 5px; }",
+    ".company-name { font-size: 10pt; font-weight: bold; max-width: 320px; line-height: 1.2; }",
+    ".header-right { text-align: right; font-size: 8.5pt; line-height: 1.45; }",
+    ".client-info { font-size: 8.8pt; line-height: 1.5; margin: 8px 0; padding-bottom: 6px; border-bottom: 1px solid #ccc; }",
+    ".saludo { font-size: 8.8pt; margin: 8px 0; line-height: 1.45; }",
+    ".section-title { font-weight: bold; font-size: 9.5pt; margin: 8px 0 4px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }",
+    ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 5px; padding: 2px 8px; font-size: 8pt; font-weight: 700; margin-bottom: 6px; }",
+    "table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 8.7pt; table-layout: fixed; }",
+    "thead { background: #222; color: white; }",
+    "thead th { padding: 5px 6px; text-align: left; font-size: 8pt; }",
+    "td { word-wrap: break-word; overflow-wrap: break-word; }",
+    ".totals { margin-top: 8px; text-align: right; font-size: 8.8pt; }",
+    ".total-row { display: flex; justify-content: flex-end; gap: 30px; padding: 1px 0; }",
+    ".grand-total { font-weight: bold; font-size: 10.5pt; border-top: 2px solid #222; padding-top: 3px; margin-top: 3px; }",
+    ".precio-nota { margin-top: 6px; font-size: 7.8pt; color: #555; font-style: italic; }",
+    ".conditions { margin-top: 10px; font-size: 8pt; line-height: 1.45; color: #444; }",
     ".conditions strong { color: #222; }",
-    ".conditions ul { margin-top: 6px; padding-left: 18px; }",
-    ".conditions li { margin-bottom: 4px; }",
-    ".signature { margin-top: 24px; font-size: 10pt; page-break-inside: avoid; break-inside: avoid; }",
-    ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
-    ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
-    ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
-    ".item-card { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }",
-    ".item-body { display: flex; gap: 12px; padding: 10px 12px; }",
-    ".item-desc { flex: 1; font-size: 10pt; line-height: 1.5; }",
-    ".item-footer { display: flex; justify-content: flex-end; gap: 22px; background: #f5f5f5; border-top: 1px solid #ddd; padding: 6px 12px; font-size: 9.5pt; color: #444; flex-wrap: wrap; }",
-    ".item-footer strong { color: #222; }",
-    ".item-subtotal { color: #111; }",
-    "@media print { body { padding: 16px; } }",
+    ".conditions ul { margin-top: 4px; padding-left: 16px; }",
+    ".conditions li { margin-bottom: 3px; }",
+    ".signature { margin-top: 16px; font-size: 8.8pt; page-break-inside: avoid; break-inside: avoid; }",
+    ".signature .name { font-weight: bold; font-size: 9.5pt; margin-top: 4px; }",
+    ".folio-ref { text-align: center; font-size: 7.5pt; color: #888; margin-bottom: 4px; letter-spacing: 0.08em; }",
+    ".subconcept { font-size: 7.8pt; color: #555; padding: 1px 0 1px 10px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 2px; }",
+    "@media print { body { padding: 14px; } }",
     "</style>", "</head>", "<body>",
 
     `<p class="folio-ref">${cot.folio}</p>`,
@@ -620,7 +612,16 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     "</div>",
 
     '<div class="section-title">Conceptos</div>',
-    itemsHtml,
+    `<table>
+      <thead><tr>
+        <th style="width:56px">IMG</th>
+        <th>DESCRIPCIÓN</th>
+        <th style="width:34px;text-align:center">CANT.</th>
+        <th style="width:84px;text-align:right">PRECIO U.</th>
+        <th style="width:84px;text-align:right">SUBTOTAL</th>
+      </tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>`,
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
@@ -754,7 +755,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
   .obs-value { padding: 6px 10px; font-size: 9.5pt; min-height: 60px; line-height: 1.6; white-space: pre-wrap; }
   .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
   .firma-box { text-align: center; }
-  .firma-line { border-top: 1.5px solid #111; padding-top: 4px; font-size: 9pt; font-weight: 700; text-transform: uppercase; margin-top: 4px; }
+  .firma-line { border-top: 1.5px solid #111; margin-top: 40px; padding-top: 4px; font-size: 9pt; font-weight: 700; text-transform: uppercase; }
   .firma-box.cliente .firma-line { margin-top: 4px; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
@@ -876,7 +877,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 
     <div class="firmas">
       <div class="firma-box">
-        <div class="firma-line" style="margin-top:0">
+        <div style="font-size:9pt;font-weight:700;text-transform:uppercase;border-top:1.5px solid #111;padding-top:4px;">
           Técnico: ${ot.tecnico ?? "—"}
         </div>
       </div>
