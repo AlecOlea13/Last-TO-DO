@@ -372,9 +372,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     equipoSerie  ? `<strong>Serie:</strong> ${equipoSerie}`   : "",
   ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
-  // ── Si ningún item tiene imagen, se quita la columna completa para dar más ancho a la descripción ──
-  const hayAlgunaImagen = cot.items.some(item => !!item.imagen);
-
+  // ── Layout de tarjetas: imagen + descripción arriba, barra de cantidades/precios abajo ──
   const itemsHtml = cot.items.map(item => {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
@@ -382,24 +380,24 @@ function htmlServicio(cot: CotizacionReporte): string {
         <span>${fmtMoneda(s.precio, moneda)}</span>
       </div>`
     ).join("");
-    const imagenCell = hayAlgunaImagen
-      ? `<td style="padding:6px 8px;border:1px solid #ddd;width:56px;text-align:center">
-          ${item.imagen ? `<img src="${item.imagen}" style="width:46px;height:46px;object-fit:cover;border-radius:4px" />` : ""}
-        </td>`
+    const imagenHtml = item.imagen
+      ? `<img src="${item.imagen}" style="width:56px;height:56px;object-fit:cover;border-radius:4px;flex-shrink:0" />`
       : "";
-    return `<tr>
-      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:44px">${item.cantidad}</td>
-      ${imagenCell}
-      <td style="padding:6px 8px;border:1px solid #ddd">
-        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
-        ${subHtml}
-      </td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:90px;white-space:nowrap">${fmtMoneda(item.precioUnitario, moneda)}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:90px;white-space:nowrap">${fmtMoneda(item.total, moneda)}</td>
-    </tr>`;
+    return `<div class="item-card">
+      <div class="item-body">
+        ${imagenHtml}
+        <div class="item-desc">
+          <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+          ${subHtml}
+        </div>
+      </div>
+      <div class="item-footer">
+        <span>Cant.: <strong>${item.cantidad}</strong></span>
+        <span>Precio U.: <strong>${fmtMoneda(item.precioUnitario, moneda)}</strong></span>
+        <span class="item-subtotal">Total: <strong>${fmtMoneda(item.total, moneda)}</strong></span>
+      </div>
+    </div>`;
   }).join("");
-
-  const theadImagen = hayAlgunaImagen ? `<th style="width:56px">IMAGEN</th>` : "";
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -417,11 +415,6 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".subject { background: #f5f5f5; padding: 10px 14px; margin: 14px 0; font-weight: bold; border-left: 4px solid #222; font-size: 10pt; white-space: pre-wrap; }",
     ".intro { margin-bottom: 10px; font-size: 10pt; }",
     ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
-    "table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; table-layout: fixed; }",
-    "thead { background: #222; color: white; }",
-    "thead th { padding: 8px; text-align: left; }",
-    "thead th:last-child, thead th:nth-child(4) { text-align: right; }",
-    "td { word-wrap: break-word; overflow-wrap: break-word; }",
     ".totals { margin-top: 8px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
@@ -433,6 +426,12 @@ function htmlServicio(cot: CotizacionReporte): string {
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
+    ".item-card { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }",
+    ".item-body { display: flex; gap: 12px; padding: 10px 12px; }",
+    ".item-desc { flex: 1; font-size: 10pt; line-height: 1.5; }",
+    ".item-footer { display: flex; justify-content: flex-end; gap: 22px; background: #f5f5f5; border-top: 1px solid #ddd; padding: 6px 12px; font-size: 9.5pt; color: #444; flex-wrap: wrap; }",
+    ".item-footer strong { color: #222; }",
+    ".item-subtotal { color: #111; }",
     "@media print { body { padding: 16px; } }",
     "</style>", "</head>", "<body>",
 
@@ -463,12 +462,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     cot.descripcionServicio ? `<div class="subject">${cot.descripcionServicio.replace(/\n/g, "<br>")}</div>` : "",
     `<p class="intro">Por medio de la presente, nos permitimos presentar la siguiente propuesta:</p>`,
 
-    "<table>",
-    "<thead><tr>",
-    `<th style='width:44px'>CANT.</th>${theadImagen}<th>DESCRIPCIÓN</th><th style='width:90px;text-align:right'>PRECIO U.</th><th style='width:90px;text-align:right'>TOTAL</th>`,
-    "</tr></thead>",
-    "<tbody>", itemsHtml, "</tbody>",
-    "</table>",
+    itemsHtml,
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
@@ -531,9 +525,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     m?.capacidad   ? `<strong>Capacidad:</strong> ${m.capacidad}` : "",
   ].filter(Boolean).join("&nbsp;&nbsp;&nbsp;");
 
-  // ── Si NINGÚN item tiene imagen, quitamos la columna completa para dar más ancho a la descripción ──
-  const hayAlgunaImagen = cot.items.some(item => !!item.imagen);
-
+  // ── Layout de tarjetas: imagen + descripción arriba, barra de cantidades/precios abajo ──
   const itemsHtml = cot.items.map((item, idx) => {
     const subHtml = (item.subconceptos ?? []).map(s =>
       `<div class="subconcept">
@@ -544,27 +536,25 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     const equipoExtra = idx === 0 && equipoDatos
       ? `<div style="margin-top:6px;font-size:9pt;color:#555;border-top:1px dotted #ddd;padding-top:4px;">${equipoDatos}</div>`
       : "";
-    const imagenCell = hayAlgunaImagen
-      ? `<td style="padding:6px 8px;border:1px solid #ddd;width:64px;text-align:center;vertical-align:middle">
-          ${item.imagen
-            ? `<img src="${item.imagen}" style="width:56px;height:56px;object-fit:cover;border-radius:4px;display:block;margin:auto" />`
-            : `<span style="color:#aaa;font-size:9pt">—</span>`}
-        </td>`
+    const imagenHtml = item.imagen
+      ? `<img src="${item.imagen}" style="width:64px;height:64px;object-fit:cover;border-radius:4px;flex-shrink:0" />`
       : "";
-    return `<tr>
-      ${imagenCell}
-      <td style="padding:6px 8px;border:1px solid #ddd">
-        <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
-        ${equipoExtra}
-        ${subHtml}
-      </td>
-      <td style="text-align:center;padding:6px 8px;border:1px solid #ddd;width:42px">${item.cantidad}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:88px;white-space:nowrap">${fmtMoneda(item.precioUnitario, moneda)}</td>
-      <td style="text-align:right;padding:6px 8px;border:1px solid #ddd;width:88px;white-space:nowrap">${fmtMoneda(item.total, moneda)}</td>
-    </tr>`;
+    return `<div class="item-card">
+      <div class="item-body">
+        ${imagenHtml}
+        <div class="item-desc">
+          <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
+          ${equipoExtra}
+          ${subHtml}
+        </div>
+      </div>
+      <div class="item-footer">
+        <span>Cant.: <strong>${item.cantidad}</strong></span>
+        <span>Precio U.: <strong>${fmtMoneda(item.precioUnitario, moneda)}</strong></span>
+        <span class="item-subtotal">Subtotal: <strong>${fmtMoneda(item.total, moneda)}</strong></span>
+      </div>
+    </div>`;
   }).join("");
-
-  const theadImagen = hayAlgunaImagen ? `<th style="width:64px">IMAGEN</th>` : "";
 
   return [
     "<!DOCTYPE html>", '<html lang="es">', "<head>", '<meta charset="UTF-8">',
@@ -581,10 +571,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     ".saludo { font-size: 10pt; margin: 12px 0; line-height: 1.7; }",
     ".section-title { font-weight: bold; font-size: 11pt; margin: 12px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }",
     ".moneda-badge { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 2px 10px; font-size: 9pt; font-weight: 700; margin-bottom: 8px; }",
-    "table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; table-layout: fixed; }",
-    "thead { background: #222; color: white; }",
-    "thead th { padding: 8px; text-align: left; }",
-    "td { word-wrap: break-word; overflow-wrap: break-word; }",
     ".totals { margin-top: 12px; text-align: right; font-size: 10pt; }",
     ".total-row { display: flex; justify-content: flex-end; gap: 40px; padding: 2px 0; }",
     ".grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #222; padding-top: 4px; margin-top: 4px; }",
@@ -597,6 +583,12 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     ".signature .name { font-weight: bold; font-size: 11pt; margin-top: 6px; }",
     ".folio-ref { text-align: center; font-size: 8.5pt; color: #888; margin-bottom: 6px; letter-spacing: 0.08em; }",
     ".subconcept { font-size: 9pt; color: #555; padding: 2px 0 2px 12px; display: flex; justify-content: space-between; border-top: 1px dotted #e0e0e0; margin-top: 3px; }",
+    ".item-card { border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }",
+    ".item-body { display: flex; gap: 12px; padding: 10px 12px; }",
+    ".item-desc { flex: 1; font-size: 10pt; line-height: 1.5; }",
+    ".item-footer { display: flex; justify-content: flex-end; gap: 22px; background: #f5f5f5; border-top: 1px solid #ddd; padding: 6px 12px; font-size: 9.5pt; color: #444; flex-wrap: wrap; }",
+    ".item-footer strong { color: #222; }",
+    ".item-subtotal { color: #111; }",
     "@media print { body { padding: 16px; } }",
     "</style>", "</head>", "<body>",
 
@@ -628,16 +620,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     "</div>",
 
     '<div class="section-title">Conceptos</div>',
-    `<table>
-      <thead><tr>
-        ${theadImagen}
-        <th>DESCRIPCIÓN</th>
-        <th style="width:42px;text-align:center">CANT.</th>
-        <th style="width:88px;text-align:right">PRECIO U.</th>
-        <th style="width:88px;text-align:right">SUBTOTAL</th>
-      </tr></thead>
-      <tbody>${itemsHtml}</tbody>
-    </table>`,
+    itemsHtml,
 
     '<div class="totals">',
     `<div class="total-row"><span>SUB TOTAL</span><span>${fmtMoneda(cot.subtotal, moneda)}</span></div>`,
