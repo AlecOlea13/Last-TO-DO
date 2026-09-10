@@ -29,6 +29,7 @@ type Renta = {
 type Cliente     = { _id: string; nombre: string };
 type Montacargas = {
   _id: string; numeroEconomico: string; marca: string; modelo: string; estatus: string;
+  tipo?: string; // "electrico" | "gas" | "diesel"
   costoSemana?: number; costoMes?: number; costoAnual?: number;
 };
 type Asesor = { _id: string; nombre: string };
@@ -46,6 +47,13 @@ const ESTATUS_BADGE: Record<string, string> = {
 const PERIODO_LABEL: Record<string, string> = {
   semanal: "📅 Semanal", mensual: "🗓️ Mensual", anual: "📆 Anual",
 };
+
+function tipoEnergiaLabel(tipo?: string): string {
+  if (tipo === "electrico") return "Eléctrico";
+  if (tipo === "gas")       return "Gas LP";
+  if (tipo === "diesel")    return "Diésel";
+  return "Sin especificar";
+}
 
 export default function Rentas() {
   const rol            = localStorage.getItem("rol") ?? "";
@@ -75,6 +83,9 @@ export default function Rentas() {
   const [savingRenovar, setSavingRenovar] = useState(false);
 
   const [modalHistorial, setModalHistorial] = useState<Renta | null>(null);
+
+  // ── Reporte de flota ──
+  const [modalReporte, setModalReporte] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -208,6 +219,91 @@ export default function Rentas() {
     return Math.ceil((new Date(fechaFin).getTime() - Date.now()) / 86400000);
   }
 
+  // ── Generar reporte HTML de flota rentada ──
+  function generarReporteFlota() {
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const activas = rentas.filter(r => r.estatus === "activa");
+
+    const conTipo = activas.map(r => {
+      const monta = todosMontas.find(m => m._id === r.montacargas?._id);
+      return { ...r, tipoEnergia: monta?.tipo ?? "sin_tipo" };
+    });
+
+    const porTipo = new Map<string, number>();
+    for (const r of conTipo) {
+      const key = r.tipoEnergia;
+      porTipo.set(key, (porTipo.get(key) ?? 0) + 1);
+    }
+
+    const rows = conTipo
+      .sort((a, b) => (a.cliente?.nombre ?? "").localeCompare(b.cliente?.nombre ?? ""))
+      .map(r => `<tr>
+        <td>${r.cliente?.nombre ?? "—"}</td>
+        <td>${r.montacargas?.numeroEconomico ?? "—"} ${r.montacargas?.marca ?? ""}</td>
+        <td>${tipoEnergiaLabel(r.tipoEnergia)}</td>
+        <td style="text-transform:capitalize">${r.tipoPeriodo ?? "mensual"}</td>
+        <td style="text-align:right">$${r.precioMensual.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+        <td>${fmt(r.fechaInicio)}</td>
+        <td>${fmt(r.fechaFin)}</td>
+      </tr>`).join("");
+
+    const resumenTipoHtml = [...porTipo.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([tipo, count]) => `
+        <div class="box">
+          <div class="val">${count}</div>
+          <div class="lbl">${tipoEnergiaLabel(tipo)}</div>
+        </div>`).join("");
+
+    const totalRentaMensual = conTipo.reduce((a, r) => a + (r.tipoPeriodo === "mensual" ? r.precioMensual : 0), 0);
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Reporte de Flota Rentada</title>
+<style>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px;max-width:900px;margin:auto; }
+  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
+  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
+  h1 { font-size:13pt;font-weight:900; } h2 { font-size:10pt;font-weight:700;margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px; }
+  p.sub { font-size:8.5pt;color:#555; }
+  table { width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:6px; }
+  thead { background:#222;color:#fff; } thead th { padding:5px 8px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; } td { padding:4px 8px;border-bottom:1px solid #ddd; }
+  .resumen-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px; }
+  .box { border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center; }
+  .box .val { font-size:18pt;font-weight:900;color:#222; }
+  .box .lbl { font-size:7.5pt;color:#666;text-transform:uppercase;margin-top:2px; }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
+  @media print { .print-btn { display:none; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Pipsa" />
+  <div>
+    <h1>Reporte de Flota Rentada</h1>
+    <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+    <p class="sub">Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}</p>
+  </div>
+</div>
+<div class="resumen-grid">
+  <div class="box"><div class="val">${activas.length}</div><div class="lbl">Equipos rentados</div></div>
+  ${resumenTipoHtml}
+  <div class="box"><div class="val" style="font-size:13pt">$${totalRentaMensual.toLocaleString("es-MX", { minimumFractionDigits: 0 })}</div><div class="lbl">Ingreso mensual estimado</div></div>
+</div>
+<h2>Detalle de equipos rentados</h2>
+<table>
+  <thead><tr><th>Cliente</th><th>Equipo</th><th>Tipo</th><th>Periodo</th><th style="text-align:right">Precio</th><th>Inicio</th><th>Fin</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#aaa">Sin rentas activas</td></tr>'}</tbody>
+</table>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setModalReporte(false);
+  }
+
   const montaSeleccionada = montas.find(m => m._id === form.montacargas);
   const precioLabel = form.tipoPeriodo === "semanal" ? "Precio semanal" : form.tipoPeriodo === "anual" ? "Precio anual" : "Precio mensual";
 
@@ -224,11 +320,14 @@ export default function Rentas() {
           <h1 className="page-title">Rentas</h1>
           <p className="page-subtitle">{rentas.filter(r => r.estatus === "activa").length} rentas activas</p>
         </div>
-        {canCreateRenta && (
-          <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
-            + Nueva renta
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => setModalReporte(true)}>📊 Reporte de flota</button>
+          {canCreateRenta && (
+            <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>
+              + Nueva renta
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="page-content">
@@ -336,6 +435,26 @@ export default function Rentas() {
           )}
         </div>
       </div>
+
+      {/* ── Modal reporte de flota ── */}
+      {modalReporte && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <button className="modal-close" onClick={() => setModalReporte(false)}>✕</button>
+            <h2 className="modal-title">📊 Reporte de flota rentada</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Genera un reporte con todos los equipos actualmente rentados, agrupados por tipo de energía (eléctrico, gas, diésel), con cliente y precio.
+            </p>
+            <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              Incluye únicamente rentas con estatus <strong style={{ color: "var(--text)" }}>activa</strong>.
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={generarReporteFlota}>📄 Ver reporte</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal nueva renta ── */}
       {modal && canCreateRenta && (
