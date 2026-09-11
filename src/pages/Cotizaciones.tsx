@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
@@ -88,23 +89,65 @@ const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
+// ── Menú de acciones con portal: se dibuja en document.body para no ser recortado
+//    por contenedores con overflow (como la tabla con scroll horizontal) ──
 function MenuAcciones({ items }: { items: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }[] }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const btnRef  = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (
+        btnRef.current && !btnRef.current.contains(e.target as Node) &&
+        menuRef.current && !menuRef.current.contains(e.target as Node)
+      ) setOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    function reposicionar() {
+      if (!btnRef.current) return;
+      const rect = btnRef.current.getBoundingClientRect();
+      const menuWidth = 190;
+      const left = rect.right - menuWidth < 8 ? rect.left : rect.right - menuWidth;
+      setCoords({ top: rect.bottom + 6, left });
+    }
+    reposicionar();
+    window.addEventListener("scroll", reposicionar, true);
+    window.addEventListener("resize", reposicionar);
+    return () => {
+      window.removeEventListener("scroll", reposicionar, true);
+      window.removeEventListener("resize", reposicionar);
+    };
+  }, [open]);
+
+  function toggleOpen() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const menuWidth = 190;
+      const left = rect.right - menuWidth < 8 ? rect.left : rect.right - menuWidth;
+      setCoords({ top: rect.bottom + 6, left });
+    }
+    setOpen(v => !v);
+  }
+
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <button onClick={() => setOpen(v => !v)}
+    <>
+      <button ref={btnRef} onClick={toggleOpen}
         style={{ background: open ? "var(--surface2)" : "transparent", border: "1.5px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: "1rem", color: "var(--text-muted)", lineHeight: 1 }}
         title="Más acciones">⋯</button>
-      {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 300, background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, overflow: "hidden" }}>
+      {open && createPortal(
+        <div ref={menuRef} style={{
+          position: "fixed", top: coords.top, left: coords.left, zIndex: 9999,
+          background: "var(--surface)", border: "1.5px solid var(--border)",
+          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          minWidth: 190, overflow: "hidden",
+        }}>
           {items.map((item, i) => (
             <button key={i} disabled={item.disabled}
               onClick={() => { if (!item.disabled) { item.onClick(); setOpen(false); } }}
@@ -115,9 +158,10 @@ function MenuAcciones({ items }: { items: { label: string; icon: string; onClick
               {item.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
