@@ -533,19 +533,16 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
       ? `<div style="margin-top:4px;font-size:7.8pt;color:#555;border-top:1px dotted #ddd;padding-top:3px;">${equipoDatos}</div>`
       : "";
     return `<tr>
-      <td style="padding:4px 6px;border:1px solid #ddd;width:48px;text-align:center;vertical-align:middle">
-        ${item.imagen
-          ? `<img src="${item.imagen}" style="width:42px;height:42px;object-fit:cover;border-radius:3px;display:block;margin:auto" />`
-          : `<span style="color:#aaa;font-size:8pt">—</span>`}
-      </td>
-      <td style="padding:4px 6px;border:1px solid #ddd">
+      <td style="padding:6px 8px;border:1px solid #ddd">
+        ${item.imagen ? `<img src="${item.imagen}" style="float:left;width:110px;height:110px;object-fit:cover;border-radius:4px;margin:0 10px 6px 0" />` : ""}
         <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
         ${equipoExtra}
         ${subHtml}
+        ${item.imagen ? '<div style="clear:both"></div>' : ""}
       </td>
-      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:30px">${item.cantidad}</td>
-      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt">${fmtMoneda(item.precioUnitario, moneda)}</td>
-      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt">${fmtMoneda(item.total, moneda)}</td>
+      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:30px;vertical-align:top">${item.cantidad}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt;vertical-align:top">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt;vertical-align:top">${fmtMoneda(item.total, moneda)}</td>
     </tr>`;
   }).join("");
 
@@ -613,7 +610,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     '<div class="section-title">Conceptos</div>',
     `<table>
       <thead><tr>
-        <th style="width:48px">IMG</th>
         <th>DESCRIPCIÓN</th>
         <th style="width:30px;text-align:center">CANT.</th>
         <th style="width:98px;text-align:right">PRECIO U.</th>
