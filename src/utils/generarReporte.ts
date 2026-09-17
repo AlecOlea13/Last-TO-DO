@@ -380,9 +380,9 @@ function htmlServicio(cot: CotizacionReporte): string {
       </div>`
     ).join("");
     return `<tr>
-      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:30px">${item.cantidad}</td>
-      <td style="padding:4px 6px;border:1px solid #ddd;width:40px;text-align:center">
-        ${item.imagen ? `<img src="${item.imagen}" style="width:34px;height:34px;object-fit:cover;border-radius:3px" />` : ""}
+      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:34px">${item.cantidad}</td>
+      <td style="padding:4px 6px;border:1px solid #ddd;width:82px;text-align:center;vertical-align:middle">
+        ${item.imagen ? `<img src="${item.imagen}" style="width:74px;height:74px;object-fit:cover;border-radius:4px" />` : ""}
       </td>
       <td style="padding:4px 6px;border:1px solid #ddd">
         <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
@@ -457,7 +457,7 @@ function htmlServicio(cot: CotizacionReporte): string {
 
     "<table>",
     "<thead><tr>",
-    "<th style='width:30px'>CANT.</th><th style='width:40px'>IMG</th><th>DESCRIPCIÓN</th><th style='width:98px;text-align:right'>PRECIO U.</th><th style='width:98px;text-align:right'>TOTAL</th>",
+    "<th style='width:34px'>CANT.</th><th style='width:82px'>IMG</th><th>DESCRIPCIÓN</th><th style='width:98px;text-align:right'>PRECIO U.</th><th style='width:98px;text-align:right'>TOTAL</th>",
     "</tr></thead>",
     "<tbody>", itemsHtml, "</tbody>",
     "</table>",
