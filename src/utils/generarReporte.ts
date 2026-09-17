@@ -380,16 +380,15 @@ function htmlServicio(cot: CotizacionReporte): string {
       </div>`
     ).join("");
     return `<tr>
-      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:34px">${item.cantidad}</td>
-      <td style="padding:4px 6px;border:1px solid #ddd;width:82px;text-align:center;vertical-align:middle">
-        ${item.imagen ? `<img src="${item.imagen}" style="width:74px;height:74px;object-fit:cover;border-radius:4px" />` : ""}
-      </td>
-      <td style="padding:4px 6px;border:1px solid #ddd">
+      <td style="text-align:center;padding:4px 6px;border:1px solid #ddd;width:34px;vertical-align:top">${item.cantidad}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd">
+        ${item.imagen ? `<img src="${item.imagen}" style="float:left;width:110px;height:110px;object-fit:cover;border-radius:4px;margin:0 10px 6px 0" />` : ""}
         <div style="white-space:pre-wrap">${item.descripcion.replace(/\n/g, "<br>")}</div>
         ${subHtml}
+        ${item.imagen ? '<div style="clear:both"></div>' : ""}
       </td>
-      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt">${fmtMoneda(item.precioUnitario, moneda)}</td>
-      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt">${fmtMoneda(item.total, moneda)}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt;vertical-align:top">${fmtMoneda(item.precioUnitario, moneda)}</td>
+      <td style="text-align:right;padding:4px 6px;border:1px solid #ddd;width:98px;white-space:nowrap;font-size:8.2pt;vertical-align:top">${fmtMoneda(item.total, moneda)}</td>
     </tr>`;
   }).join("");
 
@@ -457,7 +456,7 @@ function htmlServicio(cot: CotizacionReporte): string {
 
     "<table>",
     "<thead><tr>",
-    "<th style='width:34px'>CANT.</th><th style='width:82px'>IMG</th><th>DESCRIPCIÓN</th><th style='width:98px;text-align:right'>PRECIO U.</th><th style='width:98px;text-align:right'>TOTAL</th>",
+    "<th style='width:34px'>CANT.</th><th>DESCRIPCIÓN</th><th style='width:98px;text-align:right'>PRECIO U.</th><th style='width:98px;text-align:right'>TOTAL</th>",
     "</tr></thead>",
     "<tbody>", itemsHtml, "</tbody>",
     "</table>",
