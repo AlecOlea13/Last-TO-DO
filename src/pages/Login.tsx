@@ -567,7 +567,7 @@ export default function Login() {
           <div className="login-footer">
             <div className="login-footer-dot" />
             <div className="login-footer-text">
-              Pipsa Montacargas · Zapopán, Jal. · {new Date().getFullYear()}
+              Pipsa Montacargas · Tlaquepaque, Jal. · {new Date().getFullYear()}
             </div>
           </div>
         </div>

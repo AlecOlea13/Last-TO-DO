@@ -757,7 +757,7 @@ thead th:nth-child(4),thead th:nth-child(5) { text-align:right; }
     <img src="${logoUrl}" class="logo" alt="Pipsa" />
     <div class="company">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>
   </div>
-  <div class="header-right"><strong>Zapopán, Jal.; ${fecha}</strong><br>Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>45235, Zapopán, Jal.<br>www.pipsamontacargas.com</div>
+  <div class="header-right"><strong>Tlaquepaque, Jal.; ${fecha}</strong><br>Bahías de Huatulco No. 99-A, Parques de Santa María<br>45609, Tlaquepaque, Jal.<br>www.pipsamontacargas.com</div>
 </div>
 <div class="title-box">
   <h1>SOLICITUD DE COMPRA</h1>
@@ -1720,8 +1720,8 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
               </div>
               {verCotizacion.subtotal !== undefined && (
                 <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
-                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>👁️ Ver reporte</button>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Zapopán, Jal." })}>📥 Descargar PDF</button>
+                  <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => generarReporte({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Tlaquepaque, Jal." })}>👁️ Ver reporte</button>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => descargarPDF({ ...verCotizacion, cliente: verCotizacion.cliente ?? verCotizacion.clienteOcasional, lugar: verCotizacion.lugar ?? "Tlaquepaque, Jal." })}>📥 Descargar PDF</button>
                 </div>
               )}
             </div>

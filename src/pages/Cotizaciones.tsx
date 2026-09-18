@@ -72,7 +72,7 @@ const emptyForm: any = {
   folio: "", tipo: "servicio", cliente: "", esOcasional: false,
   clienteOcasional: { ...emptyClienteOcasional },
   montacargas: "", asesor: "", tipoPeriodo: "mensual", condiciones: "",
-  fecha: new Date().toISOString().split("T")[0], lugar: "Zapopán, Jal",
+  fecha: new Date().toISOString().split("T")[0], lugar: "Tlaquepaque, Jal",
   descripcionServicio: "", items: [], subtotal: 0, iva: 0, total: 0,
   estatus: "activa", notas: "",
   equipoMarca: "", equipoModelo: "", equipoSerie: "",
