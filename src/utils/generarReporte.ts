@@ -270,8 +270,8 @@ function htmlCurso(cot: CotizacionReporte): string {
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>",
-    "45235, Zapopán, Jal.<br>",
+    "Bahías de Huatulco No. 99-A, Parques de Santa María<br>",
+    "45609, Tlaquepaque, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
     "</div>",
@@ -435,8 +435,8 @@ function htmlServicio(cot: CotizacionReporte): string {
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Col. Agua Blanca Industrial<br>",
-    "45235, Zapopán, Jal.<br>",
+    "Bahías de Huatulco No. 99-A, Parques de Santa María<br>",
+    "45609, Tlaquepaque, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
     "</div>",
@@ -783,9 +783,9 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
     <div class="top-header">
       <div class="company-info">
         <strong>C. Bahías de Huatulco No.99</strong><br>
-        Col. Agua Blanca Industrial C.P. 45235<br>
+        Parques de Santa María C.P. 45609<br>
         Tels. 33 3856 8329 / 33 3440 0214<br>
-        Zapopán, Jal., Méx.<br>
+        Tlaquepaque, Jal., Méx.<br>
         <strong>pipsamontacargas@hotmail.com</strong><br>
         <strong>www.pipsamontacargas.com</strong>
       </div>
