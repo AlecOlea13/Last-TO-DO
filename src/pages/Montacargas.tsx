@@ -20,6 +20,9 @@ type ServicioHistorial = {
 type Venta = {
   fecha?: string;
   importe?: number;
+  montoFacturado?: number;
+  ivaFacturado?: number;
+  montoEfectivo?: number;
   cliente?: { _id: string; nombre: string } | null;
   clienteNombre?: string;
   asesor?: { _id: string; nombre: string } | null;
@@ -155,7 +158,8 @@ export default function Montacargas() {
   // ── Marcar como vendido ──
   const [ventaModal, setVentaModal]     = useState<Monta | null>(null);
   const [formVenta, setFormVenta]       = useState({
-    importe: "", fecha: new Date().toISOString().split("T")[0],
+    montoFacturado: "", montoEfectivo: "",
+    fecha: new Date().toISOString().split("T")[0],
     esClienteCatalogo: true, clienteId: "", clienteNombre: "",
     asesorId: "", notas: "",
   });
@@ -288,19 +292,29 @@ export default function Montacargas() {
   function abrirVenta(m: Monta) {
     setVentaModal(m);
     setFormVenta({
-      importe: m.precioVenta ? String(m.precioVenta) : "",
+      montoFacturado: m.precioVenta ? String(m.precioVenta) : "", montoEfectivo: "",
       fecha: new Date().toISOString().split("T")[0],
       esClienteCatalogo: true, clienteId: "", clienteNombre: "",
       asesorId: "", notas: "",
     });
   }
 
+  // Vista previa del IVA/total — el backend vuelve a calcular esto como fuente de verdad
+  const previewFacturado = Number(formVenta.montoFacturado) || 0;
+  const previewEfectivo  = Number(formVenta.montoEfectivo) || 0;
+  const previewIva       = previewFacturado * 0.16;
+  const previewTotal     = previewFacturado + previewIva + previewEfectivo;
+
   async function confirmarVenta() {
-    if (!ventaModal || !formVenta.importe || Number(formVenta.importe) <= 0) return;
+    if (!ventaModal) return;
+    const facturado = Number(formVenta.montoFacturado) || 0;
+    const efectivo  = Number(formVenta.montoEfectivo) || 0;
+    if (facturado <= 0 && efectivo <= 0) return;
     setSavingVenta(true);
     try {
       const payload: any = {
-        importe: Number(formVenta.importe),
+        montoFacturado: facturado,
+        montoEfectivo: efectivo,
         fecha: formVenta.fecha,
         asesorId: formVenta.asesorId || null,
         notas: formVenta.notas,
@@ -358,6 +372,9 @@ export default function Montacargas() {
       <td>${m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
       <td>${m.venta?.asesor?.nombre ?? "—"}</td>
       <td>${fmt(m.venta?.fecha)}</td>
+      <td style="text-align:right">$${(m.venta?.montoFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right">$${(m.venta?.ivaFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right">$${(m.venta?.montoEfectivo ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;font-weight:700">$${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
     </tr>`).join("");
 
@@ -392,8 +409,8 @@ export default function Montacargas() {
   <div class="box"><div class="val" style="color:#16a34a">$${reporteData.totalImporte.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Total vendido</div></div>
 </div>
 <table>
-  <thead><tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead>
-  <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#aaa">Sin ventas en este periodo</td></tr>'}</tbody>
+  <thead><tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style="text-align:right">Facturado</th><th style="text-align:right">IVA</th><th style="text-align:right">Efectivo</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:#aaa">Sin ventas en este periodo</td></tr>'}</tbody>
 </table>
 </body></html>`;
 
@@ -510,7 +527,14 @@ export default function Montacargas() {
                     <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                     <td>{m.venta?.asesor?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                     <td>{fmt(m.venta?.fecha)}</td>
-                    <td style={{ fontWeight: 700, color: "var(--green)" }}>${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                    <td style={{ fontWeight: 700, color: "var(--green)" }}>
+                      ${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      {(m.venta?.montoFacturado ?? 0) > 0 && (m.venta?.montoEfectivo ?? 0) > 0 && (
+                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>
+                          Fact. ${(m.venta!.montoFacturado ?? 0).toLocaleString("es-MX")} + Efvo. ${(m.venta!.montoEfectivo ?? 0).toLocaleString("es-MX")}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
@@ -740,11 +764,40 @@ export default function Montacargas() {
               ⚠️ Al confirmar, este equipo saldrá del catálogo de disponibles y solo aparecerá en el filtro "Vendidos".
             </div>
             <div className="form-grid">
-              <div className="form-group span-2">
-                <label className="form-label">Importe de venta ($) *</label>
-                <input className="form-input" type="number" min={1} value={formVenta.importe}
-                  onChange={e => setFormVenta(p => ({ ...p, importe: e.target.value }))} placeholder="Ej. 185000" autoFocus />
+              <div className="form-group">
+                <label className="form-label">Monto facturado ($, sin IVA)</label>
+                <input className="form-input" type="number" min={0} value={formVenta.montoFacturado}
+                  onChange={e => setFormVenta(p => ({ ...p, montoFacturado: e.target.value }))} placeholder="Ej. 150000" autoFocus />
               </div>
+              <div className="form-group">
+                <label className="form-label">Monto en efectivo / sin factura ($)</label>
+                <input className="form-input" type="number" min={0} value={formVenta.montoEfectivo}
+                  onChange={e => setFormVenta(p => ({ ...p, montoEfectivo: e.target.value }))} placeholder="Ej. 20000" />
+              </div>
+              {(previewFacturado > 0 || previewEfectivo > 0) && (
+                <div className="form-group span-2" style={{ margin: 0 }}>
+                  <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {previewFacturado > 0 && (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                          <span>Facturado (subtotal)</span><span>${previewFacturado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                          <span>IVA (16%)</span><span>${previewIva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </>
+                    )}
+                    {previewEfectivo > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                        <span>Efectivo / sin factura</span><span>${previewEfectivo.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.95rem", fontWeight: 700, color: "var(--green)", borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 6 }}>
+                      <span>Total de la venta</span><span>${previewTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="form-group span-2">
                 <label className="form-label">Fecha de venta *</label>
                 <input className="form-input" type="date" value={formVenta.fecha}
@@ -785,7 +838,7 @@ export default function Montacargas() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setVentaModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmarVenta}
-                disabled={savingVenta || !formVenta.importe || Number(formVenta.importe) <= 0}
+                disabled={savingVenta || (previewFacturado <= 0 && previewEfectivo <= 0)}
                 style={{ background: "var(--green)", color: "#fff" }}>
                 {savingVenta ? "Guardando..." : "✅ Confirmar venta"}
               </button>
@@ -861,11 +914,11 @@ export default function Montacargas() {
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ fontSize: "0.82rem" }}>
                     <thead>
-                      <tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style={{ textAlign: "right" }}>Importe</th></tr>
+                      <tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style={{ textAlign: "right" }}>Facturado</th><th style={{ textAlign: "right" }}>IVA</th><th style={{ textAlign: "right" }}>Efectivo</th><th style={{ textAlign: "right" }}>Total</th></tr>
                     </thead>
                     <tbody>
                       {reporteData.equipos.length === 0 ? (
-                        <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin ventas en este periodo</td></tr>
+                        <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin ventas en este periodo</td></tr>
                       ) : reporteData.equipos.map(m => (
                         <tr key={m._id}>
                           <td style={{ fontWeight: 700 }}>{m.numeroEconomico}</td>
@@ -873,6 +926,9 @@ export default function Montacargas() {
                           <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
                           <td>{m.venta?.asesor?.nombre ?? "—"}</td>
                           <td>{fmt(m.venta?.fecha)}</td>
+                          <td style={{ textAlign: "right" }}>${(m.venta?.montoFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          <td style={{ textAlign: "right" }}>${(m.venta?.ivaFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          <td style={{ textAlign: "right" }}>${(m.venta?.montoEfectivo ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                           <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                         </tr>
                       ))}
@@ -927,7 +983,10 @@ export default function Montacargas() {
                 ...(detalleModal.estatus === "vendido" ? [
                   { label: "🏷️ Vendido a",       val: detalleModal.venta?.cliente?.nombre ?? detalleModal.venta?.clienteNombre },
                   { label: "🏷️ Fecha de venta",  val: fmt(detalleModal.venta?.fecha) },
-                  { label: "🏷️ Importe de venta", val: detalleModal.venta?.importe ? `$${detalleModal.venta.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ Facturado (subtotal)", val: (detalleModal.venta?.montoFacturado ?? 0) > 0 ? `$${detalleModal.venta!.montoFacturado!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ IVA (16%)",       val: (detalleModal.venta?.ivaFacturado ?? 0) > 0 ? `$${detalleModal.venta!.ivaFacturado!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ Efectivo / sin factura", val: (detalleModal.venta?.montoEfectivo ?? 0) > 0 ? `$${detalleModal.venta!.montoEfectivo!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ Total de la venta", val: detalleModal.venta?.importe ? `$${detalleModal.venta.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                   { label: "🏷️ Asesor",          val: detalleModal.venta?.asesor?.nombre },
                   { label: "🏷️ Notas de venta",  val: detalleModal.venta?.notas },
                 ] : []),
