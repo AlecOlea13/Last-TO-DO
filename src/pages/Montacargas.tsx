@@ -22,6 +22,7 @@ type Venta = {
   importe?: number;
   montoFacturado?: number;
   ivaFacturado?: number;
+  numeroFactura?: string;
   montoEfectivo?: number;
   cliente?: { _id: string; nombre: string } | null;
   clienteNombre?: string;
@@ -128,6 +129,7 @@ export default function Montacargas() {
   const canEdit         = !["tecnico", "almacen"].includes(rol);
   const canVerHistorial = ["developer", "gerencia", "supervisor_almacen"].includes(rol);
   const canVerReporte   = ["developer", "gerencia"].includes(rol);
+  const canEditarVenta  = ["developer", "gerencia"].includes(rol);
 
   const [montas, setMontas]         = useState<Monta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
@@ -157,8 +159,9 @@ export default function Montacargas() {
 
   // ── Marcar como vendido ──
   const [ventaModal, setVentaModal]     = useState<Monta | null>(null);
+  const [modoEdicionVenta, setModoEdicionVenta] = useState(false);
   const [formVenta, setFormVenta]       = useState({
-    montoFacturado: "", montoEfectivo: "",
+    montoFacturado: "", montoEfectivo: "", numeroFactura: "",
     fecha: new Date().toISOString().split("T")[0],
     esClienteCatalogo: true, clienteId: "", clienteNombre: "",
     asesorId: "", notas: "",
@@ -291,11 +294,29 @@ export default function Montacargas() {
 
   function abrirVenta(m: Monta) {
     setVentaModal(m);
+    setModoEdicionVenta(false);
     setFormVenta({
-      montoFacturado: m.precioVenta ? String(m.precioVenta) : "", montoEfectivo: "",
+      montoFacturado: m.precioVenta ? String(m.precioVenta) : "", montoEfectivo: "", numeroFactura: "",
       fecha: new Date().toISOString().split("T")[0],
       esClienteCatalogo: true, clienteId: "", clienteNombre: "",
       asesorId: "", notas: "",
+    });
+  }
+
+  function abrirEditarVenta(m: Monta) {
+    setVentaModal(m);
+    setModoEdicionVenta(true);
+    const esCatalogo = !!m.venta?.cliente?._id;
+    setFormVenta({
+      montoFacturado: m.venta?.montoFacturado ? String(m.venta.montoFacturado) : "",
+      montoEfectivo:  m.venta?.montoEfectivo  ? String(m.venta.montoEfectivo)  : "",
+      numeroFactura:  m.venta?.numeroFactura ?? "",
+      fecha: m.venta?.fecha ? m.venta.fecha.split("T")[0] : new Date().toISOString().split("T")[0],
+      esClienteCatalogo: esCatalogo,
+      clienteId: m.venta?.cliente?._id ?? "",
+      clienteNombre: m.venta?.clienteNombre ?? "",
+      asesorId: m.venta?.asesor?._id ?? "",
+      notas: m.venta?.notas ?? "",
     });
   }
 
@@ -315,6 +336,7 @@ export default function Montacargas() {
       const payload: any = {
         montoFacturado: facturado,
         montoEfectivo: efectivo,
+        numeroFactura: formVenta.numeroFactura.trim(),
         fecha: formVenta.fecha,
         asesorId: formVenta.asesorId || null,
         notas: formVenta.notas,
@@ -324,7 +346,9 @@ export default function Montacargas() {
       } else {
         payload.clienteNombre = formVenta.clienteNombre.trim();
       }
-      const { data } = await api.post(`/montacargas/${ventaModal._id}/vender`, payload);
+      const { data } = modoEdicionVenta
+        ? await api.put(`/montacargas/${ventaModal._id}/editar-venta`, payload)
+        : await api.post(`/montacargas/${ventaModal._id}/vender`, payload);
       setMontas(prev => prev.map(m => m._id === data._id ? data : m));
       setVentaModal(null);
     } catch (e: any) {
@@ -372,6 +396,7 @@ export default function Montacargas() {
       <td>${m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
       <td>${m.venta?.asesor?.nombre ?? "—"}</td>
       <td>${fmt(m.venta?.fecha)}</td>
+      <td>${m.venta?.numeroFactura || "—"}</td>
       <td style="text-align:right">$${(m.venta?.montoFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right">$${(m.venta?.ivaFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right">$${(m.venta?.montoEfectivo ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
@@ -409,8 +434,8 @@ export default function Montacargas() {
   <div class="box"><div class="val" style="color:#16a34a">$${reporteData.totalImporte.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Total vendido</div></div>
 </div>
 <table>
-  <thead><tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style="text-align:right">Facturado</th><th style="text-align:right">IVA</th><th style="text-align:right">Efectivo</th><th style="text-align:right">Total</th></tr></thead>
-  <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:#aaa">Sin ventas en este periodo</td></tr>'}</tbody>
+  <thead><tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Factura</th><th style="text-align:right">Facturado</th><th style="text-align:right">IVA</th><th style="text-align:right">Efectivo</th><th style="text-align:right">Total</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="10" style="text-align:center;color:#aaa">Sin ventas en este periodo</td></tr>'}</tbody>
 </table>
 </body></html>`;
 
@@ -538,6 +563,9 @@ export default function Montacargas() {
                     <td>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
+                        {canEditarVenta && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => abrirEditarVenta(m)} title="Editar venta">✏️</button>
+                        )}
                         {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => deshacerVenta(m)} title="Deshacer venta">↩️</button>}
                       </div>
                     </td>
@@ -752,17 +780,19 @@ export default function Montacargas() {
       )}
 
       {/* ── Modal marcar como vendido ── */}
-      {ventaModal && canEdit && (
+      {ventaModal && (canEdit || canEditarVenta) && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setVentaModal(null); }}>
           <div className="modal" style={{ maxWidth: 460 }}>
             <button className="modal-close" onClick={() => setVentaModal(null)}>✕</button>
-            <h2 className="modal-title">💰 Marcar como vendido</h2>
+            <h2 className="modal-title">{modoEdicionVenta ? "✏️ Editar venta" : "💰 Marcar como vendido"}</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
               <strong style={{ color: "var(--text)" }}>{ventaModal.numeroEconomico}</strong> — {ventaModal.marca} {ventaModal.modelo}
             </p>
-            <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
-              ⚠️ Al confirmar, este equipo saldrá del catálogo de disponibles y solo aparecerá en el filtro "Vendidos".
-            </div>
+            {!modoEdicionVenta && (
+              <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
+                ⚠️ Al confirmar, este equipo saldrá del catálogo de disponibles y solo aparecerá en el filtro "Vendidos".
+              </div>
+            )}
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Monto facturado ($, sin IVA)</label>
@@ -796,6 +826,14 @@ export default function Montacargas() {
                       <span>Total de la venta</span><span>${previewTotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
                     </div>
                   </div>
+                </div>
+              )}
+              {previewFacturado > 0 && (
+                <div className="form-group span-2">
+                  <label className="form-label">No. de factura</label>
+                  <input className="form-input" value={formVenta.numeroFactura}
+                    onChange={e => setFormVenta(p => ({ ...p, numeroFactura: e.target.value }))}
+                    placeholder="Ej. A-1234 (si son varias, sepáralas con coma)" />
                 </div>
               )}
               <div className="form-group span-2">
@@ -840,7 +878,7 @@ export default function Montacargas() {
               <button className="btn btn-primary" onClick={confirmarVenta}
                 disabled={savingVenta || (previewFacturado <= 0 && previewEfectivo <= 0)}
                 style={{ background: "var(--green)", color: "#fff" }}>
-                {savingVenta ? "Guardando..." : "✅ Confirmar venta"}
+                {savingVenta ? "Guardando..." : modoEdicionVenta ? "✅ Guardar cambios" : "✅ Confirmar venta"}
               </button>
             </div>
           </div>
@@ -914,11 +952,11 @@ export default function Montacargas() {
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ fontSize: "0.82rem" }}>
                     <thead>
-                      <tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style={{ textAlign: "right" }}>Facturado</th><th style={{ textAlign: "right" }}>IVA</th><th style={{ textAlign: "right" }}>Efectivo</th><th style={{ textAlign: "right" }}>Total</th></tr>
+                      <tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Factura</th><th style={{ textAlign: "right" }}>Facturado</th><th style={{ textAlign: "right" }}>IVA</th><th style={{ textAlign: "right" }}>Efectivo</th><th style={{ textAlign: "right" }}>Total</th></tr>
                     </thead>
                     <tbody>
                       {reporteData.equipos.length === 0 ? (
-                        <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin ventas en este periodo</td></tr>
+                        <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin ventas en este periodo</td></tr>
                       ) : reporteData.equipos.map(m => (
                         <tr key={m._id}>
                           <td style={{ fontWeight: 700 }}>{m.numeroEconomico}</td>
@@ -926,6 +964,7 @@ export default function Montacargas() {
                           <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
                           <td>{m.venta?.asesor?.nombre ?? "—"}</td>
                           <td>{fmt(m.venta?.fecha)}</td>
+                          <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{m.venta?.numeroFactura || "—"}</td>
                           <td style={{ textAlign: "right" }}>${(m.venta?.montoFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                           <td style={{ textAlign: "right" }}>${(m.venta?.ivaFacturado ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
                           <td style={{ textAlign: "right" }}>${(m.venta?.montoEfectivo ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
@@ -984,6 +1023,7 @@ export default function Montacargas() {
                   { label: "🏷️ Vendido a",       val: detalleModal.venta?.cliente?.nombre ?? detalleModal.venta?.clienteNombre },
                   { label: "🏷️ Fecha de venta",  val: fmt(detalleModal.venta?.fecha) },
                   { label: "🏷️ Facturado (subtotal)", val: (detalleModal.venta?.montoFacturado ?? 0) > 0 ? `$${detalleModal.venta!.montoFacturado!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ No. de factura",  val: detalleModal.venta?.numeroFactura },
                   { label: "🏷️ IVA (16%)",       val: (detalleModal.venta?.ivaFacturado ?? 0) > 0 ? `$${detalleModal.venta!.ivaFacturado!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                   { label: "🏷️ Efectivo / sin factura", val: (detalleModal.venta?.montoEfectivo ?? 0) > 0 ? `$${detalleModal.venta!.montoEfectivo!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                   { label: "🏷️ Total de la venta", val: detalleModal.venta?.importe ? `$${detalleModal.venta.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
@@ -1000,6 +1040,9 @@ export default function Montacargas() {
             <div className="modal-footer">
               {canEdit && detalleModal.estatus !== "vendido" && (
                 <button className="btn btn-primary" onClick={() => { setDetalleModal(null); openEdit(detalleModal); }}>✏️ Editar</button>
+              )}
+              {canEditarVenta && detalleModal.estatus === "vendido" && (
+                <button className="btn btn-primary" onClick={() => { setDetalleModal(null); abrirEditarVenta(detalleModal); }}>✏️ Editar venta</button>
               )}
             </div>
           </div>
