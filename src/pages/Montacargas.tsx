@@ -17,6 +17,15 @@ type ServicioHistorial = {
   tecnicoAsignado?: { nombre: string };
 };
 
+type Venta = {
+  fecha?: string;
+  importe?: number;
+  cliente?: { _id: string; nombre: string } | null;
+  clienteNombre?: string;
+  asesor?: { _id: string; nombre: string } | null;
+  notas?: string;
+};
+
 type Monta = {
   _id: string;
   numeroEconomico: string;
@@ -41,7 +50,7 @@ type Monta = {
   };
   horometroActual?: number;
   horasRestantesServicio?: number;
-  estatus: "disponible" | "rentado" | "taller" | "mantenimiento";
+  estatus: "disponible" | "rentado" | "taller" | "mantenimiento" | "vendido";
   clienteActual?: { _id: string; nombre: string } | null;
   costoDia?: number;
   costoSemana?: number;
@@ -52,9 +61,11 @@ type Monta = {
   proximoMantenimiento?: string;
   fechaUltimoServicio?: string;
   proximoServicio?: string;
+  venta?: Venta;
 };
 
 type Cliente = { _id: string; nombre: string };
+type Asesor  = { _id: string; nombre: string };
 
 const emptyForm = {
   numeroEconomico: "", marca: "", modelo: "", serie: "",
@@ -75,6 +86,7 @@ const emptyForm = {
 const ESTATUS_BADGE: Record<string, string> = {
   disponible: "badge-green", rentado: "badge-blue",
   taller: "badge-amber", mantenimiento: "badge-red",
+  vendido: "badge-gray",
 };
 
 const TIPO_BADGE: Record<string, string> = {
@@ -112,9 +124,11 @@ export default function Montacargas() {
   const rol             = localStorage.getItem("rol") ?? "";
   const canEdit         = !["tecnico", "almacen"].includes(rol);
   const canVerHistorial = ["developer", "gerencia", "supervisor_almacen"].includes(rol);
+  const canVerReporte   = ["developer", "gerencia"].includes(rol);
 
   const [montas, setMontas]         = useState<Monta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
+  const [asesores, setAsesores]     = useState<Asesor[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
   const [filtroEstatus, setFiltro]  = useState("todos");
@@ -138,6 +152,26 @@ export default function Montacargas() {
   const [historialServicios, setHistorialServicios] = useState<ServicioHistorial[]>([]);
   const [loadingHistorial, setLoadingHistorial]     = useState(false);
 
+  // ── Marcar como vendido ──
+  const [ventaModal, setVentaModal]     = useState<Monta | null>(null);
+  const [formVenta, setFormVenta]       = useState({
+    importe: "", fecha: new Date().toISOString().split("T")[0],
+    esClienteCatalogo: true, clienteId: "", clienteNombre: "",
+    asesorId: "", notas: "",
+  });
+  const [savingVenta, setSavingVenta]   = useState(false);
+
+  // ── Reporte de ventas ──
+  const [reporteModal, setReporteModal] = useState(false);
+  const [repDesde, setRepDesde]         = useState(() => {
+    const d = new Date(); d.setDate(1);
+    return d.toISOString().split("T")[0];
+  });
+  const [repHasta, setRepHasta]         = useState(new Date().toISOString().split("T")[0]);
+  const [repAsesor, setRepAsesor]       = useState("todos");
+  const [reporteData, setReporteData]   = useState<{ equipos: Monta[]; totalEquipos: number; totalImporte: number; porAsesor: { nombre: string; cantidad: number; total: number }[] } | null>(null);
+  const [loadingReporte, setLoadingReporte] = useState(false);
+
   const isElectrico = form.tipo === "electrico";
   const isGasDiesel = form.tipo === "gas" || form.tipo === "diesel";
 
@@ -145,9 +179,14 @@ export default function Montacargas() {
 
   async function load() {
     try {
-      const [m, c] = await Promise.all([api.get("/montacargas"), api.get("/clientes")]);
+      const [m, c, a] = await Promise.all([
+        api.get("/montacargas"),
+        api.get("/clientes"),
+        api.get("/asesores").catch(() => ({ data: [] })),
+      ]);
       setMontas(m.data);
       setClientes(c.data.filter((cl: any) => cl.estatus === "activo"));
+      setAsesores(a.data);
     } catch {}
     finally { setLoading(false); }
   }
@@ -246,44 +285,177 @@ export default function Montacargas() {
     }
   }
 
+  function abrirVenta(m: Monta) {
+    setVentaModal(m);
+    setFormVenta({
+      importe: m.precioVenta ? String(m.precioVenta) : "",
+      fecha: new Date().toISOString().split("T")[0],
+      esClienteCatalogo: true, clienteId: "", clienteNombre: "",
+      asesorId: "", notas: "",
+    });
+  }
+
+  async function confirmarVenta() {
+    if (!ventaModal || !formVenta.importe || Number(formVenta.importe) <= 0) return;
+    setSavingVenta(true);
+    try {
+      const payload: any = {
+        importe: Number(formVenta.importe),
+        fecha: formVenta.fecha,
+        asesorId: formVenta.asesorId || null,
+        notas: formVenta.notas,
+      };
+      if (formVenta.esClienteCatalogo) {
+        payload.clienteId = formVenta.clienteId || null;
+      } else {
+        payload.clienteNombre = formVenta.clienteNombre.trim();
+      }
+      const { data } = await api.post(`/montacargas/${ventaModal._id}/vender`, payload);
+      setMontas(prev => prev.map(m => m._id === data._id ? data : m));
+      setVentaModal(null);
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    } finally {
+      setSavingVenta(false);
+    }
+  }
+
+  async function deshacerVenta(m: Monta) {
+    if (!confirm(`¿Deshacer la venta de ${m.numeroEconomico}? Regresará a "Disponible".`)) return;
+    try {
+      const { data } = await api.post(`/montacargas/${m._id}/deshacer-venta`);
+      setMontas(prev => prev.map(mm => mm._id === data._id ? data : mm));
+    } catch (e: any) {
+      if (e?.response?.data?.message) alert(e.response.data.message);
+    }
+  }
+
+  async function generarReporte() {
+    setLoadingReporte(true);
+    try {
+      const params: any = { desde: repDesde, hasta: repHasta };
+      if (repAsesor !== "todos") params.asesorId = repAsesor;
+      const { data } = await api.get("/montacargas/reporte-ventas", { params });
+      setReporteData(data);
+    } catch {
+      setReporteData(null);
+    } finally {
+      setLoadingReporte(false);
+    }
+  }
+
+  function abrirReporte() {
+    setReporteModal(true);
+    generarReporte();
+  }
+
+  function imprimirReporte() {
+    if (!reporteData) return;
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const rows = reporteData.equipos.map(m => `<tr>
+      <td>${m.numeroEconomico}</td>
+      <td>${m.marca ?? ""} ${m.modelo ?? ""}</td>
+      <td>${m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
+      <td>${m.venta?.asesor?.nombre ?? "—"}</td>
+      <td>${fmt(m.venta?.fecha)}</td>
+      <td style="text-align:right;font-weight:700">$${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+    </tr>`).join("");
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Reporte de Equipos Vendidos</title>
+<style>
+  * { margin:0;padding:0;box-sizing:border-box; }
+  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px; }
+  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
+  .logo { width:55px;height:55px;object-fit:contain;background:#000;border-radius:6px; }
+  h1 { font-size:13pt;font-weight:900; } p.sub { font-size:8.5pt;color:#555; }
+  table { width:100%;border-collapse:collapse;font-size:8.5pt; }
+  thead { background:#222;color:#fff; } thead th { padding:5px 8px;text-align:left; }
+  tbody tr:nth-child(even) { background:#f5f5f5; } td { padding:4px 8px;border-bottom:1px solid #ddd; }
+  .resumen { display:flex; gap:10px; margin-bottom:16px; }
+  .box { border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center; }
+  .box .val { font-size:16pt;font-weight:900; } .box .lbl { font-size:7.5pt;color:#666;text-transform:uppercase;margin-top:2px; }
+  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-size:11pt;font-weight:700;cursor:pointer; }
+  @media print { .print-btn { display:none; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header">
+  <img src="${logoUrl}" class="logo" alt="Pipsa" />
+  <div>
+    <h1>Reporte de Equipos Vendidos</h1>
+    <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
+    <p class="sub">Del ${fmt(repDesde)} al ${fmt(repHasta)}</p>
+  </div>
+</div>
+<div class="resumen">
+  <div class="box"><div class="val">${reporteData.totalEquipos}</div><div class="lbl">Equipos vendidos</div></div>
+  <div class="box"><div class="val" style="color:#16a34a">$${reporteData.totalImporte.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div><div class="lbl">Total vendido</div></div>
+</div>
+<table>
+  <thead><tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style="text-align:right">Importe</th></tr></thead>
+  <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#aaa">Sin ventas en este periodo</td></tr>'}</tbody>
+</table>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url  = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   function fmt(date?: string) {
     if (!date) return "—";
     const [year, month, day] = date.split("T")[0].split("-");
     return new Date(+year, +month - 1, +day).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
   }
 
+  // ── Catálogo/inventario normal: excluye vendidos salvo que se pida el filtro "vendido" explícitamente ──
   const filtered = montas.filter(m => {
     const matchSearch =
       m.numeroEconomico.toLowerCase().includes(search.toLowerCase()) ||
       (m.marca ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (m.modelo ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (m.clienteActual?.nombre ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchEstatus = filtroEstatus === "todos" || m.estatus === filtroEstatus;
+
+    if (filtroEstatus === "todos") {
+      // "Todos" en el listado normal NO incluye vendidos — para verlos hay que usar el filtro explícito
+      return matchSearch && m.estatus !== "vendido";
+    }
+    const matchEstatus = m.estatus === filtroEstatus;
     return matchSearch && matchEstatus;
   });
+
+  const totalActivos = montas.filter(m => m.estatus !== "vendido").length;
+  const totalVendidos = montas.filter(m => m.estatus === "vendido").length;
 
   return (
     <>
       <div className="page-header">
         <div>
           <h1 className="page-title">Montacargas</h1>
-          <p className="page-subtitle">{montas.length} equipos en flota</p>
+          <p className="page-subtitle">{totalActivos} equipos en flota · {totalVendidos} vendidos</p>
         </div>
-        {canEdit && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary" onClick={() => setModalRapido(true)}>⚡ Alta rápida</button>
-            <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          {canVerReporte && (
+            <button className="btn btn-secondary" onClick={abrirReporte}>📊 Reporte de ventas</button>
+          )}
+          {canEdit && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setModalRapido(true)}>⚡ Alta rápida</button>
+              <button className="btn btn-primary" onClick={openNew}>+ Nuevo equipo</button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="page-content">
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
           {[
-            { label: "Disponibles",   val: montas.filter(m => m.estatus === "disponible").length,   color: "var(--green)",  icon: "✅", key: "disponible" },
-            { label: "Rentados",      val: montas.filter(m => m.estatus === "rentado").length,       color: "var(--blue)",   icon: "📦", key: "rentado" },
-            { label: "En Taller",     val: montas.filter(m => m.estatus === "taller").length,        color: "var(--accent)", icon: "🔧", key: "taller" },
-            { label: "Mantenimiento", val: montas.filter(m => m.estatus === "mantenimiento").length, color: "var(--red)",    icon: "⚙️", key: "mantenimiento" },
+            { label: "Disponibles",   val: montas.filter(m => m.estatus === "disponible").length,   color: "var(--green)",      icon: "✅", key: "disponible" },
+            { label: "Rentados",      val: montas.filter(m => m.estatus === "rentado").length,       color: "var(--blue)",       icon: "📦", key: "rentado" },
+            { label: "En Taller",     val: montas.filter(m => m.estatus === "taller").length,        color: "var(--accent)",     icon: "🔧", key: "taller" },
+            { label: "Mantenimiento", val: montas.filter(m => m.estatus === "mantenimiento").length, color: "var(--red)",        icon: "⚙️", key: "mantenimiento" },
+            { label: "Vendidos",      val: totalVendidos,                                            color: "var(--text-muted)", icon: "💰", key: "vendido" },
           ].map(s => (
             <div key={s.label} className="stat-card" style={{ cursor: "pointer" }} onClick={() => setFiltro(s.key)}>
               <span className="stat-card-icon">{s.icon}</span>
@@ -296,15 +468,16 @@ export default function Montacargas() {
 
         <div className="table-card" style={{ overflowX: "auto" }}>
           <div className="table-card-header">
-            <p className="table-card-title">Flota completa</p>
+            <p className="table-card-title">{filtroEstatus === "vendido" ? "Equipos vendidos" : "Flota completa"}</p>
             <div className="table-toolbar">
               <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
               <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroEstatus} onChange={e => setFiltro(e.target.value)}>
-                <option value="todos">Todos</option>
+                <option value="todos">Todos (activos)</option>
                 <option value="disponible">Disponible</option>
                 <option value="rentado">Rentado</option>
                 <option value="taller">Taller</option>
                 <option value="mantenimiento">Mantenimiento</option>
+                <option value="vendido">💰 Vendidos</option>
               </select>
             </div>
           </div>
@@ -316,14 +489,36 @@ export default function Montacargas() {
           ) : (
             <table>
               <thead>
-                <tr>
-                  <th>#</th><th>Marca / Modelo</th><th>Tipo</th><th>Capacidad</th>
-                  <th>Horómetro</th><th>Prox. Mant.</th><th>Estatus</th><th>Cliente</th>
-                  <th>Costo/mes</th><th>P. Venta</th><th></th>
-                </tr>
+                {filtroEstatus === "vendido" ? (
+                  <tr>
+                    <th>#</th><th>Marca / Modelo</th><th>Cliente</th><th>Asesor</th>
+                    <th>Fecha venta</th><th>Importe</th><th></th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th>#</th><th>Marca / Modelo</th><th>Tipo</th><th>Capacidad</th>
+                    <th>Horómetro</th><th>Prox. Mant.</th><th>Estatus</th><th>Cliente</th>
+                    <th>Costo/mes</th><th>P. Venta</th><th></th>
+                  </tr>
+                )}
               </thead>
               <tbody>
-                {filtered.map(m => (
+                {filtered.map(m => filtroEstatus === "vendido" ? (
+                  <tr key={m._id}>
+                    <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{m.numeroEconomico}</td>
+                    <td><span style={{ fontWeight: 600 }}>{m.marca}</span>{m.modelo && <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}> {m.modelo}</span>}</td>
+                    <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                    <td>{m.venta?.asesor?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                    <td>{fmt(m.venta?.fecha)}</td>
+                    <td style={{ fontWeight: 700, color: "var(--green)" }}>${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
+                        {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => deshacerVenta(m)} title="Deshacer venta">↩️</button>}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
                   <tr key={m._id}>
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{m.numeroEconomico}</td>
                     <td>
@@ -349,6 +544,10 @@ export default function Montacargas() {
                         {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>}
                         {canEdit && m.estatus === "disponible" && (
                           <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
+                        )}
+                        {canEdit && m.estatus !== "vendido" && (
+                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
+                            onClick={() => abrirVenta(m)} title="Marcar como vendido">💰 Vender</button>
                         )}
                         {canEdit && <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>}
                       </div>
@@ -413,6 +612,7 @@ export default function Montacargas() {
                   <option value="rentado">Rentado</option>
                   <option value="taller">Taller</option>
                   <option value="mantenimiento">Mantenimiento</option>
+                  <option value="vendido" disabled>Vendido (usa el botón "Vender" en la tabla)</option>
                 </select>
               </div>
             </div>
@@ -527,6 +727,168 @@ export default function Montacargas() {
         </div>
       )}
 
+      {/* ── Modal marcar como vendido ── */}
+      {ventaModal && canEdit && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setVentaModal(null); }}>
+          <div className="modal" style={{ maxWidth: 460 }}>
+            <button className="modal-close" onClick={() => setVentaModal(null)}>✕</button>
+            <h2 className="modal-title">💰 Marcar como vendido</h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              <strong style={{ color: "var(--text)" }}>{ventaModal.numeroEconomico}</strong> — {ventaModal.marca} {ventaModal.modelo}
+            </p>
+            <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              ⚠️ Al confirmar, este equipo saldrá del catálogo de disponibles y solo aparecerá en el filtro "Vendidos".
+            </div>
+            <div className="form-grid">
+              <div className="form-group span-2">
+                <label className="form-label">Importe de venta ($) *</label>
+                <input className="form-input" type="number" min={1} value={formVenta.importe}
+                  onChange={e => setFormVenta(p => ({ ...p, importe: e.target.value }))} placeholder="Ej. 185000" autoFocus />
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Fecha de venta *</label>
+                <input className="form-input" type="date" value={formVenta.fecha}
+                  onChange={e => setFormVenta(p => ({ ...p, fecha: e.target.value }))} />
+              </div>
+              <div className="form-group span-2" style={{ margin: 0 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={formVenta.esClienteCatalogo}
+                    onChange={e => setFormVenta(p => ({ ...p, esClienteCatalogo: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Cliente del catálogo</span>
+                </label>
+                {formVenta.esClienteCatalogo ? (
+                  <select className="form-select" value={formVenta.clienteId} onChange={e => setFormVenta(p => ({ ...p, clienteId: e.target.value }))}>
+                    <option value="">Sin cliente / no especificado</option>
+                    {clientes.map(c => <option key={c._id} value={c._id}>{c.nombre}</option>)}
+                  </select>
+                ) : (
+                  <input className="form-input" value={formVenta.clienteNombre}
+                    onChange={e => setFormVenta(p => ({ ...p, clienteNombre: e.target.value }))}
+                    placeholder="Nombre del comprador" />
+                )}
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Asesor que realizó la venta</label>
+                <select className="form-select" value={formVenta.asesorId} onChange={e => setFormVenta(p => ({ ...p, asesorId: e.target.value }))}>
+                  <option value="">Sin asesor</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group span-2">
+                <label className="form-label">Notas (opcional)</label>
+                <textarea className="form-textarea" rows={2} value={formVenta.notas}
+                  onChange={e => setFormVenta(p => ({ ...p, notas: e.target.value }))}
+                  placeholder="Ej. Pago de contado, incluye traslado" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setVentaModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={confirmarVenta}
+                disabled={savingVenta || !formVenta.importe || Number(formVenta.importe) <= 0}
+                style={{ background: "var(--green)", color: "#fff" }}>
+                {savingVenta ? "Guardando..." : "✅ Confirmar venta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal reporte de ventas ── */}
+      {reporteModal && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setReporteModal(false); }}>
+          <div className="modal" style={{ maxWidth: 820, width: "94vw" }}>
+            <button className="modal-close" onClick={() => setReporteModal(false)}>✕</button>
+            <h2 className="modal-title">📊 Reporte de equipos vendidos</h2>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Desde</label>
+                <input className="form-input" type="date" value={repDesde} onChange={e => setRepDesde(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Hasta</label>
+                <input className="form-input" type="date" value={repHasta} onChange={e => setRepHasta(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Asesor</label>
+                <select className="form-select" value={repAsesor} onChange={e => setRepAsesor(e.target.value)}>
+                  <option value="todos">Todos</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <button className="btn btn-primary" onClick={generarReporte} disabled={loadingReporte}>
+                {loadingReporte ? "Buscando..." : "🔍 Buscar"}
+              </button>
+              {reporteData && (
+                <button className="btn btn-secondary" onClick={imprimirReporte}>🖨️ Imprimir / PDF</button>
+              )}
+            </div>
+
+            {loadingReporte ? (
+              <div className="loading-state"><div className="spinner" /></div>
+            ) : !reporteData ? (
+              <div className="empty-state"><span className="empty-icon">📊</span><p>Selecciona un rango y busca</p></div>
+            ) : (
+              <>
+                <div className="stats-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: 16 }}>
+                  <div className="stat-card">
+                    <span className="stat-card-icon">🏗️</span>
+                    <p className="stat-card-value" style={{ color: "var(--blue)" }}>{reporteData.totalEquipos}</p>
+                    <p className="stat-card-label">Equipos vendidos</p>
+                  </div>
+                  <div className="stat-card">
+                    <span className="stat-card-icon">💰</span>
+                    <p className="stat-card-value" style={{ color: "var(--green)" }}>${reporteData.totalImporte.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                    <p className="stat-card-label">Total vendido</p>
+                  </div>
+                </div>
+
+                {reporteData.porAsesor.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Por asesor</p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {reporteData.porAsesor.map((g, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", fontSize: "0.85rem" }}>
+                          <span style={{ fontWeight: 600 }}>{g.nombre} <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>· {g.cantidad} equipo{g.cantidad !== 1 ? "s" : ""}</span></span>
+                          <span style={{ fontWeight: 700, color: "var(--green)" }}>${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ fontSize: "0.82rem" }}>
+                    <thead>
+                      <tr><th>Equipo</th><th>Marca/Modelo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th style={{ textAlign: "right" }}>Importe</th></tr>
+                    </thead>
+                    <tbody>
+                      {reporteData.equipos.length === 0 ? (
+                        <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin ventas en este periodo</td></tr>
+                      ) : reporteData.equipos.map(m => (
+                        <tr key={m._id}>
+                          <td style={{ fontWeight: 700 }}>{m.numeroEconomico}</td>
+                          <td>{m.marca} {m.modelo}</td>
+                          <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? "—"}</td>
+                          <td>{m.venta?.asesor?.nombre ?? "—"}</td>
+                          <td>{fmt(m.venta?.fecha)}</td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${(m.venta?.importe ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setReporteModal(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal detalle ── */}
       {detalleModal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalleModal(null); }}>
@@ -562,6 +924,13 @@ export default function Montacargas() {
                 { label: "Costo anual",         val: detalleModal.costoAnual  ? `$${detalleModal.costoAnual.toLocaleString()}`  : null },
                 { label: "Precio venta",        val: detalleModal.precioVenta ? `$${detalleModal.precioVenta.toLocaleString()}` : null },
                 { label: "Cliente actual",      val: detalleModal.clienteActual?.nombre },
+                ...(detalleModal.estatus === "vendido" ? [
+                  { label: "🏷️ Vendido a",       val: detalleModal.venta?.cliente?.nombre ?? detalleModal.venta?.clienteNombre },
+                  { label: "🏷️ Fecha de venta",  val: fmt(detalleModal.venta?.fecha) },
+                  { label: "🏷️ Importe de venta", val: detalleModal.venta?.importe ? `$${detalleModal.venta.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
+                  { label: "🏷️ Asesor",          val: detalleModal.venta?.asesor?.nombre },
+                  { label: "🏷️ Notas de venta",  val: detalleModal.venta?.notas },
+                ] : []),
               ].map(item => item.val ? (
                 <div key={item.label}>
                   <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
@@ -570,7 +939,7 @@ export default function Montacargas() {
               ) : null)}
             </div>
             <div className="modal-footer">
-              {canEdit && (
+              {canEdit && detalleModal.estatus !== "vendido" && (
                 <button className="btn btn-primary" onClick={() => { setDetalleModal(null); openEdit(detalleModal); }}>✏️ Editar</button>
               )}
             </div>
