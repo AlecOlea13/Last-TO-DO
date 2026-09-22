@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
 import MontaScrollbar from "./MontaScrollbar";
+import HalloweenTeaser from "./HalloweenTeaser";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
@@ -397,6 +398,7 @@ export default function Dashboard() {
       </div>
 
       <MontaScrollbar targetRef={mainRef} />
+      <HalloweenTeaser />
     </div>
   );
 }

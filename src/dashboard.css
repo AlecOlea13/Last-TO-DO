@@ -845,154 +845,167 @@ input[type="file"] { display: none; }
   scrollbar-color: rgba(255,180,0,0.2) transparent;
 }
 
-
 /* ────────────────────────────────────────────────
-   🇲🇽 EDICIÓN MES PATRIO (16 DE SEPTIEMBRE) - CORREGIDO
+   🎃 HALLOWEEN TEASER (22–30 sep 2026)
+   Estilos del botón/overlay viven aquí; el resto del
+   dashboard permanece sin cambios de color generales.
 ──────────────────────────────────────────────── */
 
-/* 1. Barrita Tricolor Neón Superior Fija */
-.dash-root::before {
-  content: '' !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: 4px !important;
-  z-index: 99999 !important;
-  background: linear-gradient(90deg, #00c853 0%, #00c853 33.3%, #ffffff 33.3%, #ffffff 66.6%, #ff1744 66.6%, #ff1744 100%) !important;
-  box-shadow: 0 2px 12px rgba(0, 200, 83, 0.5), 0 2px 12px rgba(255, 23, 68, 0.5) !important;
+.hween-btn {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 150;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,122,0,0.25);
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.hween-btn:hover,
+.hween-btn:focus-visible {
+  border-color: #FF7A00;
+  background: var(--surface3);
+  transform: translateY(-1px);
+}
+.hween-btn:active { transform: scale(0.94); }
+.hween-btn:focus-visible { outline: 2px solid #FF7A00; outline-offset: 2px; }
+
+.hween-btn svg { width: 24px; height: 24px; }
+
+@keyframes hweenIntroGlow {
+  0%   { filter: drop-shadow(0 0 0 rgba(255,122,0,0)); transform: rotate(0deg); }
+  30%  { filter: drop-shadow(0 0 6px rgba(255,122,0,0.55)); transform: rotate(-6deg); }
+  60%  { filter: drop-shadow(0 0 6px rgba(255,122,0,0.35)); transform: rotate(4deg); }
+  100% { filter: drop-shadow(0 0 0 rgba(255,122,0,0)); transform: rotate(0deg); }
+}
+.hween-btn.intro svg { animation: hweenIntroGlow 1.6s ease-out 1; }
+
+.hween-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.hween-btn:hover .hween-tooltip,
+.hween-btn:focus-visible .hween-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
-/* 3. Banderita Mexicana Real (CSS Vectorial) en la Card de Usuario */
-.sidebar-user {
-  position: relative !important;
-}
-.sidebar-user::after {
-  content: '' !important;
-  display: block !important;
-  width: 20px !important;
-  height: 12px !important;
-  position: absolute !important;
-  right: 12px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  border-radius: 2px !important;
-  box-shadow: 0 0 6px rgba(0,0,0,0.6) !important;
-  background: linear-gradient(90deg, #006847 33.3%, #ffffff 33.3%, #ffffff 66.6%, #ce1126 66.6%) !important;
+/* ── Overlay de la animación completa ── */
+.hween-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  overflow: hidden;
 }
 
-/* 4. Tarjetas de Métricas (Verde, Blanco, Rojo) con Alto Contraste */
-/* Card 1: Verde (Activas) */
-.stats-grid .stat-card:nth-child(1) {
-  border: 1px solid rgba(0, 200, 83, 0.4) !important;
-  background: linear-gradient(180deg, rgba(0, 200, 83, 0.1) 0%, var(--surface) 100%) !important;
+.hween-forklift-wrap {
+  position: absolute;
+  bottom: 18px;
+  left: -180px;
+  width: 140px;
+  animation: hweenDriveAcross 4.6s linear forwards;
 }
-.stats-grid .stat-card:nth-child(1) .stat-card-value {
-  color: #00e676 !important;
-  text-shadow: 0 0 10px rgba(0, 230, 118, 0.3) !important;
-}
-.stats-grid .stat-card:nth-child(1) .stat-card-accent {
-  background: #00c853 !important;
-  box-shadow: 0 0 12px #00c853 !important;
+@keyframes hweenDriveAcross {
+  0%   { left: -180px; }
+  85%  { left: calc(100% + 40px); }
+  100% { left: calc(100% + 40px); opacity: 0; }
 }
 
-/* Card 2: Blanco / Plateado (Facturadas) */
-.stats-grid .stat-card:nth-child(2) {
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, var(--surface) 100%) !important;
+.hween-bat {
+  position: absolute;
+  animation: hweenBatFly 3.2s ease-in-out forwards;
+  opacity: 0;
 }
-.stats-grid .stat-card:nth-child(2) .stat-card-value {
-  color: #ffffff !important;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3) !important;
-}
-.stats-grid .stat-card:nth-child(2) .stat-card-accent {
-  background: #ffffff !important;
-  box-shadow: 0 0 12px #ffffff !important;
-}
-
-/* Card 3: Rojo (Canceladas) */
-.stats-grid .stat-card:nth-child(3) {
-  border: 1px solid rgba(255, 23, 68, 0.4) !important;
-  background: linear-gradient(180deg, rgba(255, 23, 68, 0.1) 0%, var(--surface) 100%) !important;
-}
-.stats-grid .stat-card:nth-child(3) .stat-card-value {
-  color: #ff1744 !important;
-  text-shadow: 0 0 10px rgba(255, 23, 68, 0.3) !important;
-}
-.stats-grid .stat-card:nth-child(3) .stat-card-accent {
-  background: #ff1744 !important;
-  box-shadow: 0 0 12px #ff1744 !important;
+@keyframes hweenBatFly {
+  0%   { opacity: 0; transform: translate(0,0) scale(0.8); }
+  10%  { opacity: 1; }
+  50%  { transform: translate(-30px,-26px) scale(1); }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-70px,-10px) scale(0.9); }
 }
 
-/* 5. Botón Principal con Resplandor Tricolor al pasar el mouse */
-.btn-primary {
-  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4) !important;
-  transition: all 0.25s ease !important;
+.hween-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translate(-50%, 12px);
+  z-index: 9999;
+  pointer-events: none;
+  background: var(--surface3);
+  border: 1px solid rgba(139,92,246,0.35);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,122,0,0.08);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  max-width: min(92vw, 380px);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.35s ease, transform 0.35s ease;
 }
-.btn-primary:hover {
-  box-shadow: -4px 0 12px rgba(0, 200, 83, 0.6), 4px 0 12px rgba(255, 23, 68, 0.6) !important;
-  transform: translateY(-1px) !important;
+.hween-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
-
-/* 6. Elemento de Menú Activo */
-.nav-item.active {
-  border-left: 4px solid #00c853 !important;
-  background: linear-gradient(90deg, rgba(0, 200, 83, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%) !important;
-  color: #ffffff !important;
+.hween-toast-close {
+  pointer-events: auto;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-
-/* ── BACKGROUND AMBIENTAL PATRIO ── */
-
-/* 1. Iluminación ambiental Neón (Verde arriba-izquierda, Rojo abajo-derecha, Dorado al centro) */
-.dash-root::before {
-  content: '' !important;
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 0 !important;
-  pointer-events: none !important;
-  background: 
-    radial-gradient(circle at 10% 20%, rgba(0, 200, 83, 0.18) 0%, transparent 45%),
-    radial-gradient(circle at 90% 80%, rgba(255, 23, 68, 0.18) 0%, transparent 45%),
-    radial-gradient(circle at 50% 50%, rgba(245, 158, 11, 0.10) 0%, transparent 55%) !important;
+.hween-toast-close:hover { color: var(--text); border-color: var(--border2); }
+.hween-toast-title {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: #FF7A00;
+  margin-bottom: 4px;
 }
-
-/* 2. Marca de agua vectorial muy sutil (Estilo papel picado geométrico a 4% de opacidad) */
-.dash-root::after {
-  content: '' !important;
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 0 !important;
-  pointer-events: none !important;
-  opacity: 0.04 !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath fill='%23FFFFFF' d='M30 0 L60 30 L30 60 L0 30 Z M30 12 L48 30 L30 48 L12 30 Z M30 20 L40 30 L30 40 L20 30 Z'/%3E%3C/svg%3E") !important;
-  background-size: 48px 48px !important;
-}
-
-/* 🇲🇽 GUIRNALDA DE PAPEL PICADO HIGH-CONTRAST (NEÓN PATRIO) 🇲🇽 */
-
-.dash-root::after {
-  content: '' !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  height: 70px !important;
-  z-index: 99999 !important;
-  pointer-events: none !important;
-  opacity: 1 !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 70'%3E%3Cpath d='M0 4 Q 100 16 200 4' stroke='%23ffffff' stroke-width='2' stroke-dasharray='4,2' fill='none' opacity='0.9'/%3E%3Cg fill='%2300ff66'%3E%3Cpath d='M4 5 h42 v40 Q25 60 4 48 Z'/%3E%3Cpolygon points='25,18 33,28 25,38 17,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='14' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='36' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='14' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='36' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ffffff'%3E%3Cpath d='M53 5 h42 v40 Q74 60 53 48 Z'/%3E%3Cpolygon points='74,18 82,28 74,38 66,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='63' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='85' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='63' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='85' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ff1744'%3E%3Cpath d='M102 5 h42 v40 Q123 60 102 48 Z'/%3E%3Cpolygon points='123,18 131,28 123,38 115,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='112' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='134' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='112' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='134' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3Cg fill='%23ffb700'%3E%3Cpath d='M151 5 h42 v40 Q172 60 151 48 Z'/%3E%3Cpolygon points='172,18 180,28 172,38 164,28' fill='none' stroke='%23000000' stroke-width='2'/%3E%3Ccircle cx='161' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='183' cy='20' r='3' fill='%23000000'/%3E%3Ccircle cx='161' cy='36' r='3' fill='%23000000'/%3E%3Ccircle cx='183' cy='36' r='3' fill='%23000000'/%3E%3C/g%3E%3C/svg%3E") !important;
-  background-repeat: repeat-x !important;
-  background-size: 220px 70px !important;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.2)) !important;
+.hween-toast-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
-/* Compensación de espacio en el encabezado principal */
-.page-header {
-  padding-top: 76px !important;
+@media (max-width: 640px) {
+  .hween-btn { top: 10px; right: 12px; width: 38px; height: 38px; }
+  .hween-btn svg { width: 20px; height: 20px; }
+  .hween-forklift-wrap { width: 96px; bottom: 12px; }
+  .hween-toast { bottom: 20px; padding: 12px 16px; }
 }
 
-/* Baja el contenido del sidebar para que no se empalme con la guirnalda */
-.sidebar {
-  padding-top: 65px !important;
+@media (prefers-reduced-motion: reduce) {
+  .hween-btn.intro svg { animation: none; }
+  .hween-forklift-wrap { animation: none; display: none; }
+  .hween-bat { animation: none; display: none; }
+  .hween-toast { transition: opacity 0.3s ease; }
+  .hween-toast.show { transform: translate(-50%, 0); }
 }
