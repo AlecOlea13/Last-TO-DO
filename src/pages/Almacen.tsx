@@ -9,6 +9,9 @@ const UPLOAD_PRESET  = "pipsa productos";
 const CATEGORIAS = ["Motor", "Transmisión", "Hidráulico", "Eléctrico", "Frenos", "Filtros", "Aceites", "Llantas", "Carrocería", "General"];
 const MARCAS_COMPATIBLES = ["CAT", "Yale", "Crown", "Toyota", "Hyster", "Mitsubishi", "Nissan", "Komatsu", "Universal"];
 
+// Tipos de cotización que pueden vincularse a una solicitud de compra
+const TIPOS_COTIZACION_SOLICITUD = ["servicio", "refacciones", "venta", "renta"];
+
 type Refaccion = {
   _id: string; nombre: string; numeroParte?: string; categoria?: string;
   proveedor?: string; marcaCompatible?: string;
@@ -320,7 +323,9 @@ function SearchableCotizacion({ value, onChange, options }: {
                 onMouseLeave={e => (e.currentTarget.style.background = c._id === value ? "rgba(245,158,11,0.1)" : "transparent")}>
                 <span style={{ fontWeight: 700, color: "var(--blue)", marginRight: 6 }}>{c.folio}</span>
                 <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                  {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo} · ${c.total.toLocaleString()}
+                  {c.cliente?.nombre ?? c.clienteOcasional?.nombre ?? "Sin cliente"} · {c.tipo}
+                  {c.estatus === "facturada" && <span style={{ color: "var(--green)", marginLeft: 4 }}>· facturada</span>}
+                  {" "}· ${c.total.toLocaleString()}
                 </span>
               </div>
             ))}
@@ -482,10 +487,12 @@ export default function Almacen() {
         } catch {}
       }
 
+      // Incluye servicio, refacciones, venta y renta. Solo se excluyen las canceladas,
+      // por lo que las ventas ya facturadas también aparecen.
       setCotizacionesDisp(
         cots.data.filter((c: any) => {
           if (c.estatus === "cancelada") return false;
-          if (!["servicio", "refacciones"].includes(c.tipo)) return false;
+          if (!TIPOS_COTIZACION_SOLICITUD.includes(c.tipo)) return false;
           if (esGerencia) return true;
           if (asesorDelUsuario && c.asesor?._id === asesorDelUsuario) return true;
           return false;
@@ -871,6 +878,24 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
   function fmtHora(date?: string) {
     if (!date) return "—";
     return new Date(date).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function badgeTipoCotizacion(tipo: string) {
+    switch (tipo) {
+      case "servicio":    return "badge-amber";
+      case "refacciones": return "badge-purple";
+      case "venta":       return "badge-green";
+      case "renta":       return "badge-blue";
+      default:            return "badge-gray";
+    }
+  }
+
+  function badgeEstatusCotizacion(estatus: string) {
+    switch (estatus) {
+      case "activa":    return "badge-green";
+      case "facturada": return "badge-blue";
+      default:          return "badge-gray";
+    }
   }
 
   const filteredRef    = refacciones.filter(r => r.nombre.toLowerCase().includes(search.toLowerCase()) || (r.numeroParte ?? "").toLowerCase().includes(search.toLowerCase()) || (r.categoria ?? "").toLowerCase().includes(search.toLowerCase()) || (r.proveedor ?? "").toLowerCase().includes(search.toLowerCase()) || (r.marcaCompatible ?? "").toLowerCase().includes(search.toLowerCase()));
@@ -1600,7 +1625,13 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                   {cotizSeleccionada && (
                     <div style={{ marginTop: 8, padding: "10px 14px", background: "rgba(79,124,255,0.08)", border: "1px solid rgba(79,124,255,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div><span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span><span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span></div>
+                        <div>
+                          <span style={{ fontWeight: 700, color: "var(--blue)" }}>{cotizSeleccionada.folio}</span>
+                          <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>{cotizSeleccionada.tipo}</span>
+                          {cotizSeleccionada.estatus === "facturada" && (
+                            <span style={{ color: "var(--green)", marginLeft: 8, fontSize: "0.72rem", fontWeight: 700 }}>· facturada</span>
+                          )}
+                        </div>
                         <span style={{ fontWeight: 700, color: "var(--accent)" }}>${cotizSeleccionada.total.toLocaleString()}</span>
                       </div>
                       {cotizSeleccionada.items?.[0] && (
@@ -1613,7 +1644,7 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
                 </>
               ) : (
                 <div style={{ padding: "10px 14px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  {esGerencia ? "Sin cotizaciones activas de servicio o refacciones." : "Tu usuario no está vinculado a ningún asesor con cotizaciones activas."}
+                  {esGerencia ? "Sin cotizaciones activas disponibles." : "Tu usuario no está vinculado a ningún asesor con cotizaciones activas."}
                 </div>
               )}
             </div>
@@ -1691,8 +1722,11 @@ ${s.notas ? `<div class="notas-box"><strong>📝 Notas generales:</strong><br><s
             <button className="modal-close" onClick={() => setVerCotizacion(null)}>✕</button>
             <h2 className="modal-title">📄 {verCotizacion.folio}</h2>
             <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              <span className={`badge ${verCotizacion.tipo === "servicio" ? "badge-amber" : verCotizacion.tipo === "refacciones" ? "badge-purple" : "badge-blue"}`}>{verCotizacion.tipo}</span>
-              <span className={`badge ${verCotizacion.estatus === "activa" ? "badge-green" : "badge-gray"}`}>{verCotizacion.estatus}</span>
+              <span className={`badge ${badgeTipoCotizacion(verCotizacion.tipo)}`}>{verCotizacion.tipo}</span>
+              <span className={`badge ${badgeEstatusCotizacion(verCotizacion.estatus)}`}>{verCotizacion.estatus}</span>
+              {verCotizacion.numeroFactura && (
+                <span className="badge badge-gray">Factura {verCotizacion.numeroFactura}</span>
+              )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: "var(--surface2)", borderRadius: "var(--radius-sm)" }}>
