@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 
 // ─── Constantes ───────────────────────────────────────────────
-const API = import.meta.env?.["VITE_API_URL"] ?? "https://pipsa-back.vercel.app";
+const API = (import.meta.env?.["VITE_API_URL"] ?? "https://pipsa-back.vercel.app").replace(/\/api$/, "");
 
 // ─── Tipos ────────────────────────────────────────────────────
 type Rango = "vigente" | "1_30" | "31_60" | "61_90" | "mas_90" | "sin_definir";
