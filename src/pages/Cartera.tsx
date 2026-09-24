@@ -1,8 +1,5 @@
-/// <reference types="vite/client" />
 import { useEffect, useState, useRef, useCallback } from "react";
-
-// ─── Constantes ───────────────────────────────────────────────
-const API = (import.meta.env?.["VITE_API_URL"] ?? "https://pipsa-back.vercel.app").replace(/\/api$/, "");
+import { api } from "../api";
 
 // ─── Tipos ────────────────────────────────────────────────────
 type Rango = "vigente" | "1_30" | "31_60" | "61_90" | "mas_90" | "sin_definir";
@@ -194,7 +191,6 @@ const FILTROS_INIT: Filtros = {
 
 // ─── Componente principal ─────────────────────────────────────
 export default function Cartera() {
-  const token = localStorage.getItem("token") ?? "";
 
   const [data, setData]           = useState<ApiCartera | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -231,16 +227,14 @@ export default function Cartera() {
       if (f.soloParcial)         q.set("soloParcial", "true");
       q.set("sort", f.sort); q.set("page", String(f.page)); q.set("limit", String(f.limit));
 
-      const res = await fetch(`${API}/api/cartera?${q}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await api.get(`/cartera?${q}`, {
         signal: abortRef.current.signal,
       });
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      setData(await res.json());
+      setData(res.data);
     } catch (e: any) {
       if (e?.name !== "AbortError") setError(e?.message ?? "Error de red");
     } finally { setLoading(false); }
-  }, [token]);
+  }, []);
 
   useEffect(() => { cargar(filtros); }, []);
 
@@ -278,12 +272,10 @@ export default function Cartera() {
     setLoadDet(true);
     try {
       const q = new URLSearchParams({ fechaCorte: filtros.fechaCorte });
-      const res = await fetch(
-        `${API}/api/cartera/cliente/${encodeURIComponent(nombre)}?${q}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.get(
+        `/cartera/cliente/${encodeURIComponent(nombre)}?${q}`
       );
-      if (!res.ok) throw new Error();
-      setDetalle(await res.json());
+      setDetalle(res.data);
     } catch { setDetalle(null); }
     finally { setLoadDet(false); }
   }
@@ -299,14 +291,9 @@ export default function Cartera() {
     if (filtros.saldoMax)            q.set("saldoMax", filtros.saldoMax);
     if (filtros.cliente)             q.set("cliente", filtros.cliente);
     if (filtros.sinFechaVencimiento) q.set("sinFechaVencimiento", "true");
-    const url = `${API}/api/cartera/exportar/csv?${q}`;
-    const a = document.createElement("a");
-    a.href = url; a.setAttribute("download", ""); a.setAttribute("target", "_blank");
-    // Incluir token como header no es posible con <a>; usamos fetch-blob
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const u = URL.createObjectURL(blob);
+    api.get(`/cartera/exportar/csv?${q}`, { responseType: "blob" })
+      .then((res: any) => {
+        const u = URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8" }));
         const link = document.createElement("a");
         link.href = u;
         link.download = `reporte-cartera-pipsa-${filtros.fechaCorte}.csv`;
