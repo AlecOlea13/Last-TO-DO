@@ -82,6 +82,7 @@ export default function Gastos() {
   const canDelete     = ["developer", "gerencia", "oficina"].includes(rol);
   const canCancel     = ["developer", "gerencia", "oficina"].includes(rol);
   const canVerTotales = ["developer", "gerencia"].includes(rol);
+  const isDeveloper   = rol === "developer";
 
   const [tab, setTab]               = useState<"fiscal" | "nofiscal">("fiscal");
   const [fiscales, setFiscales]     = useState<GastoFiscal[]>([]);
@@ -96,7 +97,6 @@ export default function Gastos() {
   const [fechaDesde, setFechaDesde]       = useState("");
   const [fechaHasta, setFechaHasta]       = useState("");
 
-  // ── Modal Reportes ──
   const [modalReportes, setModalReportes] = useState(false);
   const [reporteTipo, setReporteTipo]     = useState<"fiscal" | "nofiscal" | "general">("general");
   const [reportePeriodo, setReportePeriodo] = useState<"semana" | "mes" | "año" | "custom">("mes");
@@ -150,6 +150,7 @@ export default function Gastos() {
 
   const [pagoMultipleIds, setPagoMultipleIds] = useState<string[]>([]);
   const [reemplazandoComp, setReemplazandoComp] = useState(false);
+  const [eliminandoPago, setEliminandoPago]     = useState<string | null>(null);
 
   const [paginaF, setPaginaF]   = useState(1);
   const [paginaNF, setPaginaNF] = useState(1);
@@ -500,6 +501,23 @@ export default function Gastos() {
     finally { setReemplazandoComp(false); }
   }
 
+  // ── Eliminar un pago del historial (solo developer) ──────────
+  async function eliminarPago(gastoId: string, pagoId: string, monto: number, fechaPago: string) {
+    if (!confirm(
+      `¿Eliminar el pago de $${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })} del ${fmt(fechaPago)}?\n\nEl saldo pendiente se recalculará automáticamente.`
+    )) return;
+    setEliminandoPago(pagoId);
+    try {
+      const { data } = await api.delete(`/gastos/${gastoId}/pagos/${pagoId}`);
+      setFiscales(prev => prev.map(g => g._id === gastoId ? { ...g, ...data } : g));
+      setDetalleF(prev => prev?._id === gastoId ? { ...prev, ...data } : prev);
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? "Error al eliminar el pago");
+    } finally {
+      setEliminandoPago(null);
+    }
+  }
+
   async function registrarPago() {
     if (!modalPago) return;
 
@@ -583,7 +601,6 @@ export default function Gastos() {
   function filtrarPorPeriodo(dateStr?: string): boolean {
     if (!dateStr) return false;
     const d = new Date(dateStr);
-
     if (reportePeriodo === "semana") {
       const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
       const domingo = new Date(lunes);
@@ -595,12 +612,8 @@ export default function Gastos() {
       const [y, m] = reporteMesDesde.split("-").map(Number);
       return d.getFullYear() === y && d.getMonth() === m - 1;
     }
-    if (reportePeriodo === "año") {
-      return d.getFullYear() === reporteAnio;
-    }
-    if (reportePeriodo === "custom") {
-      return enRangoCustom(dateStr, reporteMesDesde, reporteMesHasta);
-    }
+    if (reportePeriodo === "año") return d.getFullYear() === reporteAnio;
+    if (reportePeriodo === "custom") return enRangoCustom(dateStr, reporteMesDesde, reporteMesHasta);
     return true;
   }
 
@@ -767,6 +780,25 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
     { label: "Total general", val: sumaNoFiscal() },
   ];
 
+  function labelPeriodo() {
+    if (reportePeriodo === "semana") {
+      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+      return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
+    }
+    if (reportePeriodo === "mes") {
+      const [y, m] = reporteMesDesde.split("-").map(Number);
+      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+    if (reportePeriodo === "año") return `Año ${reporteAnio}`;
+    const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
+    return desde === hasta ? desde : `${desde} — ${hasta}`;
+  }
+
   function EstatusPago({ g }: { g: GastoFiscal }) {
     const { estatus, fechaPago, comprobantePago, total, pagos } = g;
     const pagado    = estatus === "pagado";
@@ -838,25 +870,6 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
       </select>
     </div>
   );
-
-  function labelPeriodo() {
-    if (reportePeriodo === "semana") {
-      const lunes = getLunesDeSemana(reporteSemana, reporteAnio);
-      const domingo = new Date(lunes);
-      domingo.setDate(lunes.getDate() + 6);
-      const f = (d: Date) => d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
-      return `Semana ${reporteSemana}: ${f(lunes)} – ${f(domingo)} ${reporteAnio}`;
-    }
-    if (reportePeriodo === "mes") {
-      const [y, m] = reporteMesDesde.split("-").map(Number);
-      const s = new Date(y, m - 1, 1).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
-      return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-    if (reportePeriodo === "año") return `Año ${reporteAnio}`;
-    const desde = reporteMesDesde ? new Date(reporteMesDesde + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
-    const hasta = reporteMesHasta ? new Date(reporteMesHasta + "-01").toLocaleDateString("es-MX", { month: "long", year: "numeric" }) : "—";
-    return desde === hasta ? desde : `${desde} — ${hasta}`;
-  }
 
   return (
     <>
@@ -1084,7 +1097,6 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
           <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => setModalReportes(false)}>✕</button>
             <h2 className="modal-title">📊 Generar reporte</h2>
-
             <div className="form-group" style={{ marginTop: 8 }}>
               <label className="form-label">Tipo de reporte</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
@@ -1096,7 +1108,6 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 ))}
               </div>
             </div>
-
             <div className="form-group">
               <label className="form-label">Periodo</label>
               <div style={{ display: "flex", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
@@ -1108,63 +1119,29 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 ))}
               </div>
             </div>
-
             {reportePeriodo === "semana" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Semana del año</label>
-                  <input className="form-input" type="number" min={1} max={53} value={reporteSemana}
-                    onChange={e => setReporteSemana(+e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Año</label>
-                  <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
-                    onChange={e => setReporteAnio(+e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Semana del año</label><input className="form-input" type="number" min={1} max={53} value={reporteSemana} onChange={e => setReporteSemana(+e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
               </div>
             )}
-
             {reportePeriodo === "mes" && (
-              <div className="form-group">
-                <label className="form-label">Mes y año</label>
-                <input className="form-input" type="month" value={reporteMesDesde}
-                  onChange={e => setReporteMesDesde(e.target.value)} />
-              </div>
+              <div className="form-group"><label className="form-label">Mes y año</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
             )}
-
             {reportePeriodo === "año" && (
-              <div className="form-group">
-                <label className="form-label">Año</label>
-                <input className="form-input" type="number" min={2020} max={2099} value={reporteAnio}
-                  onChange={e => setReporteAnio(+e.target.value)} />
-              </div>
+              <div className="form-group"><label className="form-label">Año</label><input className="form-input" type="number" min={2020} max={2099} value={reporteAnio} onChange={e => setReporteAnio(+e.target.value)} /></div>
             )}
-
             {reportePeriodo === "custom" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="form-group">
-                  <label className="form-label">Desde</label>
-                  <input className="form-input" type="month" value={reporteMesDesde}
-                    onChange={e => setReporteMesDesde(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Hasta</label>
-                  <input className="form-input" type="month" value={reporteMesHasta}
-                    onChange={e => setReporteMesHasta(e.target.value)} />
-                </div>
+                <div className="form-group"><label className="form-label">Desde</label><input className="form-input" type="month" value={reporteMesDesde} onChange={e => setReporteMesDesde(e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Hasta</label><input className="form-input" type="month" value={reporteMesHasta} onChange={e => setReporteMesHasta(e.target.value)} /></div>
               </div>
             )}
-
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              <strong style={{ color: "var(--text)" }}>
-                {reporteTipo === "fiscal" ? "🧾 Fiscal" : reporteTipo === "nofiscal" ? "💵 No Fiscal" : "📋 General"}
-              </strong>
-              {" · "}
-              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong>
-              <br />
+              <strong style={{ color: "var(--text)" }}>{reporteTipo === "fiscal" ? "🧾 Fiscal" : reporteTipo === "nofiscal" ? "💵 No Fiscal" : "📋 General"}</strong>{" · "}
+              <strong style={{ color: "var(--accent)" }}>{labelPeriodo()}</strong><br />
               <span style={{ fontSize: "0.75rem" }}>Se abrirá una pestaña — usa el botón 🖨️ para imprimir o guardar como PDF.</span>
             </div>
-
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalReportes(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={generarReporte}>📄 Ver reporte</button>
@@ -1184,7 +1161,8 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
               <div className="form-group"><label className="form-label">RFC</label><input className="form-input" value={formManual.rfcEmisor} onChange={e => setFormManual((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" /></div>
               <div className="form-group"><label className="form-label">No. Factura</label><input className="form-input" value={formManual.folioFactura} onChange={e => setFormManual((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" /></div>
               <div className="form-group"><label className="form-label">Fecha *</label><input className="form-input" type="date" value={formManual.fechaEmision} onChange={e => setFormManual((p: any) => ({ ...p, fechaEmision: e.target.value }))} /></div>
-              <div className="form-group span-2"><label className="form-label">Monto total con IVA *</label>
+              <div className="form-group span-2">
+                <label className="form-label">Monto total con IVA *</label>
                 <input className="form-input" type="number" value={formManual.total} onChange={e => setFormManual((p: any) => ({ ...p, total: +e.target.value }))} placeholder="0.00" />
                 {formManual.total > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Subtotal: ${(formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formManual.total - formManual.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
               </div>
@@ -1214,7 +1192,8 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
               <div className="form-group"><label className="form-label">RFC</label><input className="form-input" value={formEditF.rfcEmisor} onChange={e => setFormEditF((p: any) => ({ ...p, rfcEmisor: e.target.value }))} placeholder="Opcional" /></div>
               <div className="form-group"><label className="form-label">No. Factura</label><input className="form-input" value={formEditF.folioFactura} onChange={e => setFormEditF((p: any) => ({ ...p, folioFactura: e.target.value }))} placeholder="Ej. FES2246" /></div>
               <div className="form-group"><label className="form-label">Fecha</label><input className="form-input" type="date" value={formEditF.fechaEmision} onChange={e => setFormEditF((p: any) => ({ ...p, fechaEmision: e.target.value }))} /></div>
-              <div className="form-group"><label className="form-label">Monto total con IVA *</label>
+              <div className="form-group">
+                <label className="form-label">Monto total con IVA *</label>
                 <input className="form-input" type="number" value={formEditF.total} onChange={e => setFormEditF((p: any) => ({ ...p, total: +e.target.value }))} />
                 {formEditF.total > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>Subtotal: ${(formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })} · IVA: ${(formEditF.total - formEditF.total / 1.16).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
               </div>
@@ -1335,6 +1314,8 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 </div>
               ) : null)}
             </div>
+
+            {/* ── Historial de pagos ── */}
             {(detalleF.pagos ?? []).length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>🔶 Historial de pagos</p>
@@ -1349,6 +1330,17 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         {p.comprobantePago && <a href={urlArchivo(p.comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--blue)" }}>📎 Comprobante</a>}
                         {p.complementoXml  && <a href={urlArchivo(p.complementoXml)}  download target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "var(--blue)" }}>🗂️ XML</a>}
+                        {/* Botón eliminar pago — solo developer */}
+                        {isDeveloper && (
+                          <button
+                            className="btn btn-danger btn-sm"
+                            title="Eliminar este pago (solo developer)"
+                            disabled={eliminandoPago === p._id}
+                            onClick={() => eliminarPago(detalleF._id, p._id, p.monto, p.fechaPago)}
+                          >
+                            {eliminandoPago === p._id ? "..." : "🗑️"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1365,6 +1357,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 )}
               </div>
             )}
+
             {detalleF.estatus === "pagado" && (
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {detalleF.comprobantePago && <a href={urlArchivo(detalleF.comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.82rem", color: "var(--blue)" }}>📎 Descargar comprobante</a>}
@@ -1377,6 +1370,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
               </div>
             )}
             {detalleF.complementoXml && <a href={urlArchivo(detalleF.complementoXml)} download target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: "0.82rem", color: "var(--blue)" }}>🗂️ Descargar complemento XML</a>}
+
             {detalleF.conceptos.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>Conceptos</p>
