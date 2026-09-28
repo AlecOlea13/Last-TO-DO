@@ -2,8 +2,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api";
 
 // ─── Tipos ────────────────────────────────────────────────────
-type Rango = "vigente" | "1_30" | "31_60" | "61_90" | "mas_90" | "sin_definir";
-type Estado = "VIGENTE" | "VENCIDA" | "PARCIAL_VIGENTE" | "PARCIAL_VENCIDA" | "VENCIMIENTO_POR_DEFINIR" | "PAGADA";
+type Rango = "vigente" | "por_vencer" | "vencida_30" | "vencida_60" | "mas_60" | "sin_definir";
+type Estado = "VIGENTE" | "POR_VENCER" | "VENCIDA" | "PARCIAL_VIGENTE" | "PARCIAL_POR_VENCER" | "PARCIAL_VENCIDA" | "VENCIMIENTO_POR_DEFINIR" | "PAGADA";
 type Riesgo = "bajo" | "medio" | "alto" | "critico" | "por_definir";
 
 type ClienteResumen = {
@@ -73,33 +73,37 @@ function fmtPct(n: number) { return n.toFixed(1) + "%"; }
 
 // ─── Paleta de rangos ─────────────────────────────────────────
 const RANGO_COLOR: Record<Rango, string> = {
-  vigente:    "var(--green)",
-  "1_30":     "#f0b429",
-  "31_60":    "#f97316",
-  "61_90":    "var(--red)",
-  mas_90:     "#7f1d1d",
-  sin_definir:"var(--text-muted)",
+  vigente:     "var(--green)",
+  por_vencer:  "#f0b429",
+  vencida_30:  "#f97316",
+  vencida_60:  "var(--red)",
+  mas_60:      "#7f1d1d",
+  sin_definir: "var(--text-muted)",
 };
 const RANGO_LABEL: Record<Rango, string> = {
-  vigente:    "Vigente",
-  "1_30":     "1–30 días",
-  "31_60":    "31–60 días",
-  "61_90":    "61–90 días",
-  mas_90:     "+90 días",
-  sin_definir:"Sin definir",
+  vigente:     "Vigente",
+  por_vencer:  "Por vencer",
+  vencida_30:  "Vencida 1–30d",
+  vencida_60:  "Vencida 31–60d",
+  mas_60:      "Vencida +60d",
+  sin_definir: "Sin definir",
 };
 const ESTADO_COLOR: Record<Estado, string> = {
   VIGENTE:                  "var(--green)",
+  POR_VENCER:               "#f0b429",
   VENCIDA:                  "var(--red)",
-  PARCIAL_VIGENTE:          "#f0b429",
+  PARCIAL_VIGENTE:          "var(--green)",
+  PARCIAL_POR_VENCER:       "#f0b429",
   PARCIAL_VENCIDA:          "#f97316",
   VENCIMIENTO_POR_DEFINIR:  "var(--text-muted)",
   PAGADA:                   "var(--green)",
 };
 const ESTADO_LABEL: Record<Estado, string> = {
   VIGENTE:                  "Vigente",
+  POR_VENCER:               "Por vencer",
   VENCIDA:                  "Vencida",
   PARCIAL_VIGENTE:          "Parcial vigente",
+  PARCIAL_POR_VENCER:       "Parcial por vencer",
   PARCIAL_VENCIDA:          "Parcial vencida",
   VENCIMIENTO_POR_DEFINIR:  "Sin fecha",
   PAGADA:                   "Pagada",
@@ -141,7 +145,7 @@ function Badge({ color, label }: { color: string; label: string }) {
 // ─── Barra de distribución por rangos ────────────────────────
 function BarraRangos({ rangos, total }: { rangos: Rangos; total: number }) {
   if (total <= 0) return null;
-  const orden: Rango[] = ["vigente", "1_30", "31_60", "61_90", "mas_90", "sin_definir"];
+  const orden: Rango[] = ["vigente", "por_vencer", "vencida_30", "vencida_60", "mas_60", "sin_definir"];
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", gap: 1 }}>
@@ -356,7 +360,9 @@ export default function Cartera() {
                   <option value="">Todos</option>
                   <option value="VIGENTE">Vigente</option>
                   <option value="VENCIDA">Vencida</option>
+                  <option value="POR_VENCER">Por vencer</option>
                   <option value="PARCIAL_VIGENTE">Parcial vigente</option>
+                  <option value="PARCIAL_POR_VENCER">Parcial por vencer</option>
                   <option value="PARCIAL_VENCIDA">Parcial vencida</option>
                   <option value="VENCIMIENTO_POR_DEFINIR">Sin fecha de vencimiento</option>
                 </select>
@@ -366,10 +372,10 @@ export default function Cartera() {
                 <select className="form-select" value={draft.rango} onChange={e => setDraft(p => ({ ...p, rango: e.target.value }))}>
                   <option value="">Todos</option>
                   <option value="vigente">Vigente</option>
-                  <option value="1_30">1–30 días</option>
-                  <option value="31_60">31–60 días</option>
-                  <option value="61_90">61–90 días</option>
-                  <option value="mas_90">Más de 90 días</option>
+                  <option value="por_vencer">Por vencer (1–60 días)</option>
+                  <option value="vencida_30">Vencida 1–30 días</option>
+                  <option value="vencida_60">Vencida 31–60 días</option>
+                  <option value="mas_60">Vencida más de 60 días</option>
                   <option value="sin_definir">Sin definir</option>
                 </select>
               </div>
