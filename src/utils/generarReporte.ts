@@ -15,7 +15,7 @@ export type CotizacionReporte = {
   tipo: string;
   tipoPeriodo?: string;
   condiciones?: string;
-  moneda?: "MXN" | "USD"; // ── NUEVO ──
+  moneda?: "MXN" | "USD";
   cliente?: { nombre: string; direccion?: string; telefono?: string; contacto?: string };
   montacargas?: {
     numeroEconomico?: string; marca: string; modelo: string; capacidad?: string;
@@ -58,8 +58,11 @@ export type OrdenTrabajoReporte = {
   refacciones?: { cantidad: number; descripcion: string; precio?: number }[];
   costoRefacciones?: number; costoManoObra?: number; observaciones?: string;
   firmaCliente?: string;
-  fotoEquipoFinal?: string[]; // ← nuevo
+  fotoEquipoFinal?: string[];
 };
+
+// ── Logo oficial actualizado ──
+const LOGO_URL = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
 
 // ── Helper moneda ──
 function fmtMoneda(valor: number, moneda: "MXN" | "USD" = "MXN"): string {
@@ -73,7 +76,7 @@ function generarPlantillaCondiciones(
   vigenciaDias: number = 30,
   entregaDias: number = 14,
   incluirCancelacion: boolean = false,
-  moneda: "MXN" | "USD" = "MXN", // ── NUEVO ──
+  moneda: "MXN" | "USD" = "MXN",
 ): string {
   const monedaTexto = moneda === "USD" ? "dólares americanos (USD)" : "pesos mexicanos";
   const monedaSimbolo = moneda === "USD" ? "USD" : "M.N.";
@@ -130,7 +133,6 @@ function condicionesHtml(cot: CotizacionReporte): string {
 function htmlCurso(cot: CotizacionReporte): string {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Tania Hernandez";
@@ -149,9 +151,9 @@ function htmlCurso(cot: CotizacionReporte): string {
   const duracion         = dc3.duracionHoras    ?? 4;
   const incluyeConst     = dc3.incluyeConstancia !== false;
   const modalidadLabel: Record<string, string> = {
-    "teorico":           "Teórico",
-    "practico":          "Práctico",
-    "teorico-practico":  "Teórico-Práctico",
+    "teorico":          "Teórico",
+    "practico":         "Práctico",
+    "teorico-practico": "Teórico-Práctico",
   };
   const modalidad  = modalidadLabel[dc3.modalidad ?? "teorico-practico"] ?? "Teórico-Práctico";
   const lugarCurso = dc3.lugar ?? cot.lugar ?? "Instalaciones del cliente";
@@ -223,7 +225,7 @@ function htmlCurso(cot: CotizacionReporte): string {
     "body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; padding: 32px; max-width: 820px; margin: auto; }",
     ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 2px solid #222; }",
     ".header-left { display: flex; align-items: center; gap: 14px; }",
-    ".logo { width: 70px; height: 70px; object-fit: contain; background: #000; border-radius: 6px; }",
+    ".logo { height: 60px; width: auto; object-fit: contain; }",
     ".company-name { font-size: 12pt; font-weight: bold; max-width: 340px; line-height: 1.3; }",
     ".header-right { text-align: right; font-size: 10pt; line-height: 1.7; }",
     ".client-info { font-size: 10pt; line-height: 1.8; margin: 12px 0; padding-bottom: 10px; border-bottom: 1px solid #ccc; }",
@@ -265,12 +267,12 @@ function htmlCurso(cot: CotizacionReporte): string {
     `<p style="text-align:center;font-size:8.5pt;color:#888;margin-bottom:6px;letter-spacing:.08em">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
-    `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
+    `<img src="${LOGO_URL}" class="logo" alt="Logo oficial de PIPSA Montacargas" />`,
     '<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Parques de Santa María<br>",
+    "Bahías de Huatulco No. 99, Parques de Santa María<br>",
     "45609, Tlaquepaque, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
@@ -349,7 +351,6 @@ function htmlCurso(cot: CotizacionReporte): string {
 function htmlServicio(cot: CotizacionReporte): string {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Juan Pablo Montúfar Cruz";
@@ -400,7 +401,7 @@ function htmlServicio(cot: CotizacionReporte): string {
     "body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; padding: 24px; max-width: 820px; margin: auto; line-height: 1.3; }",
     ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #222; }",
     ".header-left { display: flex; align-items: center; gap: 10px; }",
-    ".logo { width: 56px; height: 56px; object-fit: contain; background: #000; border-radius: 5px; }",
+    ".logo { height: 52px; width: auto; object-fit: contain; }",
     ".company-name { font-size: 10pt; font-weight: bold; max-width: 320px; line-height: 1.2; }",
     ".header-right { text-align: right; font-size: 8.5pt; line-height: 1.45; }",
     ".client-info { font-size: 8.8pt; line-height: 1.5; margin: 8px 0; padding-bottom: 6px; border-bottom: 1px solid #ccc; }",
@@ -430,12 +431,12 @@ function htmlServicio(cot: CotizacionReporte): string {
     `<p class="folio-ref">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
-    `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
+    `<img src="${LOGO_URL}" class="logo" alt="Logo oficial de PIPSA Montacargas" />`,
     '<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Parques de Santa María<br>",
+    "Bahías de Huatulco No. 99, Parques de Santa María<br>",
     "45609, Tlaquepaque, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
@@ -489,7 +490,6 @@ function htmlServicio(cot: CotizacionReporte): string {
 async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
   const [fy, fm, fd] = cot.fecha.split("T")[0].split("-");
   const fecha = new Date(+fy, +fm - 1, +fd).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" });
-  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const moneda = cot.moneda ?? "MXN";
 
   const asesorNombre = cot.asesor?.nombre   ?? "Richard Kimche";
@@ -554,7 +554,7 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     "body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; padding: 24px; max-width: 820px; margin: auto; line-height: 1.3; }",
     ".header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 8px; border-bottom: 2px solid #222; }",
     ".header-left { display: flex; align-items: center; gap: 10px; }",
-    ".logo { width: 56px; height: 56px; object-fit: contain; background: #000; border-radius: 5px; }",
+    ".logo { height: 52px; width: auto; object-fit: contain; }",
     ".company-name { font-size: 10pt; font-weight: bold; max-width: 320px; line-height: 1.2; }",
     ".header-right { text-align: right; font-size: 8.5pt; line-height: 1.45; }",
     ".client-info { font-size: 8.8pt; line-height: 1.5; margin: 8px 0; padding-bottom: 6px; border-bottom: 1px solid #ccc; }",
@@ -583,12 +583,12 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
     `<p class="folio-ref">${cot.folio}</p>`,
     '<div class="header">',
     '<div class="header-left">',
-    `<img src="${logoUrl}" class="logo" alt="Pipsa" />`,
+    `<img src="${LOGO_URL}" class="logo" alt="Logo oficial de PIPSA Montacargas" />`,
     '<div class="company-name">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</div>',
     "</div>",
     '<div class="header-right">',
     `<strong>${cot.lugar}; ${fecha}.</strong><br>`,
-    "Bahías de Huatulco No. 99-A, Parques de Santa María<br>",
+    "Bahías de Huatulco No. 99, Parques de Santa María<br>",
     "45609, Tlaquepaque, Jal.<br>",
     "www.pipsamontacargas.com",
     "</div>",
@@ -644,7 +644,6 @@ async function htmlVentaRenta(cot: CotizacionReporte): Promise<string> {
 }
 
 function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
-  const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
   const fechaObj = new Date(ot.fecha);
   const dia  = String(fechaObj.getDate()).padStart(2, "0");
   const mes  = fechaObj.toLocaleDateString("es-MX", { month: "short" });
@@ -671,12 +670,10 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 
   const totalCosto = (ot.costoRefacciones ?? 0) + (ot.costoManoObra ?? 0);
 
-  // ── Bloque de firma del cliente: imagen si existe, línea en blanco si no ──
   const firmaClienteHtml = ot.firmaCliente
     ? `<img src="${ot.firmaCliente}" style="max-height:44px;max-width:200px;object-fit:contain;display:block;margin:0 auto 2px;" alt="Firma del cliente" />`
     : "";
 
-  // ── Cuadrícula de fotos del equipo (hasta 5) ──
   const MAX_FOTOS_REPORTE = 6;
   const totalFotos = ot.fotoEquipoFinal?.length ?? 0;
   const fotosAMostrar = (ot.fotoEquipoFinal ?? []).slice(0, MAX_FOTOS_REPORTE);
@@ -758,7 +755,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
 <body>
 <div class="page">
   <div class="sidebar-logos">
-    <img src="${logoUrl}" alt="Pipsa" style="width:95px;background:#000;border-radius:4px;padding:4px" />
+    <img src="${LOGO_URL}" alt="Logo oficial de PIPSA Montacargas" style="width:95px;border-radius:4px;padding:2px" />
     <div style="border-top:1px solid #ccc;width:100%;margin:4px 0"></div>
     <div style="text-align:center;font-size:8pt;color:#555;font-style:italic">Montacargas</div>
     <div style="background:#f5c000;padding:3px 6px;border-radius:3px;width:90px;text-align:center">
@@ -881,6 +878,7 @@ function htmlOrdenTrabajo(ot: OrdenTrabajoReporte): string {
         <div class="firma-line">Cliente: ${ot.firmaCliente ? (ot.cliente?.nombre ?? "") : "_____________________"}</div>
       </div>
     </div>
+  </div>
 </div>
 <script>window.onload = function() { document.title = '${ot.folio}'; };</script>
 </body>
