@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
 import MontaScrollbar from "./MontaScrollbar";
-import HalloweenTeaser from "./HalloweenTeaser";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
@@ -29,19 +28,24 @@ type Alerta = {
   ruta: string;
 };
 
+// ── URLs de identidad visual ──────────────────────────────────────────────
+const LOGO_HORIZONTAL = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790787547/control-pipsa-logo_czyd1h.png";
+const APP_ICON        = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790787547/control-pipsa-app-icon-1024_vvttdw.png";
+
 export default function Dashboard() {
   const [stats, setStats] = useState({
     disponibles: 0, rentados: 0, taller: 0,
     serviciosAbiertos: 0, rentasVencer: 0, facturasPendientes: 0,
   });
-  const [alertas, setAlertas]     = useState<Alerta[]>([]);
+  const [alertas, setAlertas]         = useState<Alerta[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(
     (localStorage.getItem("theme") as "dark" | "light") ?? "dark"
   );
-  const mainRef    = useRef<HTMLDivElement>(null);
-  const location   = useLocation();
-  const navigate   = useNavigate();
+  const mainRef  = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const nombre = localStorage.getItem("nombre") ?? "Usuario";
   const rol    = localStorage.getItem("rol") ?? "";
@@ -201,26 +205,26 @@ export default function Dashboard() {
   }
 
   const allNav = [
-    { to: "/dashboard",              icon: "📊", label: "Dashboard",          roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-    { to: "/dashboard/montacargas",  icon: "🏗️",  label: "Montacargas",       roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-    { to: "/dashboard/servicios",    icon: "🔧", label: "Servicios",          roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-    { to: "/dashboard/pendientes",   icon: "📝", label: "Pendientes",         roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-    { to: "/dashboard/almacen",      icon: "📦", label: "Almacén",            roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
-    { to: "/dashboard/clientes",     icon: "🏢", label: "Clientes",           roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/rentas",       icon: "📋", label: "Rentas",             roles: ["developer","gerencia","oficina","supervisor_almacen"] },
-    { to: "/dashboard/cotizaciones", icon: "📄", label: "Cotizaciones",       roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/gastos",       icon: "🧾", label: "Gastos",             roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/asesores",     icon: "👤", label: "Asesores",           roles: ["developer"] },
-    { to: "/dashboard/usuarios",     icon: "👥", label: "Usuarios",           roles: ["developer"] },
-    { to: "/dashboard/cxc",          icon: "💰", label: "CxC",                roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/cartera",      icon: "📊", label: "Cartera",            roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/facturacion",  icon: "🧾", label: "Facturación",        roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/proveedores",  icon: "🏭", label: "Proveedores",        roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/auditoria",    icon: "📁", label: "Auditoría",          roles: ["developer","gerencia","cliente"] },
-    { to: "/dashboard/reportes-cliente", icon: "📝", label: "Mis Reportes",   roles: ["cliente"] },
+    { to: "/dashboard",              icon: "📊", label: "Dashboard",             roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/montacargas",  icon: "🏗️",  label: "Montacargas",          roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/servicios",    icon: "🔧", label: "Servicios",             roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/pendientes",   icon: "📝", label: "Pendientes",            roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/almacen",      icon: "📦", label: "Almacén",               roles: ["developer","gerencia","oficina","tecnico","almacen","supervisor_almacen"] },
+    { to: "/dashboard/clientes",     icon: "🏢", label: "Clientes",              roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/rentas",       icon: "📋", label: "Rentas",                roles: ["developer","gerencia","oficina","supervisor_almacen"] },
+    { to: "/dashboard/cotizaciones", icon: "📄", label: "Cotizaciones",          roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/gastos",       icon: "🧾", label: "Gastos",                roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/asesores",     icon: "👤", label: "Asesores",              roles: ["developer"] },
+    { to: "/dashboard/usuarios",     icon: "👥", label: "Usuarios",              roles: ["developer"] },
+    { to: "/dashboard/cxc",          icon: "💰", label: "CxC",                   roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/cartera",      icon: "📊", label: "Cartera",               roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/facturacion",  icon: "🧾", label: "Facturación",           roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/proveedores",  icon: "🏭", label: "Proveedores",           roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/auditoria",    icon: "📁", label: "Auditoría",             roles: ["developer","gerencia","cliente"] },
+    { to: "/dashboard/reportes-cliente", icon: "📝", label: "Mis Reportes",      roles: ["cliente"] },
     { to: "/dashboard/reportes-cliente", icon: "📝", label: "Reportes Clientes", roles: ["developer","gerencia"] },
-    { to: "/dashboard/portales",     icon: "🔑", label: "Portales",           roles: ["developer","gerencia","oficina"] },
-    { to: "/dashboard/flota",        icon: "🚗", label: "Flota",              roles: ["developer","gerencia","oficina"], permiso: "flota" },
+    { to: "/dashboard/portales",     icon: "🔑", label: "Portales",              roles: ["developer","gerencia","oficina"] },
+    { to: "/dashboard/flota",        icon: "🚗", label: "Flota",                 roles: ["developer","gerencia","oficina"], permiso: "flota" },
   ];
 
   const permisos = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
@@ -239,60 +243,95 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="dash-root">
+    <div className={`dash-root${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}>
       <div className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`} onClick={() => setSidebarOpen(false)} />
 
+      {/* ── Topbar móvil ── */}
       <div className="mobile-topbar">
-        <span className="mobile-topbar-brand">🏗️ Control Pipsa</span>
+        <img
+          src={LOGO_HORIZONTAL}
+          alt="Control Pipsa"
+          className="mobile-topbar-logo"
+        />
         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(p => !p)}>
           {sidebarOpen ? "✕" : "☰"}
         </button>
       </div>
 
-      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}${sidebarCollapsed ? " collapsed" : ""}`}>
+
+        {/* ── Brand: logo horizontal (expandido) / ícono cuadrado (colapsado) ── */}
         <div className="sidebar-brand">
-          <span className="brand-icon">🏗️</span>
-          <div>
-            <p className="brand-title">Control Pipsa</p>
-            <p className="brand-sub">{rol === "cliente" ? "Portal de clientes" : "Gestión de Flota"}</p>
-          </div>
+          {sidebarCollapsed ? (
+            <img
+              src={APP_ICON}
+              alt="Control Pipsa"
+              className="sidebar-brand-icon-only"
+            />
+          ) : (
+            <img
+              src={LOGO_HORIZONTAL}
+              alt="Control Pipsa"
+              className="sidebar-brand-logo"
+            />
+          )}
+          {/* Botón colapsar — solo visible en escritorio */}
+          <button
+            className="sidebar-collapse-btn"
+            onClick={() => setSidebarCollapsed(p => !p)}
+            aria-label={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
+            title={sidebarCollapsed ? "Expandir" : "Colapsar"}
+          >
+            {sidebarCollapsed ? "›" : "‹"}
+          </button>
         </div>
 
-        <div className="sidebar-user">
-          <div className="sidebar-avatar-placeholder">{nombre?.[0]?.toUpperCase() ?? "?"}</div>
-          <div>
-            <p className="sidebar-user-name">{nombre}</p>
-            <p className="sidebar-user-role">{ROL_LABEL[rol] ?? rol}</p>
+        {/* ── Perfil de usuario ── */}
+        {!sidebarCollapsed && (
+          <div className="sidebar-user">
+            <div className="sidebar-avatar-placeholder">{nombre?.[0]?.toUpperCase() ?? "?"}</div>
+            <div>
+              <p className="sidebar-user-name">{nombre}</p>
+              <p className="sidebar-user-role">{ROL_LABEL[rol] ?? rol}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        <p className="nav-section-label">Menú</p>
+        {!sidebarCollapsed && <p className="nav-section-label">Menú</p>}
+
         {navItems.map(item => (
-          <Link key={item.to + item.label} to={item.to}
+          <Link
+            key={item.to + item.label}
+            to={item.to}
             className={`nav-item ${location.pathname === item.to ? "active" : ""}`}
-            onClick={() => setSidebarOpen(false)}>
+            onClick={() => setSidebarOpen(false)}
+            title={sidebarCollapsed ? item.label : undefined}
+          >
             <span className="nav-icon">{item.icon}</span>
-            {item.label}
+            {!sidebarCollapsed && item.label}
           </Link>
         ))}
 
-        <button className="theme-toggle" onClick={toggleTheme}>
-          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="theme-toggle-icon">{theme === "dark" ? "🌙" : "☀️"}</span>
-            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-          </span>
-          <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>Cambiar</span>
-        </button>
+        {!sidebarCollapsed && (
+          <button className="theme-toggle" onClick={toggleTheme}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="theme-toggle-icon">{theme === "dark" ? "🌙" : "☀️"}</span>
+              {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+            </span>
+            <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>Cambiar</span>
+          </button>
+        )}
 
         <div className="sidebar-spacer" />
-        <button className="sidebar-logout" onClick={logout}>
-          <span>↩</span> Cerrar sesión
+
+        <button className="sidebar-logout" onClick={logout} title={sidebarCollapsed ? "Cerrar sesión" : undefined}>
+          <span>↩</span>
+          {!sidebarCollapsed && "Cerrar sesión"}
         </button>
       </aside>
 
       <div className="dash-main" ref={mainRef}>
         {isDashboard ? (
-          // ── El cliente nunca ve el panel interno ──
           rol === "cliente" ? null : (
             <div key="dashboard-home" className="page-transition">
               <div className="page-header">
@@ -398,7 +437,6 @@ export default function Dashboard() {
       </div>
 
       <MontaScrollbar targetRef={mainRef} />
-      <HalloweenTeaser />
     </div>
   );
 }

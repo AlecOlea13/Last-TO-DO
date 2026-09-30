@@ -7,41 +7,41 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: [
+        'icons/control-pipsa-favicon-64.png',
+        'icons/control-pipsa-app-icon-192.png',
+        'icons/control-pipsa-app-icon-512.png',
+      ],
       manifest: {
         name: "Control Pipsa",
-        short_name: "Pipsa",
+        short_name: "Control Pipsa",
         description: "Sistema de gestión de flota Pipsa Montacargas.",
-        theme_color: "#0a0c10",
-        background_color: "#0a0c10",
+        theme_color: "#071317",
+        background_color: "#071317",
         display: "standalone",
         start_url: "/",
         scope: "/",
         orientation: "portrait",
         icons: [
           {
-            src: "icons/icon-192x192.png",
+            src: "icons/control-pipsa-app-icon-192.png",
             sizes: "192x192",
-            type: "image/png"
+            type: "image/png",
+            purpose: "any maskable"
           },
           {
-            src: "icons/icon-512x512.png",
-            sizes: "512x512",
-            type: "image/png"
-          },
-          {
-            src: "icons/icon-512x512.png",
+            src: "icons/control-pipsa-app-icon-512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "maskable"
+            purpose: "any maskable"
           }
         ]
       },
       workbox: {
-      navigateFallback: "/index.html",
-      globPatterns: ["**/*.{js,css,html,ico,svg,woff2}"], // ← quita png
-      maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // ← 3 MB
-    }
+        navigateFallback: "/index.html",
+        globPatterns: ["**/*.{js,css,html,ico,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      }
     })
   ],
 })
