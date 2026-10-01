@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
 import MontaScrollbar from "./MontaScrollbar";
-import { HALLOWEEN_ENABLED, SpiderWeb, Spider, MoonSvg, BatSvg, Ghost, HalloweenGlobalLayer } from "./Halloween";
+import { HALLOWEEN_ENABLED, SpiderWeb, Spider, MoonSvg, Ghost, HalloweenGlobalLayer } from "./Halloween";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
