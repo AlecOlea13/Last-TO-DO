@@ -572,70 +572,115 @@ input[type="file"] { display: none; }
 .sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,180,0,0.45); }
 .sidebar { scrollbar-width: thin; scrollbar-color: rgba(255,180,0,0.2) transparent; }
 
+
 /* ════════════════════════════════════════════════════════════
    🎃 HALLOWEEN THEME — Octubre 2026
-   Para desactivar: cambiar HALLOWEEN_ENABLED = false en Halloween.tsx
-   Para eliminar: borrar este bloque y Halloween.tsx
+   Desactivar: HALLOWEEN_ENABLED = false en Halloween.tsx
+   Eliminar:   borrar este bloque + Halloween.tsx + sus imports
    ════════════════════════════════════════════════════════════ */
 
-/* ── Resplandor naranja en tarjeta destacada ── */
+/* ── Capa global fija de fondo ambiental ── */
+.hw-global-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 55% 45% at 95% 5%,  rgba(139,92,246,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 5%  90%,  rgba(249,115,22,0.09) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 100%, rgba(139,92,246,0.06) 0%, transparent 55%);
+}
+
+/* ── Luna + murciélagos: esquina superior derecha del área principal ── */
+.hw-moon-zone {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  z-index: 0;
+  pointer-events: none;
+  width: 160px;
+  height: 160px;
+}
+
+/* ── Niebla inferior fija ── */
+.hw-fog-bottom {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 160px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 70% at 30% 100%, rgba(139,92,246,0.09) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 60% at 70% 100%, rgba(249,115,22,0.07) 0%, transparent 60%);
+  animation: hwFog 28s ease-in-out infinite alternate;
+}
+
+/* ── Resplandor naranja en tarjeta Disponibles ── */
 .hw-theme .hw-card-orange {
-  box-shadow: 0 0 0 1px rgba(249,115,22,0.18), 0 4px 24px rgba(249,115,22,0.1);
-  border-color: rgba(249,115,22,0.22) !important;
+  box-shadow: 0 0 0 1px rgba(249,115,22,0.22), 0 4px 28px rgba(249,115,22,0.13);
+  border-color: rgba(249,115,22,0.25) !important;
 }
 .hw-theme .hw-card-orange:hover {
-  box-shadow: 0 0 0 1px rgba(249,115,22,0.35), 0 8px 32px rgba(249,115,22,0.18);
+  box-shadow: 0 0 0 1px rgba(249,115,22,0.38), 0 8px 36px rgba(249,115,22,0.20);
 }
 
-/* ── Resplandor morado en tarjeta de rentas ── */
+/* ── Resplandor morado en tarjeta Rentas ── */
 .hw-theme .hw-card-purple {
-  box-shadow: 0 0 0 1px rgba(139,92,246,0.18), 0 4px 24px rgba(139,92,246,0.1);
-  border-color: rgba(139,92,246,0.22) !important;
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.22), 0 4px 28px rgba(139,92,246,0.13);
+  border-color: rgba(139,92,246,0.25) !important;
 }
 .hw-theme .hw-card-purple:hover {
-  box-shadow: 0 0 0 1px rgba(139,92,246,0.35), 0 8px 32px rgba(139,92,246,0.18);
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.38), 0 8px 36px rgba(139,92,246,0.20);
 }
 
-/* ── Brillo del sidebar ── */
+/* ── Sidebar: borde morado tenue cuando hw-theme activo ── */
 .hw-theme .sidebar {
-  border-right-color: rgba(139,92,246,0.15);
-}
-.hw-theme .nav-item.active {
-  box-shadow: inset 0 0 12px rgba(249,115,22,0.06);
+  border-right-color: rgba(139,92,246,0.18);
 }
 
-/* ── Animación murciélagos ── */
-@keyframes hwBatFly {
-  0%   { left: -60px; opacity: 0; transform: translateY(0) scaleX(1); }
-  5%   { opacity: 1; }
-  25%  { transform: translateY(-12px) scaleX(1); }
-  50%  { transform: translateY(8px) scaleX(1); }
-  75%  { transform: translateY(-6px) scaleX(1); }
-  95%  { opacity: 0.5; }
-  100% { left: 110vw; opacity: 0; transform: translateY(0) scaleX(1); }
+/* ── Araña: animación de balanceo vertical ── */
+@keyframes hwSpiderDrop {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(6px); }
 }
 
-/* ── Niebla login ── */
+/* ── Murciélagos flotando cerca de la luna ── */
+@keyframes hwBatFloat {
+  0%, 100% { transform: translateY(0px) rotate(-5deg); }
+  50%       { transform: translateY(-7px) rotate(5deg); }
+}
+
+/* ── Niebla ── */
 @keyframes hwFog {
-  0%   { transform: translateX(-10%) scaleY(1); }
-  100% { transform: translateX(10%) scaleY(1.1); }
+  0%   { opacity: 0.7; transform: scaleX(1); }
+  100% { opacity: 1;   transform: scaleX(1.06); }
 }
 @keyframes hwFog2 {
-  0%   { transform: translateX(8%) scaleY(0.9); }
-  100% { transform: translateX(-8%) scaleY(1.05); }
+  0%   { transform: translateX(5%) scaleY(0.9); }
+  100% { transform: translateX(-5%) scaleY(1.05); }
 }
 
-/* ── Reduced motion: desactivar todo ── */
+/* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  .hw-card-orange, .hw-card-purple { box-shadow: none !important; }
-  .hw-theme .nav-item.active { box-shadow: none; }
+  .hw-fog-bottom,
+  .hw-global-bg            { animation: none !important; }
+  .hw-card-orange,
+  .hw-card-purple          { box-shadow: none !important; border-color: var(--border) !important; }
+  .hw-theme .sidebar       { border-right-color: rgba(255,180,0,0.12); }
 }
 
-/* ── Ocultar decoraciones en móvil pequeño ── */
+/* ── Móvil: reducir decoraciones ── */
 @media (max-width: 640px) {
-  .hw-theme .hw-card-orange,
-  .hw-theme .hw-card-purple {
-    box-shadow: none;
-    border-color: var(--border) !important;
-  }
+  .hw-moon-zone            { width: 90px; height: 90px; top: 64px; right: 12px; }
+  .hw-fog-bottom           { height: 100px; }
+  .hw-card-orange,
+  .hw-card-purple          { box-shadow: none; border-color: var(--border) !important; }
+}
+
+/* ── Tablet ── */
+@media (max-width: 900px) and (min-width: 641px) {
+  .hw-moon-zone            { width: 120px; height: 120px; top: 16px; right: 18px; }
 }
