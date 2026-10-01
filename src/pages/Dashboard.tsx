@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
 import MontaScrollbar from "./MontaScrollbar";
+import { HALLOWEEN_ENABLED, SpiderWeb, MoonSvg, FloatingBats, Ghost } from "./Halloween";
 import "../dashboard.css";
 
 const ROL_LABEL: Record<string, string> = {
@@ -28,7 +29,6 @@ type Alerta = {
   ruta: string;
 };
 
-// ── URLs de identidad visual ──────────────────────────────────────────────
 const LOGO_HORIZONTAL = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790787547/control-pipsa-logo_czyd1h.png";
 const APP_ICON        = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790787547/control-pipsa-app-icon-1024_vvttdw.png";
 
@@ -55,7 +55,6 @@ export default function Dashboard() {
     if (rol !== "cliente") loadStats();
   }, []);
 
-  // ── Redirigir cliente al entrar al dashboard raíz ──
   useEffect(() => {
     if (rol === "cliente" && location.pathname === "/dashboard") {
       navigate("/dashboard/auditoria", { replace: true });
@@ -76,7 +75,6 @@ export default function Dashboard() {
   async function loadStats() {
     try {
       const puedeVerFacturas = ["developer", "gerencia", "oficina"].includes(rol);
-
       const [montas, servicios, rentas, facturas] = await Promise.all([
         api.get("/montacargas"),
         api.get("/servicios"),
@@ -102,7 +100,6 @@ export default function Dashboard() {
       });
 
       const nuevasAlertas: Alerta[] = [];
-
       const serviciosAbiertos = servicioList.filter((s: any) => s.estatus !== "cerrado");
       if (serviciosAbiertos.length > 0) {
         const urgentes = serviciosAbiertos.filter((s: any) => {
@@ -110,38 +107,15 @@ export default function Dashboard() {
           return dias >= 3;
         });
         if (urgentes.length > 0) {
-          nuevasAlertas.push({
-            id: "servicios-urgentes", tipo: "critico", icon: "🔧",
-            mensaje: `${urgentes.length} servicio${urgentes.length > 1 ? "s" : ""} lleva${urgentes.length > 1 ? "n" : ""} más de 3 días abierto${urgentes.length > 1 ? "s" : ""} sin cerrar.`,
-            ruta: "/dashboard/servicios",
-          });
+          nuevasAlertas.push({ id: "servicios-urgentes", tipo: "critico", icon: "🔧", mensaje: `${urgentes.length} servicio${urgentes.length > 1 ? "s" : ""} lleva${urgentes.length > 1 ? "n" : ""} más de 3 días abierto${urgentes.length > 1 ? "s" : ""} sin cerrar.`, ruta: "/dashboard/servicios" });
         } else {
-          nuevasAlertas.push({
-            id: "servicios-abiertos", tipo: "advertencia", icon: "🔧",
-            mensaje: `Hay ${serviciosAbiertos.length} servicio${serviciosAbiertos.length > 1 ? "s" : ""} abierto${serviciosAbiertos.length > 1 ? "s" : ""} pendiente${serviciosAbiertos.length > 1 ? "s" : ""}.`,
-            ruta: "/dashboard/servicios",
-          });
+          nuevasAlertas.push({ id: "servicios-abiertos", tipo: "advertencia", icon: "🔧", mensaje: `Hay ${serviciosAbiertos.length} servicio${serviciosAbiertos.length > 1 ? "s" : ""} abierto${serviciosAbiertos.length > 1 ? "s" : ""} pendiente${serviciosAbiertos.length > 1 ? "s" : ""}.`, ruta: "/dashboard/servicios" });
         }
       }
-
       const enTaller = montaList.filter((m: any) => m.estatus === "taller" || m.estatus === "mantenimiento");
-      if (enTaller.length > 0) {
-        nuevasAlertas.push({
-          id: "montas-taller", tipo: "advertencia", icon: "🏗️",
-          mensaje: `${enTaller.length} montacargas en taller o mantenimiento.`,
-          ruta: "/dashboard/montacargas",
-        });
-      }
-
+      if (enTaller.length > 0) nuevasAlertas.push({ id: "montas-taller", tipo: "advertencia", icon: "🏗️", mensaje: `${enTaller.length} montacargas en taller o mantenimiento.`, ruta: "/dashboard/montacargas" });
       const mantVencido = montaList.filter((m: any) => m.proximoMantenimiento && new Date(m.proximoMantenimiento) < hoy);
-      if (mantVencido.length > 0) {
-        nuevasAlertas.push({
-          id: "mant-vencido", tipo: "critico", icon: "⚙️",
-          mensaje: `${mantVencido.length} equipo${mantVencido.length > 1 ? "s" : ""} con mantenimiento vencido.`,
-          ruta: "/dashboard/montacargas",
-        });
-      }
-
+      if (mantVencido.length > 0) nuevasAlertas.push({ id: "mant-vencido", tipo: "critico", icon: "⚙️", mensaje: `${mantVencido.length} equipo${mantVencido.length > 1 ? "s" : ""} con mantenimiento vencido.`, ruta: "/dashboard/montacargas" });
       const rentadosConServicio = montaList.filter((m: any) => m.estatus === "rentado" && m.fechaUltimoServicio);
       const proximosMantenimiento = rentadosConServicio.filter((m: any) => {
         const ultimo = new Date(m.fechaUltimoServicio);
@@ -149,49 +123,17 @@ export default function Dashboard() {
         proximoMes.setMonth(proximoMes.getMonth() + 1);
         return proximoMes <= en30dias;
       });
-      if (proximosMantenimiento.length > 0) {
-        nuevasAlertas.push({
-          id: "mant-mensual", tipo: "advertencia", icon: "🔩",
-          mensaje: `${proximosMantenimiento.length} equipo${proximosMantenimiento.length > 1 ? "s" : ""} rentado${proximosMantenimiento.length > 1 ? "s" : ""} próximo${proximosMantenimiento.length > 1 ? "s" : ""} a mantenimiento mensual.`,
-          ruta: "/dashboard/montacargas",
-        });
-      }
-
+      if (proximosMantenimiento.length > 0) nuevasAlertas.push({ id: "mant-mensual", tipo: "advertencia", icon: "🔩", mensaje: `${proximosMantenimiento.length} equipo${proximosMantenimiento.length > 1 ? "s" : ""} rentado${proximosMantenimiento.length > 1 ? "s" : ""} próximo${proximosMantenimiento.length > 1 ? "s" : ""} a mantenimiento mensual.`, ruta: "/dashboard/montacargas" });
       if (["developer", "gerencia", "oficina"].includes(rol)) {
         const rentasVencidas = rentaList.filter((r: any) => r.estatus === "activa" && r.fechaFin && new Date(r.fechaFin) < hoy);
-        if (rentasVencidas.length > 0) {
-          nuevasAlertas.push({
-            id: "rentas-vencidas", tipo: "critico", icon: "📋",
-            mensaje: `${rentasVencidas.length} renta${rentasVencidas.length > 1 ? "s" : ""} ya vencida${rentasVencidas.length > 1 ? "s" : ""} y aún activa${rentasVencidas.length > 1 ? "s" : ""}.`,
-            ruta: "/dashboard/rentas",
-          });
-        }
+        if (rentasVencidas.length > 0) nuevasAlertas.push({ id: "rentas-vencidas", tipo: "critico", icon: "📋", mensaje: `${rentasVencidas.length} renta${rentasVencidas.length > 1 ? "s" : ""} ya vencida${rentasVencidas.length > 1 ? "s" : ""} y aún activa${rentasVencidas.length > 1 ? "s" : ""}.`, ruta: "/dashboard/rentas" });
         const rentasSemana = rentaList.filter((r: any) => r.estatus === "activa" && r.fechaFin && new Date(r.fechaFin) > hoy && new Date(r.fechaFin) <= en7dias);
-        if (rentasSemana.length > 0) {
-          nuevasAlertas.push({
-            id: "rentas-semana", tipo: "advertencia", icon: "📅",
-            mensaje: `${rentasSemana.length} renta${rentasSemana.length > 1 ? "s" : ""} vence${rentasSemana.length > 1 ? "n" : ""} en los próximos 7 días.`,
-            ruta: "/dashboard/rentas",
-          });
-        }
+        if (rentasSemana.length > 0) nuevasAlertas.push({ id: "rentas-semana", tipo: "advertencia", icon: "📅", mensaje: `${rentasSemana.length} renta${rentasSemana.length > 1 ? "s" : ""} vence${rentasSemana.length > 1 ? "n" : ""} en los próximos 7 días.`, ruta: "/dashboard/rentas" });
         const rentasMes = rentaList.filter((r: any) => r.estatus === "activa" && r.fechaFin && new Date(r.fechaFin) > en7dias && new Date(r.fechaFin) <= en30dias);
-        if (rentasMes.length > 0) {
-          nuevasAlertas.push({
-            id: "rentas-mes", tipo: "info", icon: "📅",
-            mensaje: `${rentasMes.length} renta${rentasMes.length > 1 ? "s" : ""} vence${rentasMes.length > 1 ? "n" : ""} en los próximos 30 días.`,
-            ruta: "/dashboard/rentas",
-          });
-        }
+        if (rentasMes.length > 0) nuevasAlertas.push({ id: "rentas-mes", tipo: "info", icon: "📅", mensaje: `${rentasMes.length} renta${rentasMes.length > 1 ? "s" : ""} vence${rentasMes.length > 1 ? "n" : ""} en los próximos 30 días.`, ruta: "/dashboard/rentas" });
         const factVencidas = facturaList.filter((f: any) => f.tipo === "factura" && f.estatus === "vigente" && f.estatusPago !== "pagada");
-        if (factVencidas.length > 0) {
-          nuevasAlertas.push({
-            id: "facturas-vencidas", tipo: "critico", icon: "💸",
-            mensaje: `${factVencidas.length} factura${factVencidas.length > 1 ? "s" : ""} sin cobrar.`,
-            ruta: "/dashboard/facturacion",
-          });
-        }
+        if (factVencidas.length > 0) nuevasAlertas.push({ id: "facturas-vencidas", tipo: "critico", icon: "💸", mensaje: `${factVencidas.length} factura${factVencidas.length > 1 ? "s" : ""} sin cobrar.`, ruta: "/dashboard/facturacion" });
       }
-
       setAlertas(nuevasAlertas);
     } catch {}
   }
@@ -243,16 +185,12 @@ export default function Dashboard() {
   };
 
   return (
-    <div className={`dash-root${sidebarCollapsed ? " sidebar-is-collapsed" : ""}`}>
+    <div className={`dash-root${sidebarCollapsed ? " sidebar-is-collapsed" : ""}${HALLOWEEN_ENABLED ? " hw-theme" : ""}`}>
       <div className={`sidebar-overlay ${sidebarOpen ? "active" : ""}`} onClick={() => setSidebarOpen(false)} />
 
       {/* ── Topbar móvil ── */}
       <div className="mobile-topbar">
-        <img
-          src={LOGO_HORIZONTAL}
-          alt="Control Pipsa"
-          className="mobile-topbar-logo"
-        />
+        <img src={LOGO_HORIZONTAL} alt="Control Pipsa" className="mobile-topbar-logo" />
         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(p => !p)}>
           {sidebarOpen ? "✕" : "☰"}
         </button>
@@ -260,22 +198,23 @@ export default function Dashboard() {
 
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}${sidebarCollapsed ? " collapsed" : ""}`}>
 
-        {/* ── Brand: logo horizontal (expandido) / ícono cuadrado (colapsado) ── */}
-        <div className="sidebar-brand">
+        {/* ── Halloween: telaraña en esquina superior del sidebar ── */}
+        {HALLOWEEN_ENABLED && (
+          <SpiderWeb style={{
+            position: "absolute",
+            top: 0, left: 0,
+            width: 90, height: 90,
+            opacity: 0.55,
+            zIndex: 0,
+          }} />
+        )}
+
+        <div className="sidebar-brand" style={{ position: "relative", zIndex: 1 }}>
           {sidebarCollapsed ? (
-            <img
-              src={APP_ICON}
-              alt="Control Pipsa"
-              className="sidebar-brand-icon-only"
-            />
+            <img src={APP_ICON} alt="Control Pipsa" className="sidebar-brand-icon-only" />
           ) : (
-            <img
-              src={LOGO_HORIZONTAL}
-              alt="Control Pipsa"
-              className="sidebar-brand-logo"
-            />
+            <img src={LOGO_HORIZONTAL} alt="Control Pipsa" className="sidebar-brand-logo" />
           )}
-          {/* Botón colapsar — solo visible en escritorio */}
           <button
             className="sidebar-collapse-btn"
             onClick={() => setSidebarCollapsed(p => !p)}
@@ -286,7 +225,6 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ── Perfil de usuario ── */}
         {!sidebarCollapsed && (
           <div className="sidebar-user">
             <div className="sidebar-avatar-placeholder">{nombre?.[0]?.toUpperCase() ?? "?"}</div>
@@ -335,13 +273,22 @@ export default function Dashboard() {
           rol === "cliente" ? null : (
             <div key="dashboard-home" className="page-transition">
               <div className="page-header">
-                <div>
-                  <h1 className="page-title">{getSaludo(nombre)}</h1>
-                  <p className="page-subtitle">Aquí está el resumen de hoy.</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div>
+                    <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {getSaludo(nombre)}
+                      {/* ── Halloween: luna junto al saludo ── */}
+                      {HALLOWEEN_ENABLED && (
+                        <MoonSvg style={{ opacity: 0.7, marginTop: 2, flexShrink: 0 }} />
+                      )}
+                    </h1>
+                    <p className="page-subtitle">Aquí está el resumen de hoy.</p>
+                  </div>
                 </div>
               </div>
 
               <div className="page-content">
+
                 {alertas.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
                     {alertas.map(a => {
@@ -370,8 +317,15 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* ── Halloween: murciélagos en el fondo del dashboard ── */}
+                {HALLOWEEN_ENABLED && (
+                  <div style={{ position: "relative" }}>
+                    <FloatingBats />
+                  </div>
+                )}
+
                 <div className="stats-grid">
-                  <div className="stat-card" onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
+                  <div className={`stat-card${HALLOWEEN_ENABLED ? " hw-card-orange" : ""}`} onClick={() => navigate("/dashboard/montacargas")} style={{ cursor: "pointer" }}>
                     <span className="stat-card-icon">✅</span>
                     <p className="stat-card-value" style={{ color: "var(--green)" }}>{stats.disponibles}</p>
                     <p className="stat-card-label">Disponibles</p>
@@ -395,7 +349,7 @@ export default function Dashboard() {
                     <p className="stat-card-label">Servicios Abiertos</p>
                     <div className="stat-card-accent" style={{ background: "var(--accent)" }} />
                   </div>
-                  <div className="stat-card" onClick={() => navigate("/dashboard/rentas")} style={{ cursor: "pointer" }}>
+                  <div className={`stat-card${HALLOWEEN_ENABLED ? " hw-card-purple" : ""}`} onClick={() => navigate("/dashboard/rentas")} style={{ cursor: "pointer" }}>
                     <span className="stat-card-icon">📅</span>
                     <p className="stat-card-value" style={{ color: "var(--purple)" }}>{stats.rentasVencer}</p>
                     <p className="stat-card-label">Rentas por Vencer</p>
@@ -437,6 +391,9 @@ export default function Dashboard() {
       </div>
 
       <MontaScrollbar targetRef={mainRef} />
+
+      {/* ── Halloween: fantasma flotante (toda la app) ── */}
+      {HALLOWEEN_ENABLED && <Ghost />}
     </div>
   );
 }
