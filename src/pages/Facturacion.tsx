@@ -104,6 +104,20 @@ type Factura = {
   createdAt: string;
 };
 
+// ── Estado de idempotencia de REP expuesto al componente ──
+type EstadoRep =
+  | "idle"                         // sin operación activa
+  | "incierto"                     // EF no respondió; requiere reconciliación manual
+  | "timbrado_pendiente_aplicacion"; // EF timbró pero falló guardado local
+
+type BlockeoRep = {
+  estado: EstadoRep;
+  folioEF?: number;
+  operacionId?: string;
+  uuidEF?: string;
+  mensaje: string;
+};
+
 const emptyReceptor: Receptor = {
   rfc: "", nombre: "", regimenFiscal: "601", usoCfdi: "G03", cp: "", email: "",
 };
@@ -119,7 +133,12 @@ function calcTotales(partidas: Partida[]) {
   const base       = subtotal - descuentos;
   const iva        = parseFloat((base * 0.16).toFixed(2));
   const total      = parseFloat((base + iva).toFixed(2));
-  return { subtotal: parseFloat(subtotal.toFixed(2)), descuentos: parseFloat(descuentos.toFixed(2)), base: parseFloat(base.toFixed(2)), iva, total };
+  return {
+    subtotal:   parseFloat(subtotal.toFixed(2)),
+    descuentos: parseFloat(descuentos.toFixed(2)),
+    base:       parseFloat(base.toFixed(2)),
+    iva, total,
+  };
 }
 
 // ── Buscador de clientes ──
@@ -129,7 +148,7 @@ function BuscadorCliente({ onSelect }: { onSelect: (c: any) => void }) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen]       = useState(false);
   const ref                   = useRef<HTMLDivElement>(null);
-  const timer                 = useRef<any>(null);
+  const timer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -141,7 +160,7 @@ function BuscadorCliente({ onSelect }: { onSelect: (c: any) => void }) {
 
   function buscar(q: string) {
     setQuery(q);
-    clearTimeout(timer.current);
+    if (timer.current) clearTimeout(timer.current);
     if (q.length < 2) { setResults([]); setOpen(false); return; }
     timer.current = setTimeout(async () => {
       setLoading(true);
@@ -201,7 +220,7 @@ function BuscadorProducto({ onSelect }: { onSelect: (p: ProductoFiscal) => void 
   const [loading, setLoading] = useState(false);
   const [open, setOpen]       = useState(false);
   const ref                   = useRef<HTMLDivElement>(null);
-  const timer                 = useRef<any>(null);
+  const timer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -213,7 +232,7 @@ function BuscadorProducto({ onSelect }: { onSelect: (p: ProductoFiscal) => void 
 
   function buscar(q: string) {
     setQuery(q);
-    clearTimeout(timer.current);
+    if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setLoading(true);
       try {
@@ -225,9 +244,7 @@ function BuscadorProducto({ onSelect }: { onSelect: (p: ProductoFiscal) => void 
     }, 300);
   }
 
-  useEffect(() => {
-    buscar("");
-  }, []);
+  useEffect(() => { buscar(""); }, []);
 
   function select(p: ProductoFiscal) {
     onSelect(p);
@@ -272,10 +289,10 @@ function BuscadorProducto({ onSelect }: { onSelect: (p: ProductoFiscal) => void 
 
 // ── Modal gestión de productos fiscales ──
 function ModalProductos({ onClose }: { onClose: () => void }) {
-  const [productos, setProductos]   = useState<ProductoFiscal[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [form, setForm]             = useState({ claveSAT: "", claveUnidad: "E48", unidad: "Unidad de servicio", descripcion: "" });
-  const [saving, setSaving]         = useState(false);
+  const [productos, setProductos] = useState<ProductoFiscal[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [form, setForm]           = useState({ claveSAT: "", claveUnidad: "E48", unidad: "Unidad de servicio", descripcion: "" });
+  const [saving, setSaving]       = useState(false);
 
   useEffect(() => { loadProductos(); }, []);
 
@@ -310,10 +327,8 @@ function ModalProductos({ onClose }: { onClose: () => void }) {
         <button className="modal-close" onClick={onClose}>✕</button>
         <h2 className="modal-title">📦 Catálogo de productos y servicios fiscales</h2>
         <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>
-          Estos productos se auto-llenan en las partidas de la factura — equivalente al catálogo de Enlace Fiscal.
+          Estos productos se auto-llenan en las partidas de la factura.
         </p>
-
-        {/* Form nuevo producto */}
         <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12, marginBottom: 16 }}>
           <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>+ Nuevo producto/servicio</p>
           <div className="form-grid">
@@ -329,7 +344,7 @@ function ModalProductos({ onClose }: { onClose: () => void }) {
             </div>
             <div className="form-group span-2" style={{ margin: 0 }}>
               <label className="form-label">Descripción *</label>
-              <input className="form-input" value={form.descripcion} onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Servicio de mantenimiento correctivo de montacargas" onKeyDown={e => { if (e.key === "Enter") guardar(); }} />
+              <input className="form-input" value={form.descripcion} onChange={e => setForm(p => ({ ...p, descripcion: e.target.value }))} placeholder="Ej. Servicio de mantenimiento correctivo" onKeyDown={e => { if (e.key === "Enter") guardar(); }} />
             </div>
           </div>
           <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
@@ -338,8 +353,6 @@ function ModalProductos({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </div>
-
-        {/* Lista */}
         {loading ? (
           <div className="loading-state"><div className="spinner" /></div>
         ) : productos.length === 0 ? (
@@ -358,7 +371,6 @@ function ModalProductos({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         )}
-
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={onClose}>Cerrar</button>
         </div>
@@ -398,11 +410,22 @@ export default function Facturacion() {
   const [notasFactura, setNotasFactura] = useState("");
   const [saving, setSaving]             = useState(false);
 
-  const [repMonto, setRepMonto]   = useState<number>(0);
-  const [repForma, setRepForma]   = useState("03");
-  const [repFecha, setRepFecha]   = useState(new Date().toISOString().split("T")[0]);
-  const [repRef, setRepRef]       = useState("");
-  const [savingRep, setSavingRep] = useState(false);
+  // ── Estado REP con idempotencia ──────────────────────────────────────────
+  // claveIdempotencia: UUID generado UNA VEZ al abrir el modal de REP.
+  // Se reutiliza en todos los reintentos de esa misma operación.
+  // Solo se renueva cuando la operación termina correctamente (timbrado)
+  // o cuando EF confirma un fallo claro (fallido).
+  // En estado "incierto" o "timbrado_pendiente_aplicacion" NO se renueva —
+  // el formulario queda bloqueado hasta que el usuario reconcilie manualmente.
+  const [repClaveIdempotencia, setRepClaveIdempotencia] = useState<string>("");
+  const [repMonto, setRepMonto]     = useState<number>(0);
+  const [repForma, setRepForma]     = useState("03");
+  const [repFecha, setRepFecha]     = useState(new Date().toISOString().split("T")[0]);
+  const [repRef, setRepRef]         = useState("");
+  const [savingRep, setSavingRep]   = useState(false);
+  // blockeoRep: cuando estado === "incierto" o "timbrado_pendiente_aplicacion",
+  // el formulario queda bloqueado y se muestra el mensaje de conciliación.
+  const [blockeoRep, setBlockeoRep] = useState<BlockeoRep | null>(null);
 
   const [motivoCancelacion, setMotivoCancelacion] = useState("02");
   const [savingCancelar, setSavingCancelar]       = useState(false);
@@ -473,6 +496,21 @@ export default function Facturacion() {
     }));
   }
 
+  // ── Abrir modal REP: genera clave de idempotencia única para esta operación ──
+  function abrirModalRep(f: Factura) {
+    // Generar clave nueva UNA VEZ al abrir el modal.
+    // Si ya había una operación activa (blockeoRep != null) el modal se abre
+    // en modo bloqueado y no genera nueva clave — la clave anterior persiste
+    // para que el backend pueda identificar la operación en curso.
+    setRepClaveIdempotencia(crypto.randomUUID());
+    setBlockeoRep(null); // limpia bloqueo de la factura anterior (no de la misma)
+    setRepMonto(parseFloat((f.total - f.totalPagado).toFixed(2)));
+    setRepForma("03");
+    setRepFecha(new Date().toISOString().split("T")[0]);
+    setRepRef("");
+    setModalRep(f);
+  }
+
   async function timbrar() {
     if (!receptor.rfc || !receptor.nombre || !partidas.some(p => p.descripcion.trim())) return;
     setSaving(true);
@@ -493,30 +531,142 @@ export default function Facturacion() {
       resetForm();
     } catch (e: any) {
       alert(e?.response?.data?.detalle?.AckEnlaceFiscal?.descripcionError ?? e?.response?.data?.message ?? "Error al timbrar");
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   }
 
+  // ── emitirRep: envía claveIdempotencia y maneja todos los estados ─────────
+  //
+  // Estados del backend y su manejo en el frontend:
+  //   timbrado (200 idempotente)    → ya fue timbrado antes; mostrar resultado y cerrar.
+  //   201                           → éxito nuevo; renovar clave, actualizar lista, cerrar.
+  //   incierto (502 / 409)          → NO renovar clave; bloquear formulario; mostrar folioEF.
+  //   timbrado_pendiente_aplicacion → bloquear formulario; mostrar operacionId para reaplicar.
+  //   fallido (409)                 → renovar clave (nueva operación limpia); mostrar error.
+  //   pendiente/procesando (409)    → no renovar; mostrar mensaje de espera.
+  //   error de validación (400)     → no renovar; mostrar error.
+  //
+  // setSavingRep(false) SOLO en el finally.
   async function emitirRep() {
     if (!modalRep || !repMonto) return;
+    if (!repClaveIdempotencia) return; // guard: nunca debería ocurrir
     setSavingRep(true);
     try {
-      const { data } = await api.post("/facturacion/rep", {
-        facturaId: modalRep._id, montoPagado: repMonto,
-        formaPago: repForma, fechaPago: repFecha,
+      const { data, status } = await api.post("/facturacion/rep", {
+        facturaId:          modalRep._id,
+        montoPagado:        repMonto,
+        formaPago:          repForma,
+        fechaPago:          repFecha,
         referenciaBancaria: repRef || undefined,
+        claveIdempotencia:  repClaveIdempotencia,
       });
-      setFacturas(prev => [data.rep, ...prev.map(f =>
-        f._id === modalRep._id
-          ? { ...f, totalPagado: f.totalPagado + repMonto, estatusPago: f.totalPagado + repMonto >= f.total ? "pagada" : "parcial" as any }
-          : f
-      )]);
+
+      // ── Respuesta idempotente: ya timbrado previamente ──────────────────
+      if (status === 200 && data.idempotente) {
+        alert(`ℹ️ ${data.info ?? "El REP ya fue emitido anteriormente."}`);
+        await load();
+        setModalRep(null);
+        // Renovar clave para la próxima apertura del modal
+        setRepClaveIdempotencia(crypto.randomUUID());
+        return;
+      }
+
+      // ── Éxito: nuevo REP timbrado (201) ─────────────────────────────────
+      setFacturas(prev => [
+        data.rep,
+        ...prev.map((f) =>
+          f._id === modalRep._id
+            ? {
+                ...f,
+                totalPagado: f.totalPagado + repMonto,
+                estatusPago: (f.totalPagado + repMonto >= f.total ? "pagada" : "parcial") as Factura["estatusPago"],
+              }
+            : f
+        ),
+      ]);
       setModalRep(null);
-      setRepMonto(0); setRepForma("03"); setRepFecha(new Date().toISOString().split("T")[0]); setRepRef("");
+      // Renovar clave — esta operación terminó; la próxima será distinta
+      setRepClaveIdempotencia(crypto.randomUUID());
+      setBlockeoRep(null);
+
     } catch (e: any) {
-      alert(e?.response?.data?.message ?? "Error al emitir REP");
+      const respData  = e?.response?.data ?? {};
+      const httpStatus = e?.response?.status ?? 0;
+      const estado    = respData.estado as string | undefined;
+      const msg       = respData.message ?? "Error al emitir REP";
+      const folioEF   = respData.folioEF as number | undefined;
+      const opId      = respData.operacionId as string | undefined;
+      const uuidEF    = respData.uuidEF as string | undefined;
+
+      // ── Incierto: EF no respondió — no renovar clave, bloquear modal ────
+      if (estado === "incierto" || httpStatus === 502) {
+        setBlockeoRep({
+          estado:      "incierto",
+          folioEF,
+          operacionId: opId,
+          mensaje:     msg,
+        });
+        // NO renovar repClaveIdempotencia — el usuario debe reconciliar
+        // antes de poder iniciar otra operación sobre esta factura.
+        return;
+      }
+
+      // ── REP timbrado pero no registrado — bloquear hasta reaplicación ───
+      if (estado === "timbrado_pendiente_aplicacion") {
+        setBlockeoRep({
+          estado:      "timbrado_pendiente_aplicacion",
+          folioEF,
+          operacionId: opId,
+          uuidEF,
+          mensaje:     msg,
+        });
+        // NO renovar — el CFDI ya existe en SAT; usar endpoint de reaplicación.
+        return;
+      }
+
+      // ── Fallido: EF rechazó claramente — renovar clave para reintento ───
+      if (estado === "fallido") {
+        alert(`❌ ${msg}\n\nPuedes volver a intentar con una nueva operación.`);
+        setRepClaveIdempotencia(crypto.randomUUID());
+        return;
+      }
+
+      // ── En proceso / validación / red — mostrar error, no renovar ────────
+      alert(msg);
+
+    } finally {
+      // setSavingRep(false) SIEMPRE aquí, nunca en otro lugar
+      setSavingRep(false);
     }
-    finally { setSavingRep(false); }
+  }
+
+  // ── Reaplicar REP localmente (timbrado_pendiente_aplicacion) ─────────────
+  async function reaplicarRep(operacionId: string) {
+    if (!modalRep) return;
+    setSavingRep(true);
+    try {
+      const { data } = await api.post(`/facturacion/rep/aplicar/${operacionId}`);
+      setFacturas(prev => [
+        data.rep,
+        ...prev.map((f) =>
+          f._id === modalRep._id
+            ? {
+                ...f,
+                totalPagado: data.factura?.totalPagado ?? f.totalPagado,
+                estatusPago: (data.factura?.estatusPago ?? f.estatusPago) as Factura["estatusPago"],
+              }
+            : f
+        ),
+      ]);
+      setModalRep(null);
+      setBlockeoRep(null);
+      setRepClaveIdempotencia(crypto.randomUUID());
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? "Error al reaplicar el REP");
+    } finally {
+      setSavingRep(false);
+    }
   }
 
   async function cancelar() {
@@ -528,21 +678,22 @@ export default function Facturacion() {
       setModalCancelar(null);
     } catch (e: any) {
       alert(e?.response?.data?.message ?? "Error al cancelar");
+    } finally {
+      setSavingCancelar(false);
     }
-    finally { setSavingCancelar(false); }
   }
 
   const totales = calcTotales(partidas);
   const simb    = moneda === "USD" ? "USD $" : "$";
 
   const filtered = facturas.filter(f => {
-    if (filtroTipo !== "todos"    && f.tipo       !== filtroTipo)    return false;
-    if (filtroEstatus !== "todos" && f.estatus    !== filtroEstatus) return false;
-    if (filtroPago !== "todos"    && f.estatusPago !== filtroPago)   return false;
+    if (filtroTipo !== "todos"    && f.tipo        !== filtroTipo)    return false;
+    if (filtroEstatus !== "todos" && f.estatus     !== filtroEstatus) return false;
+    if (filtroPago !== "todos"    && f.estatusPago !== filtroPago)    return false;
     if (search) {
       const q = search.toLowerCase();
       return (
-        f.folio.toLowerCase().includes(q) ||
+        f.folio.toLowerCase().includes(q)        ||
         (f.uuid ?? "").toLowerCase().includes(q) ||
         f.receptor.nombre.toLowerCase().includes(q) ||
         f.receptor.rfc.toLowerCase().includes(q)
@@ -551,15 +702,20 @@ export default function Facturacion() {
     return true;
   });
 
+  // fmtFecha: extrae YYYY-MM-DD antes de cualquier conversión UTC para evitar
+  // el desfase de zona horaria (México es UTC-6/UTC-5).
+  function fmtFecha(d?: string) {
+    if (!d) return "—";
+    const [y, m, day] = d.slice(0, 10).split("-").map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString("es-MX", {
+      day: "2-digit", month: "short", year: "numeric",
+    });
+  }
+
   const totalVigente   = facturas.filter(f => f.estatus === "vigente" && f.tipo === "factura").reduce((a, f) => a + f.total, 0);
   const totalCobrado   = facturas.filter(f => f.tipo === "factura").reduce((a, f) => a + f.totalPagado, 0);
   const totalPendiente = facturas.filter(f => f.estatus === "vigente" && f.tipo === "factura" && f.estatusPago !== "pagada").reduce((a, f) => a + (f.total - f.totalPagado), 0);
   const totalReps      = facturas.filter(f => f.tipo === "rep").length;
-
-  function fmtFecha(d?: string) {
-    if (!d) return "—";
-    return new Date(d).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
-  }
 
   function badgePago(f: Factura) {
     if (f.tipo !== "factura") return null;
@@ -569,7 +725,7 @@ export default function Facturacion() {
       pagada:    { label: "Pagada",   color: "#15803d", bg: "rgba(34,197,94,0.15)"  },
       no_aplica: { label: "N/A",      color: "#6b7280", bg: "rgba(107,114,128,0.15)" },
     };
-    const s = map[f.estatusPago] ?? map.sin_pago;
+    const s = map[f.estatusPago] ?? map["sin_pago"];
     return <span style={{ fontSize: "0.72rem", fontWeight: 700, color: s.color, background: s.bg, padding: "2px 8px", borderRadius: 20 }}>{s.label}</span>;
   }
 
@@ -597,8 +753,8 @@ export default function Facturacion() {
       <div className="page-content">
         <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
           {[
-            { label: "Total facturado", val: `$${totalVigente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`,   color: "var(--accent)", icon: "🧾" },
-            { label: "Total cobrado",   val: `$${totalCobrado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`,   color: "var(--green)",  icon: "✅" },
+            { label: "Total facturado", val: `$${totalVigente.toLocaleString("es-MX",   { minimumFractionDigits: 2 })}`, color: "var(--accent)", icon: "🧾" },
+            { label: "Total cobrado",   val: `$${totalCobrado.toLocaleString("es-MX",   { minimumFractionDigits: 2 })}`, color: "var(--green)",  icon: "✅" },
             { label: "Por cobrar",      val: `$${totalPendiente.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`, color: "var(--red)",    icon: "⏳" },
             { label: "REPs emitidos",   val: totalReps,                                                                    color: "var(--blue)",   icon: "💳" },
           ].map(s => (
@@ -693,7 +849,7 @@ export default function Facturacion() {
                         {f.urlPdf && <a className="btn btn-secondary btn-sm" href={f.urlPdf} target="_blank" rel="noreferrer" title="PDF" style={{ textDecoration: "none" }}>📄</a>}
                         {f.urlXml && <a className="btn btn-secondary btn-sm" href={f.urlXml} target="_blank" rel="noreferrer" title="XML" style={{ textDecoration: "none" }}>📋</a>}
                         {f.tipo === "factura" && f.estatus === "vigente" && f.estatusPago !== "pagada" && canFacturar && (
-                          <button className="btn btn-primary btn-sm" onClick={() => { setModalRep(f); setRepMonto(parseFloat((f.total - f.totalPagado).toFixed(2))); }} title="Registrar pago">💳 REP</button>
+                          <button className="btn btn-primary btn-sm" onClick={() => abrirModalRep(f)} title="Registrar pago">💳 REP</button>
                         )}
                         {f.estatus === "vigente" && canFacturar && (
                           <button className="btn btn-danger btn-sm" onClick={() => { setModalCancelar(f); setMotivoCancelacion("02"); }} title="Cancelar">🚫</button>
@@ -715,7 +871,6 @@ export default function Facturacion() {
             <button className="modal-close" onClick={() => { setModalFactura(false); resetForm(); }}>✕</button>
             <h2 className="modal-title">🧾 Nueva Factura — Serie M</h2>
 
-            {/* Receptor */}
             <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 14, marginBottom: 14 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>📋 Datos del receptor</p>
               <div style={{ marginBottom: 10 }}>
@@ -754,7 +909,6 @@ export default function Facturacion() {
               </div>
             </div>
 
-            {/* Moneda y pago */}
             <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 14, marginBottom: 14 }}>
               <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 10 }}>💰 Pago y moneda</p>
               <div className="form-grid">
@@ -790,7 +944,7 @@ export default function Facturacion() {
                   <div className="form-group">
                     <label className="form-label">Forma de pago</label>
                     <select className="form-select" value={formaPago} onChange={e => setFormaPago(e.target.value)}>
-                      {FORMAS_PAGO.map(f => <option key={f.clave} value={f.clave}>{f.clave} — {f.desc}</option>)}
+                      {FORMAS_PAGO.map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.desc}</option>)}
                     </select>
                   </div>
                 )}
@@ -805,7 +959,6 @@ export default function Facturacion() {
               </div>
             </div>
 
-            {/* Partidas */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase" }}>📦 Conceptos / Partidas</p>
@@ -814,12 +967,10 @@ export default function Facturacion() {
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {partidas.map((p, i) => (
                   <div key={i} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12 }}>
-                    {/* Buscador de producto */}
                     <div className="form-group" style={{ margin: "0 0 10px" }}>
                       <label className="form-label">Buscar en catálogo</label>
                       <BuscadorProducto onSelect={prod => onProductoSelect(i, prod)} />
                     </div>
-
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label className="form-label">Clave prod/serv SAT</label>
@@ -858,8 +1009,6 @@ export default function Facturacion() {
                   </div>
                 ))}
               </div>
-
-              {/* Totales */}
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                 <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Subtotal:</span><span>{simb}{totales.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
                 {totales.descuentos > 0 && <div style={{ display: "flex", gap: 24, fontSize: "0.88rem", color: "var(--text-muted)" }}><span>Descuentos:</span><span>-{simb}{totales.descuentos.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>}
@@ -899,36 +1048,96 @@ export default function Facturacion() {
               <strong style={{ color: "var(--text)" }}>{modalRep.folio}</strong> — {modalRep.receptor.nombre}
             </p>
             <div style={{ padding: "10px 14px", background: "var(--surface2)", borderRadius: "var(--radius-sm)", marginBottom: 16, fontSize: "0.85rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--text-muted)" }}>Total factura:</span><span style={{ fontWeight: 700 }}>${modalRep.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ color: "var(--text-muted)" }}>Ya pagado:</span><span style={{ color: "var(--green)", fontWeight: 700 }}>${modalRep.totalPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 6 }}><span style={{ color: "var(--text-muted)", fontWeight: 700 }}>Por cobrar:</span><span style={{ color: "var(--accent)", fontWeight: 800, fontSize: "1rem" }}>${(modalRep.total - modalRep.totalPagado).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span></div>
-            </div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Monto del pago *</label>
-                <input className="form-input" type="number" step="0.01" value={repMonto} onChange={e => setRepMonto(+e.target.value)} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Total factura:</span>
+                <span style={{ fontWeight: 700 }}>${modalRep.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="form-group">
-                <label className="form-label">Fecha de pago *</label>
-                <input className="form-input" type="date" value={repFecha} onChange={e => setRepFecha(e.target.value)} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "var(--text-muted)" }}>Ya pagado:</span>
+                <span style={{ color: "var(--green)", fontWeight: 700 }}>${modalRep.totalPagado.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
-              <div className="form-group">
-                <label className="form-label">Forma de pago</label>
-                <select className="form-select" value={repForma} onChange={e => setRepForma(e.target.value)}>
-                  {FORMAS_PAGO.filter(f => f.clave !== "99").map(f => <option key={f.clave} value={f.clave}>{f.clave} — {f.desc}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Referencia bancaria</label>
-                <input className="form-input" value={repRef} onChange={e => setRepRef(e.target.value)} placeholder="Últimos 4 dígitos o referencia" />
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 6, marginTop: 6 }}>
+                <span style={{ color: "var(--text-muted)", fontWeight: 700 }}>Por cobrar:</span>
+                <span style={{ color: "var(--accent)", fontWeight: 800, fontSize: "1rem" }}>${(modalRep.total - modalRep.totalPagado).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModalRep(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={emitirRep} disabled={savingRep || !repMonto}>
-                {savingRep ? "Timbrando REP..." : "💳 Emitir REP"}
-              </button>
-            </div>
+
+            {/* ── Banner de bloqueo por estado incierto o pendiente_aplicacion ── */}
+            {blockeoRep && (
+              <div style={{ padding: "12px 14px", background: blockeoRep.estado === "incierto" ? "rgba(239,68,68,0.08)" : "rgba(245,158,11,0.10)", border: `1px solid ${blockeoRep.estado === "incierto" ? "var(--red)" : "var(--accent)"}`, borderRadius: "var(--radius-sm)", marginBottom: 16 }}>
+                <p style={{ fontWeight: 700, fontSize: "0.88rem", color: blockeoRep.estado === "incierto" ? "var(--red)" : "var(--accent)", marginBottom: 6 }}>
+                  {blockeoRep.estado === "incierto"
+                    ? "⚠️ Operación pendiente de conciliación"
+                    : "⚠️ REP timbrado — registro pendiente"}
+                </p>
+                <p style={{ fontSize: "0.82rem", color: "var(--text)", marginBottom: 8 }}>{blockeoRep.mensaje}</p>
+                {blockeoRep.folioEF !== undefined && (
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                    Folio interno EF: <strong style={{ fontFamily: "monospace" }}>{blockeoRep.folioEF}</strong>
+                  </p>
+                )}
+                {blockeoRep.uuidEF && (
+                  <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", wordBreak: "break-all" }}>
+                    UUID SAT: <strong style={{ fontFamily: "monospace" }}>{blockeoRep.uuidEF}</strong>
+                  </p>
+                )}
+                {blockeoRep.estado === "incierto" && (
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
+                    Verifica en el portal de Enlace Fiscal si el REP fue timbrado antes de continuar.
+                    Si no fue timbrado, cierra y abre el modal nuevamente para una nueva operación.
+                  </p>
+                )}
+                {blockeoRep.estado === "timbrado_pendiente_aplicacion" && blockeoRep.operacionId && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    style={{ marginTop: 10, width: "100%" }}
+                    onClick={() => reaplicarRep(blockeoRep.operacionId!)}
+                    disabled={savingRep}
+                  >
+                    {savingRep ? "Registrando..." : "🔄 Registrar REP localmente"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Formulario de pago — deshabilitado si hay bloqueo activo */}
+            {!blockeoRep && (
+              <>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label className="form-label">Monto del pago *</label>
+                    <input className="form-input" type="number" step="0.01" value={repMonto} onChange={e => setRepMonto(+e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Fecha de pago *</label>
+                    <input className="form-input" type="date" value={repFecha} onChange={e => setRepFecha(e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Forma de pago</label>
+                    <select className="form-select" value={repForma} onChange={e => setRepForma(e.target.value)}>
+                      {FORMAS_PAGO.filter(fp => fp.clave !== "99").map(fp => <option key={fp.clave} value={fp.clave}>{fp.clave} — {fp.desc}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Referencia bancaria</label>
+                    <input className="form-input" value={repRef} onChange={e => setRepRef(e.target.value)} placeholder="Últimos 4 dígitos o referencia" />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-secondary" onClick={() => setModalRep(null)}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={emitirRep} disabled={savingRep || !repMonto}>
+                    {savingRep ? "Timbrando REP..." : "💳 Emitir REP"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Footer cuando hay bloqueo */}
+            {blockeoRep && (
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setModalRep(null)}>Cerrar</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -957,7 +1166,7 @@ export default function Facturacion() {
               </select>
             </div>
             <div style={{ padding: "10px 14px", background: "rgba(239,68,68,0.08)", border: "1px solid var(--red)", borderRadius: "var(--radius-sm)", fontSize: "0.82rem", color: "var(--red)", marginBottom: 12 }}>
-              ⚠️ Esta acción cancela el CFDI ante el SAT. El receptor recibirá una notificación.
+              ⚠️ Esta acción cancela el CFDI ante el SAT.
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModalCancelar(null)}>Cancelar</button>
