@@ -337,6 +337,9 @@ export default function Cotizaciones() {
   const [facturaModal, setFacturaModal]               = useState<Cotizacion | null>(null);
   const [numeroFacturaInput, setNumeroFacturaInput]   = useState("");
   const [fechaPagoInput, setFechaPagoInput]           = useState("");
+  const [pagoModal, setPagoModal]                     = useState<Cotizacion | null>(null);
+  const [fechaPagoEdit, setFechaPagoEdit]             = useState("");
+  const [savingPago, setSavingPago]                   = useState(false);
   const [form, setForm]                               = useState<any>(emptyForm);
   const [saving, setSaving]                           = useState(false);
   const [savingComentario, setSavingComentario]       = useState(false);
@@ -444,6 +447,20 @@ export default function Cotizaciones() {
       cursoDC3: c.cursoDC3 ?? { ...emptyCursoDC3 },
     });
     setModal(true);
+  }
+
+  async function guardarFechaPago() {
+    if (!pagoModal) return;
+    setSavingPago(true);
+    try {
+      const { data } = await api.put(`/cotizaciones/${pagoModal._id}`, {
+        fechaPago: fechaPagoEdit || null,
+      });
+      setCotizaciones(prev => prev.map(c => c._id === pagoModal._id ? { ...c, ...data } : c));
+      setPagoModal(null);
+      setFechaPagoEdit("");
+    } catch {}
+    finally { setSavingPago(false); }
   }
 
   async function marcarFacturada() {
@@ -1234,6 +1251,7 @@ export default function Cotizaciones() {
                             { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
                             { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
                             ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); setFechaPagoInput(""); } }] : []),
+                            ...( c.estatus === "facturada" ? [{ label: c.fechaPago ? "✏️ Editar fecha de pago" : "💳 Registrar fecha de pago", icon: "💳", onClick: () => { setPagoModal(c); setFechaPagoEdit(c.fechaPago ? c.fechaPago.split("T")[0] : ""); } }] : []),
                             ...( c.estatus === "activa"    ? [{ label: "Cancelar",         icon: "🚫", onClick: () => cambiarEstatus(c._id, "cancelada") }] : []),
                             ...( canDelete                 ? [{ label: "Eliminar",         icon: "🗑️", onClick: () => remove(c._id), danger: true }] : []),
                           ]} />
@@ -1466,6 +1484,78 @@ export default function Cotizaciones() {
               <button className="btn btn-secondary" onClick={() => setFacturaModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={marcarFacturada} disabled={saving || !numeroFacturaInput.trim()}>
                 {saving ? "Guardando..." : "✅ Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal registrar / editar fecha de pago ── */}
+      {pagoModal && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setPagoModal(null); }}>
+          <div className="modal" style={{ maxWidth: 380 }}>
+            <button className="modal-close" onClick={() => setPagoModal(null)}>✕</button>
+            <h2 className="modal-title">💳 Fecha de pago</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.88rem", marginBottom: 16 }}>
+              <strong style={{ color: "var(--text)" }}>{pagoModal.folio}</strong>
+              {pagoModal.numeroFactura && (
+                <span style={{ marginLeft: 6, color: "var(--text-muted)" }}>· Factura #{pagoModal.numeroFactura}</span>
+              )}
+            </p>
+            <div className="form-group">
+              <label className="form-label">
+                Fecha en que PIPSA recibió el pago
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                  (a partir de aquí se calcula la comisión)
+                </span>
+              </label>
+              <input className="form-input" type="date" value={fechaPagoEdit} autoFocus
+                onChange={e => setFechaPagoEdit(e.target.value)} />
+              {fechaPagoEdit && (() => {
+                const dias = Math.round(
+                  (new Date(fechaPagoEdit).getTime() - new Date(pagoModal.fecha).getTime())
+                  / (1000 * 60 * 60 * 24)
+                );
+                const pct   = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
+                const monto = pagoModal.total * (pct / 100);
+                return (
+                  <div style={{
+                    marginTop: 6, padding: "8px 12px",
+                    background: pct > 0 ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                    border: `1px solid ${pct > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                    borderRadius: "var(--radius-sm)", fontSize: "0.78rem", lineHeight: 1.6,
+                  }}>
+                    <strong>{dias} días de cobro</strong>
+                    {" → "}
+                    <strong style={{ color: pct > 0 ? "var(--green)" : "var(--red)" }}>
+                      {pct}% de comisión
+                    </strong>
+                    {pct > 0 && (
+                      <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                    {pct === 0 && (
+                      <span style={{ color: "var(--red)", marginLeft: 6 }}>requiere autorización de Dirección</span>
+                    )}
+                    <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>
+                      ⚠ El % final depende también del margen bruto. Consulta la política de comisiones.
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            {pagoModal.fechaPago && (
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+                Fecha actual: {new Date(pagoModal.fechaPago).toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}
+              </p>
+            )}
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setPagoModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardarFechaPago}
+                disabled={savingPago || !fechaPagoEdit}
+                style={{ background: "var(--green)", color: "#fff" }}>
+                {savingPago ? "Guardando..." : "✅ Guardar"}
               </button>
             </div>
           </div>
