@@ -152,8 +152,6 @@ const TOOLTIPS: Record<string, string> = {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function ReporteVentas() {
-  const rol = localStorage.getItem("rol") ?? "";
-
   // ── Filtros ──────────────────────────────────────────────────────────────
   const [desde,     setDesde]    = useState(primerDiaMes());
   const [hasta,     setHasta]    = useState(hoy());
