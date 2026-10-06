@@ -1451,8 +1451,13 @@ export default function Cotizaciones() {
                   (new Date(fechaPagoInput).getTime() - new Date(facturaModal.fecha).getTime())
                   / (1000 * 60 * 60 * 24)
                 );
+                if (dias < 0) return (
+                  <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--red)" }}>
+                    ⚠ La fecha de pago no puede ser anterior a la fecha de la cotización ({new Date(facturaModal.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}).
+                  </div>
+                );
                 const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
-                const monto = facturaModal.total * (pct / 100);
+                const monto = Math.round(facturaModal.total * (pct / 100) * 100) / 100;
                 return (
                   <div style={{
                     marginTop: 6, padding: "8px 12px",
@@ -1467,7 +1472,7 @@ export default function Cotizaciones() {
                     </strong>
                     {pct > 0 && (
                       <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     )}
                     {pct === 0 && (
@@ -1516,8 +1521,13 @@ export default function Cotizaciones() {
                   (new Date(fechaPagoEdit).getTime() - new Date(pagoModal.fecha).getTime())
                   / (1000 * 60 * 60 * 24)
                 );
+                if (dias < 0) return (
+                  <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--red)" }}>
+                    ⚠ La fecha de pago no puede ser anterior a la fecha de la cotización ({new Date(pagoModal.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}).
+                  </div>
+                );
                 const pct   = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
-                const monto = pagoModal.total * (pct / 100);
+                const monto = Math.round(pagoModal.total * (pct / 100) * 100) / 100;
                 return (
                   <div style={{
                     marginTop: 6, padding: "8px 12px",
@@ -1532,7 +1542,7 @@ export default function Cotizaciones() {
                     </strong>
                     {pct > 0 && (
                       <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     )}
                     {pct === 0 && (
@@ -1553,7 +1563,7 @@ export default function Cotizaciones() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setPagoModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardarFechaPago}
-                disabled={savingPago || !fechaPagoEdit}
+                disabled={savingPago || !fechaPagoEdit || !!(fechaPagoEdit && new Date(fechaPagoEdit) < new Date(pagoModal!.fecha))}
                 style={{ background: "var(--green)", color: "#fff" }}>
                 {savingPago ? "Guardando..." : "✅ Guardar"}
               </button>

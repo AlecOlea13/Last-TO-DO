@@ -863,7 +863,7 @@ export default function Montacargas() {
                   const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
                   const base = (Number(formVenta.montoFacturado) || 0) * 1.16
                              + (Number(formVenta.montoEfectivo)  || 0);
-                  const monto = base * (pct / 100);
+                  const monto = Math.round(base * (pct / 100) * 100) / 100;
                   return (
                     <div style={{
                       marginTop: 6, padding: "8px 12px",
@@ -878,7 +878,7 @@ export default function Montacargas() {
                       </strong>
                       {pct > 0 && base > 0 && (
                         <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                          ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       )}
                       {pct === 0 && (
