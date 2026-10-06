@@ -17,6 +17,58 @@ type ResumenEquipos = {
   ticketPromedio:              number;
 };
 
+type ResumenServicios = {
+  serviciosVendidos:   number;
+  manoObraTotal:       number | null;
+  refaccionesTotal:    number | null;
+  subtotalComercial:   number;
+  ivaRegistrado:       number | null;
+  ventaComercialTotal: number;
+  ticketPromedio:      number;
+};
+
+type OperacionServicio = {
+  id:              string;
+  cotizacionId:    string;
+  folio:           string;
+  fecha:           string | null;
+  moneda:          string;
+  subtotal:        number;
+  iva:             number;
+  total:           number;
+  numeroFactura:   string | null;
+  descripcion:     string | null;
+  itemsCount:      number;
+  equipoMarca:     string | null;
+  equipoModelo:    string | null;
+  equipoSerie:     string | null;
+  fechaPagoComision: { inicio: string; fin: string; etiqueta: string } | null;
+  cliente:         { id: string | null; nombre: string } | null;
+  asesor:          { id: string | null; nombre: string } | null;
+};
+
+type PorAsesorServicio = {
+  asesorId:            string | null;
+  asesorNombre:        string;
+  serviciosVendidos:   number;
+  ventaComercialTotal: number;
+  subtotalComercial:   number;
+  ivaRegistrado:       number;
+  manoObraTotal:       number | null;
+  refaccionesTotal:    number | null;
+  ticketPromedio:      number;
+  participacion:       number;
+};
+
+type ResultadoServicios = {
+  resumen:       ResumenServicios;
+  porAsesor:     PorAsesorServicio[];
+  operaciones:   OperacionServicio[];
+  paginacion:    Paginacion;
+  disponibilidad: { facturacionConciliada: boolean; cobranza: boolean; saldo: boolean };
+  meta:          { fuenteFecha: string; advertencia: string; manoObra: string };
+};
+
 type PorAsesor = {
   asesorId:                    string | null;
   asesorNombre:                string;
@@ -165,7 +217,7 @@ export default function ReporteVentas() {
 
   // ── Datos ────────────────────────────────────────────────────────────────
   const [asesores, setAsesores]   = useState<Asesor[]>([]);
-  const [resultado, setResultado] = useState<ResultadoEquipos | null>(null);
+  const [resultado, setResultado] = useState<ResultadoEquipos | ResultadoServicios | null>(null);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
 
@@ -182,7 +234,7 @@ export default function ReporteVentas() {
 
   // ── Carga de datos ───────────────────────────────────────────────────────
   const cargar = useCallback(async (resetPage = false) => {
-    if (categoria !== "equipos") return;
+    if (categoria !== "equipos" && categoria !== "servicios") return;
     setLoading(true);
     setError(null);
     const currentPage = resetPage ? 1 : page;
@@ -195,7 +247,8 @@ export default function ReporteVentas() {
       if (asesorId !== "todos") params.asesorId = asesorId;
       if (buscar.trim())        params.buscar   = buscar.trim();
 
-      const { data } = await api.get("/reportes/ventas/equipos", { params });
+      const endpoint = categoria === "servicios" ? "/reportes/ventas/servicios" : "/reportes/ventas/equipos";
+      const { data } = await api.get(endpoint, { params });
       setResultado(data);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Error al cargar el reporte.");
@@ -227,6 +280,36 @@ export default function ReporteVentas() {
   // ── Exportar CSV ─────────────────────────────────────────────────────────
   function exportarCSV() {
     if (!resultado) return;
+
+    if (categoria === "servicios") {
+      const rs = resultado as ResultadoServicios;
+      const cabecera = [
+        "Fecha","Folio","Cliente","Asesor","No. Factura",
+        "Equipo","Subtotal","IVA","Total comercial","Comisión aprox.",
+      ].map(escaparCSV).join(",");
+      const filas = rs.operaciones.map(op => [
+        fmtFecha(op.fecha),
+        op.folio,
+        op.cliente?.nombre ?? "—",
+        op.asesor?.nombre  ?? "Sin asesor asignado",
+        op.numeroFactura   ?? "—",
+        [op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—",
+        op.subtotal,
+        op.iva,
+        op.total,
+        op.fechaPagoComision?.etiqueta ?? "—",
+      ].map(escaparCSV).join(","));
+      const csv = [cabecera, ...filas].join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = `reporte-servicios-facturados_${desde}_${hasta}.csv`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
+    // Categoría equipos (lógica original)
+    const re = resultado as ResultadoEquipos;
     const cabecera = [
       "Fecha","N° Económico","Marca","Modelo","Serie","Capacidad","Tipo",
       "Cliente","Asesor","Ref. Factura (manual)",
@@ -234,7 +317,7 @@ export default function ReporteVentas() {
       "Importe calculado","Diferencia","Requiere revisión","Notas",
     ].map(escaparCSV).join(",");
 
-    const filas = resultado.operaciones.map(op => [
+    const filas = re.operaciones.map(op => [
       fmtFecha(op.venta.fecha),
       op.numeroEconomico,
       op.marca,
@@ -268,8 +351,42 @@ export default function ReporteVentas() {
   // ── Exportar HTML imprimible ──────────────────────────────────────────────
   function exportarHTML() {
     if (!resultado) return;
-    const r = resultado.resumen;
-    const filas = resultado.operaciones.map(op => `
+
+    if (categoria === "servicios") {
+      const rs = resultado as ResultadoServicios;
+      const filas = rs.operaciones.map(op => `
+        <tr>
+          <td>${escaparHTML(fmtFecha(op.fecha))}</td>
+          <td>${escaparHTML(op.folio)}</td>
+          <td>${escaparHTML(op.cliente?.nombre ?? "—")}</td>
+          <td>${escaparHTML(op.asesor?.nombre ?? "Sin asesor")}</td>
+          <td>${escaparHTML(op.numeroFactura ?? "—")}</td>
+          <td>${escaparHTML([op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—")}</td>
+          <td style="text-align:right">$${fmtMXN(op.subtotal)}</td>
+          <td style="text-align:right">$${fmtMXN(op.iva)}</td>
+          <td style="text-align:right;font-weight:700">$${fmtMXN(op.total)}</td>
+          <td style="font-size:0.8em">${escaparHTML(op.fechaPagoComision?.etiqueta ?? "—")}</td>
+        </tr>`).join("");
+      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Servicios Facturados</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+<div class="header"><img src="${LOGO_URL}" class="logo" alt="PIPSA"/><div><h1>Reporte de Servicios Facturados</h1><p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p><p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p></div></div>
+<div class="aviso">⚠ El filtro usa la fecha de cotización, no de facturación. No. factura es texto libre.</div>
+<div class="resumen"><div class="box"><div class="val">${rs.resumen.serviciosVendidos}</div><div class="lbl">Servicios</div></div><div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(rs.resumen.ventaComercialTotal)}</div><div class="lbl">Total comercial</div></div><div class="box"><div class="val">$${fmtMXN(rs.resumen.ticketPromedio)}</div><div class="lbl">Ticket prom.</div></div></div>
+<table><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Asesor</th><th>Factura*</th><th>Equipo</th><th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Comisión</th></tr></thead><tbody>${filas || "<tr><td colspan='10'>Sin datos</td></tr>"}</tbody></table>
+<p style="font-size:7.5pt;color:#aaa">* Texto libre, sin conciliación con CFDI.</p>
+</body></html>`;
+      const blob = new Blob([html], { type: "text/html" });
+      const url  = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
+    // Categoría equipos
+    const re2 = resultado as ResultadoEquipos;
+    const r = re2.resumen;
+    const filas = re2.operaciones.map(op => `
       <tr>
         <td>${escaparHTML(fmtFecha(op.venta.fecha))}</td>
         <td>${escaparHTML(op.numeroEconomico)}</td>
@@ -287,7 +404,7 @@ export default function ReporteVentas() {
         ${op.venta.requiereRevision ? '<td style="color:#ef4444;font-size:0.75em">⚠ revisar</td>' : '<td></td>'}
       </tr>`).join("");
 
-    const porAsesorRows = resultado.porAsesor.map(g => `
+    const porAsesorRows = (re2.porAsesor as PorAsesor[]).map(g => `
       <tr>
         <td>${escaparHTML(g.asesorNombre)}</td>
         <td style="text-align:center">${g.equiposVendidos}</td>
@@ -383,13 +500,12 @@ export default function ReporteVentas() {
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const r = resultado?.resumen;
   const CATS = [
-    { key: "equipos",     label: "Equipos" },
-    { key: "rentas",      label: "Rentas" },
-    { key: "servicios",   label: "Servicios" },
-    { key: "refacciones", label: "Refacciones" },
-    { key: "otros",       label: "Otros" },
+    { key: "equipos",     label: "Equipos",     pendiente: false },
+    { key: "servicios",   label: "Servicios",   pendiente: false },
+    { key: "rentas",      label: "Rentas",       pendiente: true  },
+    { key: "refacciones", label: "Refacciones",  pendiente: true  },
+    { key: "otros",       label: "Otros",        pendiente: true  },
   ] as const;
 
   return (
@@ -404,7 +520,7 @@ export default function ReporteVentas() {
           <button
             className="btn btn-secondary"
             onClick={exportarCSV}
-            disabled={!resultado || loading || categoria !== "equipos"}
+            disabled={!resultado || loading || (categoria !== "equipos" && categoria !== "servicios")}
             title="Exportar CSV con los filtros activos"
           >
             CSV
@@ -412,7 +528,7 @@ export default function ReporteVentas() {
           <button
             className="btn btn-secondary"
             onClick={exportarHTML}
-            disabled={!resultado || loading || categoria !== "equipos"}
+            disabled={!resultado || loading || (categoria !== "equipos" && categoria !== "servicios")}
             title="Abrir reporte imprimible / PDF"
           >
             Imprimir / PDF
@@ -530,7 +646,7 @@ export default function ReporteVentas() {
               }}
             >
               {c.label}
-              {c.key !== "equipos" && (
+              {c.pendiente && (
                 <span
                   style={{
                     fontSize: "0.6rem",
@@ -571,7 +687,10 @@ export default function ReporteVentas() {
         )}
 
         {/* ══ CATEGORÍA EQUIPOS ══════════════════════════════════════════════ */}
-        {categoria === "equipos" && (
+        {categoria === "equipos" && (() => {
+          const reE = resultado as ResultadoEquipos | null;
+          const r   = reE?.resumen;
+          return (
           <>
             {/* ── Aviso de limitaciones ─────────────────────────────────────── */}
             <div
@@ -683,7 +802,7 @@ export default function ReporteVentas() {
                           </tr>
                         </thead>
                         <tbody>
-                          {resultado.porAsesor.map((g, i) => (
+                          {reE!.porAsesor.map((g, i) => (
                             <tr key={g.asesorId ?? `sin-${i}`}>
                               <td style={{ fontWeight: 600 }}>
                                 {g.asesorNombre}
@@ -815,7 +934,7 @@ export default function ReporteVentas() {
                             </tr>
                           </thead>
                           <tbody>
-                            {resultado.operaciones.map(op => (
+                            {reE!.operaciones.map(op => (
                               <tr key={op.id}>
                                 <td style={{ whiteSpace: "nowrap" }}>
                                   {fmtFecha(op.venta.fecha)}
@@ -916,7 +1035,7 @@ export default function ReporteVentas() {
                       </div>
 
                       {/* Paginación */}
-                      {resultado.paginacion.pages > 1 && (
+                      {reE!.paginacion.pages > 1 && (
                         <div
                           style={{
                             display: "flex",
@@ -930,8 +1049,8 @@ export default function ReporteVentas() {
                         >
                           <span>
                             {(page - 1) * limit + 1}–
-                            {Math.min(page * limit, resultado.paginacion.total)} de{" "}
-                            {resultado.paginacion.total}
+                            {Math.min(page * limit, reE!.paginacion.total)} de{" "}
+                            {reE!.paginacion.total}
                           </span>
                           <div style={{ display: "flex", gap: 4 }}>
                             <button
@@ -977,14 +1096,14 @@ export default function ReporteVentas() {
                             <button
                               className="btn btn-secondary btn-sm"
                               onClick={() => setPage(p => p + 1)}
-                              disabled={page === resultado.paginacion.pages}
+                              disabled={page === reE!.paginacion.pages}
                             >
                               ›
                             </button>
                             <button
                               className="btn btn-secondary btn-sm"
                               onClick={() => setPage(resultado.paginacion.pages)}
-                              disabled={page === resultado.paginacion.pages}
+                              disabled={page === reE!.paginacion.pages}
                             >
                               »
                             </button>
@@ -997,7 +1116,186 @@ export default function ReporteVentas() {
               </>
             )}
           </>
-        )}
+          );
+        })()}
+
+        {/* ══ CATEGORÍA SERVICIOS ══════════════════════════════════════════ */}
+        {categoria === "servicios" && (() => {
+          const rs = resultado as ResultadoServicios | null;
+          const r  = rs?.resumen;
+          return (
+            <>
+              {/* Aviso de limitaciones */}
+              <div style={{
+                marginTop: 16, padding: "10px 16px",
+                background: "rgba(245,158,11,0.06)",
+                border: "1px solid rgba(245,158,11,0.2)",
+                borderRadius: "var(--radius-sm)", fontSize: "0.78rem",
+                color: "var(--text-muted)", lineHeight: 1.6,
+              }}>
+                <strong style={{ color: "var(--accent)" }}>Servicios — Cotizaciones facturadas.</strong>
+                {" "}Se muestran cotizaciones de tipo "servicio" con estatus "facturada".
+                El filtro de fechas usa la fecha de la cotización, no la fecha de facturación (campo inexistente en el modelo).
+                Mano de obra y refacciones no están desglosadas: los conceptos son texto libre.
+                La fecha de pago de comisión corresponde a la segunda semana del mes siguiente.
+              </div>
+
+              {error ? (
+                <div style={{
+                  marginTop: 16, padding: "20px 24px",
+                  background: "rgba(239,68,68,0.06)",
+                  border: "1px solid rgba(239,68,68,0.2)",
+                  borderRadius: "var(--radius)", color: "var(--red)", fontSize: "0.88rem",
+                }}>
+                  {error}
+                </div>
+              ) : (
+                <>
+                  {/* KPIs */}
+                  <div className="stats-grid" style={{
+                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginTop: 16,
+                  }}>
+                    <StatCard label="Servicios facturados" value={loading ? "—" : String(r?.serviciosVendidos ?? 0)} color="var(--blue)" />
+                    <StatCard label="Total comercial" value={loading ? "—" : `$${fmtMXN(r?.ventaComercialTotal ?? 0)}`} color="var(--green)" sub="total c/IVA" />
+                    <StatCard label="Subtotal (sin IVA)" value={loading ? "—" : `$${fmtMXN(r?.subtotalComercial ?? 0)}`} color="var(--accent)" />
+                    <StatCard label="IVA registrado" value={loading ? "—" : `$${fmtMXN(r?.ivaRegistrado ?? 0)}`} color="var(--accent)" />
+                    <StatCard label="Ticket promedio" value={loading ? "—" : `$${fmtMXN(r?.ticketPromedio ?? 0)}`} color="var(--text)" />
+                    <StatCard label="Mano de obra" value="" noDisponible sub="items sin categoría" />
+                    <StatCard label="Total cobrado" value="" noDisponible sub="sin vinculación fiscal" />
+                    <StatCard label="Saldo pendiente" value="" noDisponible sub="sin vinculación fiscal" />
+                  </div>
+
+                  {/* Por asesor */}
+                  {!loading && rs && rs.porAsesor.length > 0 && (
+                    <div className="table-card" style={{ marginTop: 16 }}>
+                      <div className="table-card-header">
+                        <p className="table-card-title">Servicios por asesor</p>
+                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic" }}>
+                          Fecha de pago de comisión: segunda semana del mes siguiente a la cotización
+                        </p>
+                      </div>
+                      <div style={{ overflowX: "auto" }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Asesor</th>
+                              <th style={{ textAlign: "right" }}>Servicios</th>
+                              <th style={{ textAlign: "right" }}>Subtotal</th>
+                              <th style={{ textAlign: "right" }}>IVA</th>
+                              <th style={{ textAlign: "right" }}>Total comercial</th>
+                              <th style={{ textAlign: "right" }}>Ticket prom.</th>
+                              <th style={{ textAlign: "right" }}>%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rs.porAsesor.map((g, i) => (
+                              <tr key={g.asesorId ?? `sin-${i}`}>
+                                <td style={{ fontWeight: 600 }}>
+                                  {g.asesorNombre}
+                                  {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
+                                </td>
+                                <td style={{ textAlign: "right" }}>{g.serviciosVendidos}</td>
+                                <td style={{ textAlign: "right" }}>${fmtMXN(g.subtotalComercial)}</td>
+                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ivaRegistrado)}</td>
+                                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${fmtMXN(g.ventaComercialTotal)}</td>
+                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ticketPromedio)}</td>
+                                <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{g.participacion.toFixed(1)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tabla de operaciones */}
+                  <div className="table-card" style={{ marginTop: 16 }}>
+                    <div className="table-card-header">
+                      <p className="table-card-title">
+                        Cotizaciones facturadas — Servicios
+                        {rs && <span style={{ marginLeft: 8, fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 400 }}>{rs.paginacion.total} total</span>}
+                      </p>
+                    </div>
+                    {loading ? (
+                      <div className="loading-state"><div className="spinner" /></div>
+                    ) : !rs || rs.operaciones.length === 0 ? (
+                      <div className="empty-state">
+                        <span style={{ fontSize: "2rem" }}>🔧</span>
+                        <p>Sin servicios facturados en este periodo</p>
+                        <p style={{ fontSize: "0.8rem" }}>Ajusta el rango de fechas o los filtros</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                          <table style={{ fontSize: "0.82rem", minWidth: 860 }}>
+                            <thead>
+                              <tr>
+                                <th>Fecha</th>
+                                <th>Folio</th>
+                                <th>Cliente</th>
+                                <th>Asesor</th>
+                                <th>Factura</th>
+                                <th>Equipo</th>
+                                <th style={{ textAlign: "right" }}>Subtotal</th>
+                                <th style={{ textAlign: "right" }}>IVA</th>
+                                <th style={{ textAlign: "right" }}>Total</th>
+                                <th>Comisión aprox.</th>
+                                <th style={{ width: 40 }}></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rs.operaciones.map(op => (
+                                <tr key={op.id}>
+                                  <td style={{ whiteSpace: "nowrap" }}>{fmtFecha(op.fecha)}</td>
+                                  <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{op.folio}</td>
+                                  <td>{op.cliente?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                                  <td>
+                                    {op.asesor?.nombre ?? (
+                                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic" }}>Sin asesor asignado</span>
+                                    )}
+                                  </td>
+                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>{op.numeroFactura ?? "—"}</td>
+                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                                    {[op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—"}
+                                  </td>
+                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.subtotal)}</td>
+                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.iva)}</td>
+                                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${fmtMXN(op.total)}</td>
+                                  <td style={{ fontSize: "0.72rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                                    {op.fechaPagoComision?.etiqueta ?? "—"}
+                                  </td>
+                                  <td>
+                                    <button className="btn btn-secondary btn-sm" onClick={() => setDetalle({ ...op, _tipoDetalle: "servicio" } as any)} title="Ver detalle">Ver</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        {/* Paginación igual que equipos */}
+                        {rs.paginacion.pages > 1 && (
+                          <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "12px 20px", borderTop: "1px solid var(--border)",
+                            fontSize: "0.82rem", color: "var(--text-muted)",
+                          }}>
+                            <span>{(page - 1) * limit + 1}–{Math.min(page * limit, rs.paginacion.total)} de {rs.paginacion.total}</span>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(1)} disabled={page === 1}>«</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page === rs.paginacion.pages}>›</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(rs.paginacion.pages)} disabled={page === rs.paginacion.pages}>»</button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* ── Tooltip flotante ─────────────────────────────────────────────── */}
@@ -1024,8 +1322,75 @@ export default function ReporteVentas() {
         </div>
       )}
 
+      {/* ── Modal de detalle servicios ──────────────────────────────────── */}
+      {detalle && (detalle as any)._tipoDetalle === "servicio" && (() => {
+        const op = detalle as any as OperacionServicio & { _tipoDetalle: string };
+        return (
+          <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
+            <div className="modal" style={{ maxWidth: 500 }}>
+              <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
+              <h2 className="modal-title">
+                {op.folio}
+                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> — Servicio facturado</span>
+              </h2>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 12 }}>
+                {[
+                  { label: "Fecha de cotización", val: fmtFecha(op.fecha) },
+                  { label: "Cliente",             val: op.cliente?.nombre },
+                  { label: "Asesor",              val: op.asesor?.nombre ?? "Sin asesor asignado" },
+                  { label: "No. de factura *",    val: op.numeroFactura },
+                  { label: "Moneda",              val: op.moneda },
+                  { label: "Equipo",              val: [op.equipoMarca, op.equipoModelo, op.equipoSerie].filter(Boolean).join(" ") || undefined },
+                  { label: "Descripción",         val: op.descripcion },
+                  { label: "Conceptos",           val: op.itemsCount ? `${op.itemsCount} concepto${op.itemsCount !== 1 ? "s" : ""}` : undefined },
+                  { label: "Comisión aprox.",     val: op.fechaPagoComision?.etiqueta },
+                ].map(item => item.val ? (
+                  <div key={item.label}>
+                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
+                    <p style={{ fontSize: "0.9rem", color: "var(--text)", margin: "2px 0 0", fontWeight: 500 }}>{item.val}</p>
+                  </div>
+                ) : null)}
+              </div>
+              <div style={{
+                marginTop: 16, background: "var(--surface2)", border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)", padding: "12px 16px",
+                display: "flex", flexDirection: "column", gap: 6,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                  <span>Subtotal</span><span>${fmtMXN(op.subtotal)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                  <span>IVA (16%)</span><span>${fmtMXN(op.iva)}</span>
+                </div>
+                <div style={{
+                  display: "flex", justifyContent: "space-between",
+                  fontSize: "0.95rem", fontWeight: 700, color: "var(--green)",
+                  borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 8,
+                }}>
+                  <span>Total comercial</span><span>${fmtMXN(op.total)}</span>
+                </div>
+              </div>
+              <div style={{
+                marginTop: 12, padding: "8px 12px",
+                background: "rgba(122,128,153,0.08)", border: "1px solid rgba(122,128,153,0.2)",
+                borderRadius: "var(--radius-sm)", fontSize: "0.75rem",
+                color: "var(--text-muted)", lineHeight: 1.5,
+              }}>
+                La cotización está vinculada a una factura solo por folio de texto. No hay conciliación automática con el módulo de Facturación.
+              </div>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 8 }}>
+                * No. factura es texto libre. No representa FK a Factura en la BD.
+              </p>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Modal de detalle ─────────────────────────────────────────────── */}
-      {detalle && (
+      {detalle && (detalle as any)._tipoDetalle !== "servicio" && (
         <div
           className="modal-overlay"
           onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}

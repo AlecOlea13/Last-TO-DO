@@ -24,6 +24,7 @@ type Venta = {
   ivaFacturado?: number;
   numeroFactura?: string;
   montoEfectivo?: number;
+  fechaPago?: string | null;
   cliente?: { _id: string; nombre: string } | null;
   clienteNombre?: string;
   asesor?: { _id: string; nombre: string } | null;
@@ -163,6 +164,7 @@ export default function Montacargas() {
   const [formVenta, setFormVenta]       = useState({
     montoFacturado: "", montoEfectivo: "", numeroFactura: "",
     fecha: new Date().toISOString().split("T")[0],
+    fechaPago: "",
     esClienteCatalogo: true, clienteId: "", clienteNombre: "",
     asesorId: "", notas: "",
   });
@@ -298,6 +300,7 @@ export default function Montacargas() {
     setFormVenta({
       montoFacturado: m.precioVenta ? String(m.precioVenta) : "", montoEfectivo: "", numeroFactura: "",
       fecha: new Date().toISOString().split("T")[0],
+      fechaPago: "",
       esClienteCatalogo: true, clienteId: "", clienteNombre: "",
       asesorId: "", notas: "",
     });
@@ -311,7 +314,8 @@ export default function Montacargas() {
       montoFacturado: m.venta?.montoFacturado ? String(m.venta.montoFacturado) : "",
       montoEfectivo:  m.venta?.montoEfectivo  ? String(m.venta.montoEfectivo)  : "",
       numeroFactura:  m.venta?.numeroFactura ?? "",
-      fecha: m.venta?.fecha ? m.venta.fecha.split("T")[0] : new Date().toISOString().split("T")[0],
+      fecha:     m.venta?.fecha     ? m.venta.fecha.split("T")[0]     : new Date().toISOString().split("T")[0],
+      fechaPago: m.venta?.fechaPago ? m.venta.fechaPago.split("T")[0] : "",
       esClienteCatalogo: esCatalogo,
       clienteId: m.venta?.cliente?._id ?? "",
       clienteNombre: m.venta?.clienteNombre ?? "",
@@ -338,6 +342,7 @@ export default function Montacargas() {
         montoEfectivo: efectivo,
         numeroFactura: formVenta.numeroFactura.trim(),
         fecha: formVenta.fecha,
+        fechaPago: formVenta.fechaPago || null,
         asesorId: formVenta.asesorId || null,
         notas: formVenta.notas,
       };
@@ -841,6 +846,53 @@ export default function Montacargas() {
                 <input className="form-input" type="date" value={formVenta.fecha}
                   onChange={e => setFormVenta(p => ({ ...p, fecha: e.target.value }))} />
               </div>
+              <div className="form-group span-2">
+                <label className="form-label">
+                  Fecha de pago del cliente
+                  <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                    (opcional — desde aquí se calcula la comisión)
+                  </span>
+                </label>
+                <input className="form-input" type="date" value={formVenta.fechaPago}
+                  onChange={e => setFormVenta(p => ({ ...p, fechaPago: e.target.value }))} />
+                {formVenta.fechaPago && formVenta.fecha && (() => {
+                  const dias = Math.round(
+                    (new Date(formVenta.fechaPago).getTime() - new Date(formVenta.fecha).getTime())
+                    / (1000 * 60 * 60 * 24)
+                  );
+                  const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
+                  const base = (Number(formVenta.montoFacturado) || 0) * 1.16
+                             + (Number(formVenta.montoEfectivo)  || 0);
+                  const monto = base * (pct / 100);
+                  return (
+                    <div style={{
+                      marginTop: 6, padding: "8px 12px",
+                      background: pct > 0 ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                      border: `1px solid ${pct > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                      borderRadius: "var(--radius-sm)", fontSize: "0.78rem", lineHeight: 1.6,
+                    }}>
+                      <strong>{dias} días de cobro</strong>
+                      {" → "}
+                      <strong style={{ color: pct > 0 ? "var(--green)" : "var(--red)" }}>
+                        {pct}% de comisión
+                      </strong>
+                      {pct > 0 && base > 0 && (
+                        <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                          ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                      {pct === 0 && (
+                        <span style={{ color: "var(--red)", marginLeft: 6 }}>
+                          requiere autorización de Dirección
+                        </span>
+                      )}
+                      <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>
+                        ⚠ El % final depende también del margen bruto. Consulta la política de comisiones.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="form-group span-2" style={{ margin: 0 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 10 }}>
                   <input type="checkbox" checked={formVenta.esClienteCatalogo}
@@ -1029,6 +1081,7 @@ export default function Montacargas() {
                   { label: "🏷️ Total de la venta", val: detalleModal.venta?.importe ? `$${detalleModal.venta.importe.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : null },
                   { label: "🏷️ Asesor",          val: detalleModal.venta?.asesor?.nombre },
                   { label: "🏷️ Notas de venta",  val: detalleModal.venta?.notas },
+                  { label: "💳 Fecha de pago",    val: detalleModal.venta?.fechaPago ? fmt(detalleModal.venta.fechaPago) : null },
                 ] : []),
               ].map(item => item.val ? (
                 <div key={item.label}>
