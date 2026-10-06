@@ -43,6 +43,8 @@ type OperacionServicio = {
   equipoModelo:    string | null;
   equipoSerie:     string | null;
   fechaPagoComision: { inicio: string; fin: string; etiqueta: string } | null;
+  fechaPago:       string | null;
+  comision:        { diasCobro: number; porcentaje: number; monto: number } | null;
   cliente:         { id: string | null; nombre: string } | null;
   asesor:          { id: string | null; nombre: string } | null;
 };
@@ -1239,7 +1241,7 @@ export default function ReporteVentas() {
                                 <th style={{ textAlign: "right" }}>Subtotal</th>
                                 <th style={{ textAlign: "right" }}>IVA</th>
                                 <th style={{ textAlign: "right" }}>Total</th>
-                                <th>Comisión aprox.</th>
+                                <th>Comisión</th>
                                 <th style={{ width: 40 }}></th>
                               </tr>
                             </thead>
@@ -1261,8 +1263,26 @@ export default function ReporteVentas() {
                                   <td style={{ textAlign: "right" }}>${fmtMXN(op.subtotal)}</td>
                                   <td style={{ textAlign: "right" }}>${fmtMXN(op.iva)}</td>
                                   <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${fmtMXN(op.total)}</td>
-                                  <td style={{ fontSize: "0.72rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-                                    {op.fechaPagoComision?.etiqueta ?? "—"}
+                                  <td style={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
+                                    {op.comision ? (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                        <span style={{ fontWeight: 700, color: "var(--green)" }}>
+                                          ${fmtMXN(op.comision.monto)}
+                                        </span>
+                                        <span style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>
+                                          {op.comision.porcentaje}% · {op.comision.diasCobro}d
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: "var(--text-muted)" }}>
+                                        {op.fechaPagoComision?.etiqueta ?? "—"}
+                                        {!op.fechaPago && (
+                                          <span style={{ display: "block", fontSize: "0.65rem", color: "rgba(156,163,175,0.7)" }}>
+                                            sin fecha de pago
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
                                   </td>
                                   <td>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setDetalle({ ...op, _tipoDetalle: "servicio" } as any)} title="Ver detalle">Ver</button>
@@ -1343,7 +1363,9 @@ export default function ReporteVentas() {
                   { label: "Equipo",              val: [op.equipoMarca, op.equipoModelo, op.equipoSerie].filter(Boolean).join(" ") || undefined },
                   { label: "Descripción",         val: op.descripcion },
                   { label: "Conceptos",           val: op.itemsCount ? `${op.itemsCount} concepto${op.itemsCount !== 1 ? "s" : ""}` : undefined },
-                  { label: "Comisión aprox.",     val: op.fechaPagoComision?.etiqueta },
+                  { label: "Fecha pago comisión", val: op.comision ? undefined : op.fechaPagoComision?.etiqueta },
+                  { label: "Comisión calculada",  val: op.comision ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días de cobro)` : undefined },
+                  { label: "Sin fecha de pago",   val: (!op.comision && !op.fechaPago) ? "Registra la fecha de pago en Cotizaciones para calcular la comisión" : undefined },
                 ].map(item => item.val ? (
                   <div key={item.label}>
                     <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
