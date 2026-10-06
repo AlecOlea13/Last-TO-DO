@@ -39,6 +39,7 @@ type Cotizacion = {
   items: Item[]; subtotal: number; iva: number; total: number;
   estatus: "activa" | "facturada" | "cancelada";
   numeroFactura?: string;
+  fechaPago?: string | null;
   notas?: string; comentarios: Comentario[];
   equipoMarca?: string; equipoModelo?: string; equipoSerie?: string;
   cursoDC3?: CursoDC3;
@@ -335,6 +336,7 @@ export default function Cotizaciones() {
   const [nuevoComentario, setNuevoComentario]         = useState("");
   const [facturaModal, setFacturaModal]               = useState<Cotizacion | null>(null);
   const [numeroFacturaInput, setNumeroFacturaInput]   = useState("");
+  const [fechaPagoInput, setFechaPagoInput]           = useState("");
   const [form, setForm]                               = useState<any>(emptyForm);
   const [saving, setSaving]                           = useState(false);
   const [savingComentario, setSavingComentario]       = useState(false);
@@ -448,10 +450,16 @@ export default function Cotizaciones() {
     if (!facturaModal || !numeroFacturaInput.trim()) return;
     setSaving(true);
     try {
-      const { data } = await api.put(`/cotizaciones/${facturaModal._id}`, { estatus: "facturada", numeroFactura: numeroFacturaInput.trim() });
+      const payload: any = {
+        estatus: "facturada",
+        numeroFactura: numeroFacturaInput.trim(),
+      };
+      if (fechaPagoInput) payload.fechaPago = fechaPagoInput;
+      const { data } = await api.put(`/cotizaciones/${facturaModal._id}`, payload);
       setCotizaciones(prev => prev.map(c => c._id === facturaModal._id ? { ...c, ...data } : c));
       setFacturaModal(null);
       setNumeroFacturaInput("");
+      setFechaPagoInput("");
     } catch {}
     finally { setSaving(false); }
   }
@@ -1196,6 +1204,11 @@ export default function Cotizaciones() {
                           {c.estatus === "facturada" && c.numeroFactura && (
                             <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>#{c.numeroFactura}</span>
                           )}
+                          {c.estatus === "facturada" && c.fechaPago && (
+                            <span style={{ fontSize: "0.65rem", color: "var(--green)" }}>
+                              💳 {new Date(c.fechaPago).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td>
@@ -1220,7 +1233,7 @@ export default function Cotizaciones() {
                             { label: "Ver cotización",  icon: "👁️", onClick: () => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda }) },
                             { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
                             { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
-                            ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); } }] : []),
+                            ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); setFechaPagoInput(""); } }] : []),
                             ...( c.estatus === "activa"    ? [{ label: "Cancelar",         icon: "🚫", onClick: () => cambiarEstatus(c._id, "cancelada") }] : []),
                             ...( canDelete                 ? [{ label: "Eliminar",         icon: "🗑️", onClick: () => remove(c._id), danger: true }] : []),
                           ]} />
@@ -1405,6 +1418,49 @@ export default function Cotizaciones() {
               <input className="form-input" value={numeroFacturaInput} onChange={e => setNumeroFacturaInput(e.target.value)}
                 placeholder="Ej. A-1234" autoFocus
                 onKeyDown={e => { if (e.key === "Enter" && numeroFacturaInput.trim()) marcarFacturada(); }} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">
+                Fecha de pago del cliente
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                  (opcional — para calcular comisión)
+                </span>
+              </label>
+              <input className="form-input" type="date" value={fechaPagoInput}
+                onChange={e => setFechaPagoInput(e.target.value)} />
+              {fechaPagoInput && facturaModal && (() => {
+                const dias = Math.round(
+                  (new Date(fechaPagoInput).getTime() - new Date(facturaModal.fecha).getTime())
+                  / (1000 * 60 * 60 * 24)
+                );
+                const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
+                const monto = facturaModal.total * (pct / 100);
+                return (
+                  <div style={{
+                    marginTop: 6, padding: "8px 12px",
+                    background: pct > 0 ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+                    border: `1px solid ${pct > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                    borderRadius: "var(--radius-sm)", fontSize: "0.78rem", lineHeight: 1.6,
+                  }}>
+                    <strong>{dias} días de cobro</strong>
+                    {" → "}
+                    <strong style={{ color: pct > 0 ? "var(--green)" : "var(--red)" }}>
+                      {pct}% de comisión
+                    </strong>
+                    {pct > 0 && (
+                      <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                    {pct === 0 && (
+                      <span style={{ color: "var(--red)", marginLeft: 6 }}>requiere autorización de Dirección</span>
+                    )}
+                    <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>
+                      ⚠ El % final depende también del margen bruto. Consulta la política de comisiones.
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setFacturaModal(null)}>Cancelar</button>
