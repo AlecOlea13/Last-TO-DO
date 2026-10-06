@@ -123,7 +123,8 @@ type ResultadoEquipos = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Formatea número como moneda MXN sin desfase. */
-function fmtMXN(v: number): string {
+function fmtMXN(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "0.00";
   return v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -140,17 +141,23 @@ function fmtFecha(dateStr: string | null | undefined): string {
   });
 }
 
-/** Primer día del mes actual en "YYYY-MM-DD" */
-function primerDiaMes(): string {
+/** Primer día del mes anterior en "YYYY-MM-DD" */
+function primerDiaMesAnterior(): string {
   const d = new Date();
-  d.setDate(1);
-  return d.toISOString().split("T")[0];
+  d.setDate(1);          // ir al día 1 del mes actual
+  d.setMonth(d.getMonth() - 1);  // retroceder un mes
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-/** Hoy en "YYYY-MM-DD" */
-function hoy(): string {
-  return new Date().toISOString().split("T")[0];
+/** Último día del mes anterior en "YYYY-MM-DD" */
+function ultimoDiaMesAnterior(): string {
+  const d = new Date();
+  d.setDate(1);          // día 1 del mes actual
+  d.setDate(0);          // retroceder al último día del mes anterior
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+
 
 // ── Componentes auxiliares ────────────────────────────────────────────────────
 
@@ -207,8 +214,8 @@ const TOOLTIPS: Record<string, string> = {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function ReporteVentas() {
   // ── Filtros ──────────────────────────────────────────────────────────────
-  const [desde,     setDesde]    = useState(primerDiaMes());
-  const [hasta,     setHasta]    = useState(hoy());
+  const [desde,     setDesde]    = useState(primerDiaMesAnterior());
+  const [hasta,     setHasta]    = useState(ultimoDiaMesAnterior());
   const [asesorId,  setAsesorId] = useState("todos");
   const [buscar,    setBuscar]   = useState("");
   const [page,      setPage]     = useState(1);
@@ -629,7 +636,12 @@ export default function ReporteVentas() {
           {CATS.map(c => (
             <button
               key={c.key}
-              onClick={() => setCategoria(c.key)}
+              onClick={() => {
+                setCategoria(c.key);
+                setResultado(null);   // evita que el resultado anterior rompa el render de la nueva pestaña
+                setBuscar("");
+                setPage(1);
+              }}
               style={{
                 padding: "10px 22px",
                 border: "none",
