@@ -1,29 +1,30 @@
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { useCallback } from "react";
-import Login        from "./pages/Login";
-import Dashboard    from "./pages/Dashboard";
-import Profile      from "./pages/Profile";
-import Clientes     from "./pages/Clientes";
-import Montacargas  from "./pages/Montacargas";
-import Rentas       from "./pages/Rentas";
-import Servicios    from "./pages/Servicios";
-import Pendientes from "./pages/Pendientes";
-import Facturacion from "./pages/Facturacion";
-import Cotizaciones from "./pages/Cotizaciones";
-import Asesores     from "./pages/Asesores";
-import Usuarios     from "./pages/Usuarios";
-import Almacen      from "./pages/Almacen";
-import Gastos       from "./pages/Gastos";
-import CxC          from "./pages/CxC";
-import Proveedores  from "./pages/Proveedores";
+import Login           from "./pages/Login";
+import Dashboard       from "./pages/Dashboard";
+import Profile         from "./pages/Profile";
+import Clientes        from "./pages/Clientes";
+import Montacargas     from "./pages/Montacargas";
+import Rentas          from "./pages/Rentas";
+import Servicios       from "./pages/Servicios";
+import Pendientes      from "./pages/Pendientes";
+import Facturacion     from "./pages/Facturacion";
+import Cotizaciones    from "./pages/Cotizaciones";
+import Asesores        from "./pages/Asesores";
+import Usuarios        from "./pages/Usuarios";
+import Almacen         from "./pages/Almacen";
+import Gastos          from "./pages/Gastos";
+import CxC             from "./pages/CxC";
+import Proveedores     from "./pages/Proveedores";
 import Auditoria       from "./pages/Auditoria";
 import ReportesCliente from "./pages/ReportesCliente";
-import Portales     from "./pages/Portales";
-import Flota        from "./pages/Flota";
-import ProtectedRoute from "./routes/ProtectedRoute";
-import IAWidget from "./components/IAWidget";
-import Cartera from "./pages/Cartera";
+import Portales        from "./pages/Portales";
+import Flota           from "./pages/Flota";
+import ProtectedRoute  from "./routes/ProtectedRoute";
+import IAWidget        from "./components/IAWidget";
+import Cartera         from "./pages/Cartera";
 import EncuestaPublica from "./pages/EncuestaPublica";
+import ReporteVentas   from "./pages/ReporteVentas";          // ← NUEVO
 import { useInactivityLogout } from "./hooks/useInactivityHook";
 
 // ── Componente interno para poder usar useNavigate dentro de BrowserRouter ──
@@ -52,18 +53,16 @@ function AppRoutes() {
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Clientes /></ProtectedRoute>
         } />
         <Route path="pendientes" element={
-          <ProtectedRoute><Pendientes /></ProtectedRoute>} />
+          <ProtectedRoute><Pendientes /></ProtectedRoute>
+        } />
         <Route path="rentas" element={
           <ProtectedRoute roles={["developer","gerencia","oficina","supervisor_almacen"]}><Rentas /></ProtectedRoute>
         } />
         <Route path="cotizaciones" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Cotizaciones /></ProtectedRoute>
         } />
-        {/* <Route path="facturas" element={
-          <ProtectedRoute roles={["developer","gerencia","oficina"]}><Facturas /></ProtectedRoute>
-        } /> */}
         <Route path="facturacion" element={
-  <ProtectedRoute roles={["developer", "gerencia", "oficina"]}><Facturacion /></ProtectedRoute>
+          <ProtectedRoute roles={["developer","gerencia","oficina"]}><Facturacion /></ProtectedRoute>
         } />
         <Route path="gastos" element={
           <ProtectedRoute roles={["developer","gerencia","oficina"]}><Gastos /></ProtectedRoute>
@@ -93,9 +92,13 @@ function AppRoutes() {
           <ProtectedRoute permiso="flota"><Flota /></ProtectedRoute>
         } />
         <Route path="cartera" element={
-        <ProtectedRoute roles={["developer","gerencia"]}><Cartera /></ProtectedRoute>
-          } />
-        </Route>
+          <ProtectedRoute roles={["developer","gerencia"]}><Cartera /></ProtectedRoute>
+        } />
+        {/* NUEVO — Reporte de ventas. Ver también: Dashboard.tsx allNav, app.js /api/reportes */}
+        <Route path="reporte-ventas" element={
+          <ProtectedRoute roles={["developer","gerencia"]}><ReporteVentas /></ProtectedRoute>
+        } />
+      </Route>
 
       <Route path="/dashboard/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
     </Routes>
@@ -110,6 +113,5 @@ function App() {
     </BrowserRouter>
   );
 }
-
 
 export default App;

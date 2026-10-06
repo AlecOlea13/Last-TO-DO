@@ -151,6 +151,7 @@ export default function Dashboard() {
     { to:"/dashboard/reportes-cliente", icon:"📝", label:"Reportes Clientes", roles:["developer","gerencia"] },
     { to:"/dashboard/portales",      icon:"🔑", label:"Portales",             roles:["developer","gerencia","oficina"] },
     { to:"/dashboard/flota",         icon:"🚗", label:"Flota",                roles:["developer","gerencia","oficina"], permiso:"flota" },
+    { to:"/dashboard/reporte-ventas", icon:"📈", label:"Reporte de ventas",     roles:["developer","gerencia"] },
   ];
 
   const permisos = JSON.parse(localStorage.getItem("permisos") ?? "[]") as string[];
