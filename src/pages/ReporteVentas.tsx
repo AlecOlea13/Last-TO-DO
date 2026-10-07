@@ -42,8 +42,10 @@ type OperacionServicio = {
   equipoMarca:     string | null;
   equipoModelo:    string | null;
   equipoSerie:     string | null;
+  fechaFacturada:    string | null;
+  fechaReferencia:   string | null;
   fechaPagoComision: { inicio: string; fin: string; etiqueta: string } | null;
-  fechaPago:       string | null;
+  fechaPago:         string | null;
   comision:        { diasCobro: number; porcentaje: number; monto: number } | null;
   cliente:         { id: string | null; nombre: string } | null;
   asesor:          { id: string | null; nombre: string } | null;
@@ -684,25 +686,6 @@ export default function ReporteVentas() {
             </button>
           ))}
         </div>
-
-        {/* ── Categorías pendientes ─────────────────────────────────────────── */}
-        {categoria !== "equipos" && (
-          <div
-            className="table-card"
-            style={{ marginTop: 16 }}
-          >
-            <div className="empty-state" style={{ padding: "80px 24px" }}>
-              <span style={{ fontSize: "2rem" }}>🔧</span>
-              <p style={{ fontWeight: 600, color: "var(--text)", fontSize: "1rem" }}>
-                Categoría pendiente de integración
-              </p>
-              <p style={{ textAlign: "center", maxWidth: 480, color: "var(--text-muted)", fontSize: "0.88rem" }}>
-                Esta categoría estará disponible cuando se complete su integración comercial.
-                Los modelos de datos requeridos aún no han sido auditados y aprobados para esta fase.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* ══ CATEGORÍA EQUIPOS ══════════════════════════════════════════════ */}
         {categoria === "equipos" && (() => {
@@ -1379,6 +1362,8 @@ export default function ReporteVentas() {
                   { label: "Equipo",              val: [op.equipoMarca, op.equipoModelo, op.equipoSerie].filter(Boolean).join(" ") || undefined },
                   { label: "Descripción",         val: op.descripcion },
                   { label: "Conceptos",           val: op.itemsCount ? `${op.itemsCount} concepto${op.itemsCount !== 1 ? "s" : ""}` : undefined },
+                  { label: "Fecha facturación",   val: op.fechaFacturada ? fmtFecha(op.fechaFacturada) : undefined },
+                  { label: "Ref. comisión",       val: !op.fechaFacturada ? `Usando fecha cotización (${fmtFecha(op.fecha)}) — captura la fecha de facturación para mayor precisión` : undefined },
                   { label: "Fecha pago comisión", val: op.comision ? undefined : op.fechaPagoComision?.etiqueta },
                   { label: "Comisión calculada",  val: op.comision ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días de cobro)` : undefined },
                   { label: "Sin fecha de pago",   val: (!op.comision && !op.fechaPago) ? "Registra la fecha de pago en Cotizaciones para calcular la comisión" : undefined },

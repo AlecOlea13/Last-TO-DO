@@ -39,6 +39,7 @@ type Cotizacion = {
   items: Item[]; subtotal: number; iva: number; total: number;
   estatus: "activa" | "facturada" | "cancelada";
   numeroFactura?: string;
+  fechaFacturada?: string | null;
   fechaPago?: string | null;
   notas?: string; comentarios: Comentario[];
   equipoMarca?: string; equipoModelo?: string; equipoSerie?: string;
@@ -337,8 +338,10 @@ export default function Cotizaciones() {
   const [facturaModal, setFacturaModal]               = useState<Cotizacion | null>(null);
   const [numeroFacturaInput, setNumeroFacturaInput]   = useState("");
   const [fechaPagoInput, setFechaPagoInput]           = useState("");
+  const [fechaFacturadaInput, setFechaFacturadaInput] = useState("");
   const [pagoModal, setPagoModal]                     = useState<Cotizacion | null>(null);
   const [fechaPagoEdit, setFechaPagoEdit]             = useState("");
+  const [fechaFacturadaEdit, setFechaFacturadaEdit]   = useState("");
   const [savingPago, setSavingPago]                   = useState(false);
   const [form, setForm]                               = useState<any>(emptyForm);
   const [saving, setSaving]                           = useState(false);
@@ -453,9 +456,9 @@ export default function Cotizaciones() {
     if (!pagoModal) return;
     setSavingPago(true);
     try {
-      const { data } = await api.put(`/cotizaciones/${pagoModal._id}`, {
-        fechaPago: fechaPagoEdit || null,
-      });
+      const payload: any = { fechaPago: fechaPagoEdit || null };
+      if (fechaFacturadaEdit) payload.fechaFacturada = fechaFacturadaEdit;
+      const { data } = await api.put(`/cotizaciones/${pagoModal._id}`, payload);
       setCotizaciones(prev => prev.map(c => c._id === pagoModal._id ? { ...c, ...data } : c));
       setPagoModal(null);
       setFechaPagoEdit("");
@@ -471,7 +474,8 @@ export default function Cotizaciones() {
         estatus: "facturada",
         numeroFactura: numeroFacturaInput.trim(),
       };
-      if (fechaPagoInput) payload.fechaPago = fechaPagoInput;
+      if (fechaFacturadaInput) payload.fechaFacturada = fechaFacturadaInput;
+      if (fechaPagoInput)      payload.fechaPago      = fechaPagoInput;
       const { data } = await api.put(`/cotizaciones/${facturaModal._id}`, payload);
       setCotizaciones(prev => prev.map(c => c._id === facturaModal._id ? { ...c, ...data } : c));
       setFacturaModal(null);
@@ -1221,6 +1225,11 @@ export default function Cotizaciones() {
                           {c.estatus === "facturada" && c.numeroFactura && (
                             <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>#{c.numeroFactura}</span>
                           )}
+                          {c.estatus === "facturada" && c.fechaFacturada && (
+                            <span style={{ fontSize: "0.65rem", color: "var(--blue)" }}>
+                              🧾 {new Date(c.fechaFacturada).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                            </span>
+                          )}
                           {c.estatus === "facturada" && c.fechaPago && (
                             <span style={{ fontSize: "0.65rem", color: "var(--green)" }}>
                               💳 {new Date(c.fechaPago).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
@@ -1250,8 +1259,8 @@ export default function Cotizaciones() {
                             { label: "Ver cotización",  icon: "👁️", onClick: () => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda }) },
                             { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
                             { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
-                            ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); setFechaPagoInput(""); } }] : []),
-                            ...( c.estatus === "facturada" ? [{ label: c.fechaPago ? "✏️ Editar fecha de pago" : "💳 Registrar fecha de pago", icon: "💳", onClick: () => { setPagoModal(c); setFechaPagoEdit(c.fechaPago ? c.fechaPago.split("T")[0] : ""); } }] : []),
+                            ...( c.estatus !== "facturada" ? [{ label: "Marcar facturada", icon: "🧾", onClick: () => { setFacturaModal(c); setNumeroFacturaInput(""); setFechaPagoInput(""); setFechaFacturadaInput(new Date().toISOString().split("T")[0]); } }] : []),
+                            ...( c.estatus === "facturada" ? [{ label: c.fechaPago ? "✏️ Editar fecha de pago" : "💳 Registrar fecha de pago", icon: "💳", onClick: () => { setPagoModal(c); setFechaPagoEdit(c.fechaPago ? c.fechaPago.split("T")[0] : ""); setFechaFacturadaEdit(c.fechaFacturada ? c.fechaFacturada.split("T")[0] : ""); } }] : []),
                             ...( c.estatus === "activa"    ? [{ label: "Cancelar",         icon: "🚫", onClick: () => cambiarEstatus(c._id, "cancelada") }] : []),
                             ...( canDelete                 ? [{ label: "Eliminar",         icon: "🗑️", onClick: () => remove(c._id), danger: true }] : []),
                           ]} />
@@ -1439,6 +1448,16 @@ export default function Cotizaciones() {
             </div>
             <div className="form-group">
               <label className="form-label">
+                Fecha de facturación
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                  (desde aquí se calculan los días de comisión)
+                </span>
+              </label>
+              <input className="form-input" type="date" value={fechaFacturadaInput}
+                onChange={e => setFechaFacturadaInput(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">
                 Fecha de pago del cliente
                 <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
                   (opcional — para calcular comisión)
@@ -1507,6 +1526,21 @@ export default function Cotizaciones() {
                 <span style={{ marginLeft: 6, color: "var(--text-muted)" }}>· Factura #{pagoModal.numeroFactura}</span>
               )}
             </p>
+            <div className="form-group">
+              <label className="form-label">
+                Fecha de facturación
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
+                  (desde aquí se cuentan los días)
+                </span>
+              </label>
+              <input className="form-input" type="date" value={fechaFacturadaEdit}
+                onChange={e => setFechaFacturadaEdit(e.target.value)} />
+              {!fechaFacturadaEdit && (
+                <p style={{ fontSize: "0.7rem", color: "var(--accent)", marginTop: 4 }}>
+                  Sin fecha de facturación — se usará la fecha de la cotización ({new Date(pagoModal!.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}) como referencia.
+                </p>
+              )}
+            </div>
             <div className="form-group">
               <label className="form-label">
                 Fecha en que PIPSA recibió el pago
