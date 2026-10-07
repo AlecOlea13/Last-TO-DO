@@ -674,7 +674,7 @@ export default function Servicios() {
         localStorage.setItem(STORAGE_KEY_RECORDATORIO, String(Date.now()));
         setMostrarRecordatorio(true);
         if ("Notification" in window && Notification.permission === "granted") {
-          try { new Notification("⏱️ Control Pipsa", { body: "Recuerda terminar el servicio en la app.", icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png" }); } catch {}
+          try { new Notification("⏱️ Control Pipsa", { body: "Recuerda terminar el servicio en la app.", icon: "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png" }); } catch {}
         }
       }
     }
@@ -1074,7 +1074,7 @@ export default function Servicios() {
   }
 
   function generarReporteServicios() {
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
     const datos = servicios
       .filter(s => s.estatus === "cerrado")
       .filter(filtrarPorPeriodoReporte)

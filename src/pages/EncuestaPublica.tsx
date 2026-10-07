@@ -250,7 +250,7 @@ export default function EncuestaPublica() {
     <div style={{ ...page, justifyContent: "center", textAlign: "center", padding: 32 }}>
       <div style={card}>
         <div style={{ background: "#1a1d27", padding: "28px 32px", borderBottom: "3px solid #22c55e", textAlign: "center" }}>
-          <img src="https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png"
+          <img src="https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png"
             style={{ width: 56, height: 56, objectFit: "contain", background: "#000", borderRadius: 8, marginBottom: 12 }} alt="Pipsa" />
           <div style={{ fontSize: "3rem", marginBottom: 8 }}>🎉</div>
           <h2 style={{ color: "#22c55e", fontSize: "1.4rem", marginBottom: 8 }}>¡Gracias por tu respuesta!</h2>
@@ -273,7 +273,7 @@ export default function EncuestaPublica() {
       <div style={card}>
         {/* Header */}
         <div style={{ background: "#1a1d27", padding: "24px 28px", borderBottom: "3px solid #f0b800", display: "flex", alignItems: "center", gap: 14 }}>
-          <img src="https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png"
+          <img src="https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png"
             style={{ width: 52, height: 52, objectFit: "contain", background: "#000", borderRadius: 8, flexShrink: 0 }} alt="Pipsa" />
           <div>
             <p style={{ margin: 0, fontWeight: 700, fontSize: "1.1rem", color: "#fff" }}>Encuesta de satisfacción</p>

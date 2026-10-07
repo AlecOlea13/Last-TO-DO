@@ -561,7 +561,7 @@ export default function CuentasCobrar() {
   // }
 
   function generarReporteFacturado() {
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
     const [y, m] = reporteMesDesde.split("-").map(Number);
 
     // Facturas cuya fecha de emisión cae en el mes
@@ -644,7 +644,7 @@ export default function CuentasCobrar() {
   }
 
   function generarReporteCobrado() {
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
     const [y, m] = reporteMesDesde.split("-").map(Number);
     const inicioMes = new Date(y, m - 1, 1);
     const finMes    = new Date(y, m, 0, 23, 59, 59);

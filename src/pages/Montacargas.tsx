@@ -394,7 +394,7 @@ export default function Montacargas() {
 
   function imprimirReporte() {
     if (!reporteData) return;
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
     const rows = reporteData.equipos.map(m => `<tr>
       <td>${m.numeroEconomico}</td>
       <td>${m.marca ?? ""} ${m.modelo ?? ""}</td>

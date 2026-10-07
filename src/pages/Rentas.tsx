@@ -221,7 +221,7 @@ export default function Rentas() {
 
   // ── Generar reporte HTML de flota rentada ──
   function generarReporteFlota() {
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
     const activas = rentas.filter(r => r.estatus === "activa");
 
     const conTipo = activas.map(r => {

@@ -646,7 +646,7 @@ export default function Gastos() {
 
     const totalF  = gastosFR.reduce((a, g) => a + g.total, 0);
     const totalNF = gastosNFR.reduce((a, g) => a + g.monto, 0);
-    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1778686227/Pipsa_logo_png_damxzy.png";
+    const logoUrl = "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
 
     let subtitulo = "";
     if (reportePeriodo === "semana") {
