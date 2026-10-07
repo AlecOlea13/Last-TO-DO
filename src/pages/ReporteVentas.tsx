@@ -266,7 +266,10 @@ export default function ReporteVentas() {
     }
   }, [categoria, desde, hasta, asesorId, buscar, page, limit, sortBy, sortDir]);
 
-  useEffect(() => { cargar(); }, [page, sortBy, sortDir]);
+  useEffect(() => {
+    cargar();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoria, desde, hasta, asesorId, page, sortBy, sortDir]);
 
   // ── Helpers de exportación segura ───────────────────────────────────────
   // Escapa valores para CSV: comas, comillas, saltos de línea y fórmulas Excel
@@ -637,10 +640,11 @@ export default function ReporteVentas() {
             <button
               key={c.key}
               onClick={() => {
+                if (categoria === c.key) return;  // ya estamos aquí, no hacer nada
                 setCategoria(c.key);
-                setResultado(null);   // evita que el resultado anterior rompa el render de la nueva pestaña
-                setBuscar("");
+                setResultado(null);
                 setPage(1);
+                // NO limpiar buscar, desde, hasta ni asesorId — conservar filtros al cambiar pestaña
               }}
               style={{
                 padding: "10px 22px",
