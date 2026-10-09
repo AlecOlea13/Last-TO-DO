@@ -1225,16 +1225,22 @@ export default function Cotizaciones() {
                           {c.estatus === "facturada" && c.numeroFactura && (
                             <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>#{c.numeroFactura}</span>
                           )}
-                          {c.estatus === "facturada" && c.fechaFacturada && (
-                            <span style={{ fontSize: "0.65rem", color: "var(--blue)" }}>
-                              🧾 {new Date(c.fechaFacturada).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
-                            </span>
-                          )}
-                          {c.estatus === "facturada" && c.fechaPago && (
-                            <span style={{ fontSize: "0.65rem", color: "var(--green)" }}>
-                              💳 {new Date(c.fechaPago).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
-                            </span>
-                          )}
+                          {c.estatus === "facturada" && c.fechaFacturada && (() => {
+                            const [y,m,d] = c.fechaFacturada.split("T")[0].split("-").map(Number);
+                            return (
+                              <span style={{ fontSize: "0.65rem", color: "var(--blue)" }}>
+                                🧾 {new Date(y, m-1, d).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                              </span>
+                            );
+                          })()}
+                          {c.estatus === "facturada" && c.fechaPago && (() => {
+                            const [y,m,d] = c.fechaPago.split("T")[0].split("-").map(Number);
+                            return (
+                              <span style={{ fontSize: "0.65rem", color: "var(--green)" }}>
+                                💳 {new Date(y, m-1, d).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td>
@@ -1466,8 +1472,13 @@ export default function Cotizaciones() {
               <input className="form-input" type="date" value={fechaPagoInput}
                 onChange={e => setFechaPagoInput(e.target.value)} />
               {fechaPagoInput && facturaModal && (() => {
-                const dias = Math.round(
-                  (new Date(fechaPagoInput).getTime() - new Date(facturaModal.fecha).getTime())
+                // Parsear como fecha local para evitar desfase UTC
+                const parseFechaLocal = (s: string) => {
+                  const [y, m, d] = s.split("T")[0].split("-").map(Number);
+                  return new Date(y, m - 1, d).getTime();
+                };
+                const dias = Math.floor(
+                  (parseFechaLocal(fechaPagoInput) - parseFechaLocal(facturaModal.fecha))
                   / (1000 * 60 * 60 * 24)
                 );
                 if (dias < 0) return (
@@ -1551,13 +1562,19 @@ export default function Cotizaciones() {
               <input className="form-input" type="date" value={fechaPagoEdit} autoFocus
                 onChange={e => setFechaPagoEdit(e.target.value)} />
               {fechaPagoEdit && (() => {
-                const dias = Math.round(
-                  (new Date(fechaPagoEdit).getTime() - new Date(pagoModal.fecha).getTime())
+                const parseFechaLocal2 = (s: string) => {
+                  const [y, m, d] = s.split("T")[0].split("-").map(Number);
+                  return new Date(y, m - 1, d).getTime();
+                };
+                // Usar fechaFacturadaEdit como referencia si existe, sino fecha de la cotización
+                const refBase = fechaFacturadaEdit || pagoModal!.fecha;
+                const dias = Math.floor(
+                  (parseFechaLocal2(fechaPagoEdit) - parseFechaLocal2(refBase))
                   / (1000 * 60 * 60 * 24)
                 );
                 if (dias < 0) return (
                   <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.78rem", color: "var(--red)" }}>
-                    ⚠ La fecha de pago no puede ser anterior a la fecha de la cotización ({new Date(pagoModal.fecha).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}).
+                    ⚠ La fecha de pago no puede ser anterior a la fecha de facturación ({new Date(refBase).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" })}).
                   </div>
                 );
                 const pct   = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
