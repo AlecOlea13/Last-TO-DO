@@ -1504,11 +1504,11 @@ export default function Cotizaciones() {
 
       {modalReporteAsesor && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporteAsesor(false); }}>
-          <div className="modal" style={{ maxWidth: 1040, width: "96vw", display: "flex", flexDirection: "column" }}>
+          <div className="modal" style={{ maxWidth: 980, width: "96vw", display: "flex", flexDirection: "column" }}>
             <button className="modal-close" onClick={() => setModalReporteAsesor(false)}>✕</button>
             <h2 className="modal-title" style={{ marginBottom: 4 }}>👤 Reporte de cotizaciones por asesor</h2>
             <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>
-              Incluye todos los tipos de cotización. La comisión solo se calcula sobre las facturadas.
+              Incluye todos los tipos de cotización, agrupadas por estatus. La comisión se consulta en el Reporte de Ventas.
             </p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
@@ -1555,108 +1555,110 @@ export default function Cotizaciones() {
               <div className="empty-state"><span className="empty-icon">👤</span><p>Selecciona un rango y busca</p></div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+                {/* Totales globales — sin comisión, solo volumen por estatus */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 20 }}>
                   {[
                     { label: "Activas",    data: repAsesorData.totales.activas,    color: "#22c55e", icon: "📄" },
                     { label: "Facturadas", data: repAsesorData.totales.facturadas, color: "#3b82f6", icon: "🧾" },
-                    { label: "Canceladas", data: repAsesorData.totales.canceladas, color: "#6b7280", icon: "❌" },
+                    { label: "Canceladas", data: repAsesorData.totales.canceladas, color: "#9ca3af", icon: "❌" },
                   ].map(s => (
-                    <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>{s.icon} {s.label}</span>
-                        <span style={{ fontWeight: 700, color: s.color }}>{s.data.cantidad}</span>
+                    <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "14px 16px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.04em" }}>{s.icon} {s.label}</span>
+                        <span style={{ fontWeight: 800, fontSize: "1.1rem", color: s.color }}>{s.data.cantidad}</span>
                       </div>
-                      <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--text)" }}>${s.data.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                      <p style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--text)" }}>${s.data.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                     </div>
                   ))}
-                  <div style={{ background: "rgba(245,158,11,0.08)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid rgba(245,158,11,0.25)" }}>
-                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", textTransform: "uppercase", fontWeight: 700 }}>💰 Comisión total</span>
-                    <p style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)", marginTop: 6 }}>
-                      ${repAsesorData.totales.facturadas.comision!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                    </p>
+                </div>
+
+                {/* Por asesor — tabla compacta, sin columna de comisión */}
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8, letterSpacing: "0.04em" }}>
+                  Por asesor
+                </p>
+                <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden", marginBottom: 20 }}>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ fontSize: "0.82rem", width: "100%", minWidth: 620 }}>
+                      <thead>
+                        <tr style={{ background: "var(--surface3)" }}>
+                          <th style={{ padding: "10px 14px", textAlign: "left" }}>Asesor</th>
+                          <th style={{ padding: "10px 14px", textAlign: "center" }}>📄 Activas</th>
+                          <th style={{ padding: "10px 14px", textAlign: "center" }}>🧾 Facturadas</th>
+                          <th style={{ padding: "10px 14px", textAlign: "center" }}>❌ Canceladas</th>
+                          <th style={{ padding: "10px 14px", textAlign: "right" }}>Total facturado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repAsesorData.porAsesor.length === 0 ? (
+                          <tr><td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>Sin datos en este periodo</td></tr>
+                        ) : repAsesorData.porAsesor.map((g, i) => (
+                          <tr key={g.asesorId ?? `sin-${i}`} style={{ borderTop: "1px solid var(--border)" }}>
+                            <td style={{ padding: "10px 14px", fontWeight: 600 }}>
+                              {g.asesorNombre}
+                              {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
+                            </td>
+                            <td style={{ padding: "10px 14px", textAlign: "center", color: "#22c55e", fontWeight: 600 }}>{g.activas.cantidad}</td>
+                            <td style={{ padding: "10px 14px", textAlign: "center", color: "#3b82f6", fontWeight: 600 }}>{g.facturadas.cantidad}</td>
+                            <td style={{ padding: "10px 14px", textAlign: "center", color: "#9ca3af", fontWeight: 600 }}>{g.canceladas.cantidad}</td>
+                            <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${g.facturadas.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                <div style={{ overflowX: "auto", marginBottom: 20 }}>
-                  <table style={{ fontSize: "0.82rem", minWidth: 760 }}>
-                    <thead>
-                      <tr>
-                        <th>Asesor</th>
-                        <th style={{ textAlign: "center" }}>Activas</th>
-                        <th style={{ textAlign: "center" }}>Facturadas</th>
-                        <th style={{ textAlign: "center" }}>Canceladas</th>
-                        <th style={{ textAlign: "right" }}>Total facturado</th>
-                        <th style={{ textAlign: "right" }}>Comisión</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {repAsesorData.porAsesor.length === 0 ? (
-                        <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin datos en este periodo</td></tr>
-                      ) : repAsesorData.porAsesor.map((g, i) => (
-                        <tr key={g.asesorId ?? `sin-${i}`}>
-                          <td style={{ fontWeight: 600 }}>
-                            {g.asesorNombre}
-                            {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
-                          </td>
-                          <td style={{ textAlign: "center" }}>{g.activas.cantidad}</td>
-                          <td style={{ textAlign: "center" }}>{g.facturadas.cantidad}</td>
-                          <td style={{ textAlign: "center" }}>{g.canceladas.cantidad}</td>
-                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${g.facturadas.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--accent)" }}>${(g.facturadas.comision ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {/* Detalle — con pestañas por estatus para que canceladas no se pierdan en el scroll */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    Detalle ({repAsesorData.operaciones.length} cotizaciones)
+                  </p>
                 </div>
-
-                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
-                  Detalle ({repAsesorData.operaciones.length} cotizaciones)
-                </p>
-                <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
-                  <table style={{ fontSize: "0.78rem", minWidth: 820 }}>
-                    <thead>
-                      <tr>
-                        <th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th>
-                        <th style={{ textAlign: "right" }}>Subtotal</th><th style={{ textAlign: "right" }}>Total</th>
-                        <th>Estatus</th><th style={{ textAlign: "right" }}>Comisión</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {repAsesorData.operaciones.map(op => (
-                        <tr key={op.id}>
-                          <td style={{ fontFamily: "monospace", fontWeight: 700 }}>{op.folio}</td>
-                          <td style={{ textTransform: "capitalize" }}>{op.tipo}</td>
-                          <td>{op.cliente?.nombre ?? "—"}</td>
-                          <td style={{ color: "var(--text-muted)" }}>{op.asesor?.nombre ?? "Sin asesor"}</td>
-                          <td style={{ textAlign: "right" }}>${op.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                          <td style={{ textAlign: "right", fontWeight: 700 }}>${op.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
-                          <td>
-                            <span className={`badge ${ESTATUS_BADGE[op.estatus] ?? "badge-gray"}`}>
-                              {op.estatus === "activa" ? "Activa" : op.estatus === "facturada" ? "Facturada" : "Cancelada"}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: "right", color: op.comision ? "var(--accent)" : "var(--text-muted)" }}>
-                            {op.comision ? `$${op.comision.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "—"}
-                          </td>
+                <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
+                  <div style={{ overflowX: "auto", maxHeight: 340, overflowY: "auto" }}>
+                    <table style={{ fontSize: "0.8rem", width: "100%", minWidth: 760 }}>
+                      <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                        <tr style={{ background: "var(--surface3)" }}>
+                          <th style={{ padding: "9px 12px", textAlign: "left" }}>Folio</th>
+                          <th style={{ padding: "9px 12px", textAlign: "left" }}>Tipo</th>
+                          <th style={{ padding: "9px 12px", textAlign: "left" }}>Cliente</th>
+                          <th style={{ padding: "9px 12px", textAlign: "left" }}>Asesor</th>
+                          <th style={{ padding: "9px 12px", textAlign: "right" }}>Subtotal</th>
+                          <th style={{ padding: "9px 12px", textAlign: "right" }}>Total</th>
+                          <th style={{ padding: "9px 12px", textAlign: "center" }}>Estatus</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {repAsesorData.operaciones.length === 0 ? (
+                          <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>Sin cotizaciones en este periodo</td></tr>
+                        ) : repAsesorData.operaciones.map(op => (
+                          <tr key={op.id} style={{ borderTop: "1px solid var(--border)" }}>
+                            <td style={{ padding: "8px 12px", fontFamily: "monospace", fontWeight: 700 }}>{op.folio}</td>
+                            <td style={{ padding: "8px 12px", textTransform: "capitalize", color: "var(--text-muted)" }}>{op.tipo}</td>
+                            <td style={{ padding: "8px 12px" }}>{op.cliente?.nombre ?? "—"}</td>
+                            <td style={{ padding: "8px 12px", color: "var(--text-muted)" }}>{op.asesor?.nombre ?? "Sin asesor"}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "right" }}>${op.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700 }}>${op.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                            <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                              <span className={`badge ${ESTATUS_BADGE[op.estatus] ?? "badge-gray"}`}>
+                                {op.estatus === "activa" ? "Activa" : op.estatus === "facturada" ? "Facturada" : "Cancelada"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-
-                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 12, fontStyle: "italic" }}>
-                  ⚠ {repAsesorData.meta.advertencia}
-                </p>
               </>
             )}
 
-            <div className="modal-footer" style={{ paddingTop: 12 }}>
+            <div className="modal-footer" style={{ paddingTop: 16 }}>
               <button className="btn btn-secondary" onClick={() => setModalReporteAsesor(false)}>Cerrar</button>
             </div>
           </div>
         </div>
       )}
-
       {facturaModal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setFacturaModal(null); }}>
           <div className="modal" style={{ maxWidth: 400 }}>
