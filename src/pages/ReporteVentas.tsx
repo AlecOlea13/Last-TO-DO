@@ -859,23 +859,27 @@ export default function ReporteVentas() {
               alignItems: "flex-end",
             }}
           >
-            <div className="form-group" style={{ margin: 0 }}>
+            <div className="form-group" style={{ margin: 0, opacity: categoria === "rentas" ? 0.45 : 1 }}>
               <label className="form-label">Desde</label>
               <input
                 className="form-input"
                 type="date"
                 value={desde}
                 onChange={e => setDesde(e.target.value)}
+                disabled={categoria === "rentas"}
+                title={categoria === "rentas" ? "No aplica a Rentas: se muestran todas las activas sin importar la fecha" : undefined}
                 style={{ width: 160 }}
               />
             </div>
-            <div className="form-group" style={{ margin: 0 }}>
+            <div className="form-group" style={{ margin: 0, opacity: categoria === "rentas" ? 0.45 : 1 }}>
               <label className="form-label">Hasta</label>
               <input
                 className="form-input"
                 type="date"
                 value={hasta}
                 onChange={e => setHasta(e.target.value)}
+                disabled={categoria === "rentas"}
+                title={categoria === "rentas" ? "No aplica a Rentas: se muestran todas las activas sin importar la fecha" : undefined}
                 style={{ width: 160 }}
               />
             </div>
@@ -1830,8 +1834,8 @@ export default function ReporteVentas() {
                 color: "var(--text-muted)", lineHeight: 1.6,
               }}>
                 <strong style={{ color: "var(--accent)" }}>Rentas — Contratos activos.</strong>
-                {" "}Solo se muestran rentas con estatus "activa"; en cuanto un contrato pasa a "terminada" deja de contar aquí.
-                El filtro de fechas usa la fecha de inicio del contrato.
+                {" "}Se muestran TODAS las rentas con estatus "activa", sin importar cuándo inició el contrato; en cuanto pasa a "terminada" deja de contar aquí.
+                Los filtros de fecha no aplican a esta categoría (una renta activa es vigente hoy, no un evento puntual).
                 La comisión se calcula desde la fecha de inicio hasta hoy, ya que este módulo no registra una fecha de pago separada.
               </div>
 
