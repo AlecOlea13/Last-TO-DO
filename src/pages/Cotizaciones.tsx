@@ -47,6 +47,30 @@ type Cotizacion = {
 };
 
 type Cliente = { _id: string; nombre: string };
+
+// ── Reporte general por asesor ──────────────────────────────────────────────
+type BucketReporte = { cantidad: number; subtotal: number; iva: number; total: number; comision?: number };
+type GrupoAsesorReporte = {
+  asesorId: string | null;
+  asesorNombre: string;
+  activas: BucketReporte;
+  facturadas: BucketReporte;
+  canceladas: BucketReporte;
+  totalGeneral: BucketReporte;
+};
+type OperacionReporte = {
+  id: string; folio: string; tipo: string; fecha: string | null; estatus: string;
+  subtotal: number; iva: number; total: number; numeroFactura: string | null;
+  cliente: { id: string | null; nombre: string } | null;
+  asesor: { id: string | null; nombre: string } | null;
+  comision: { porcentaje: number; monto: number; diasCobro: number } | null;
+};
+type ReporteAsesorData = {
+  totales: { activas: BucketReporte; facturadas: BucketReporte; canceladas: BucketReporte };
+  porAsesor: GrupoAsesorReporte[];
+  operaciones: OperacionReporte[];
+  meta: { advertencia: string };
+};
 type Montacargas = {
   _id: string; numeroEconomico: string; marca: string; modelo: string; capacidad?: string;
   tipo?: string; serie?: string; alturaColapsada?: string; alturaLevante?: string;
@@ -354,6 +378,19 @@ export default function Cotizaciones() {
   const [modalReporte, setModalReporte] = useState(false);
   const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
 
+  // ── Reporte general por asesor ──
+  const [modalReporteAsesor, setModalReporteAsesor] = useState(false);
+  const [repAsesorDesde, setRepAsesorDesde] = useState(() => {
+    const d = new Date(); d.setDate(1);
+    return d.toISOString().split("T")[0];
+  });
+  const [repAsesorHasta, setRepAsesorHasta] = useState(new Date().toISOString().split("T")[0]);
+  const [repAsesorFiltroAsesor, setRepAsesorFiltroAsesor] = useState("todos");
+  const [repAsesorFiltroTipo, setRepAsesorFiltroTipo] = useState("todos");
+  const [repAsesorData, setRepAsesorData] = useState<ReporteAsesorData | null>(null);
+  const [loadingRepAsesor, setLoadingRepAsesor] = useState(false);
+  const [repAsesorError, setRepAsesorError] = useState<string | null>(null);
+
   useEffect(() => { load(); }, []);
 
   async function load() {
@@ -372,6 +409,28 @@ export default function Cotizaciones() {
       setRefaccionesCatalogo(rf.data);
     } catch {}
     finally { setLoading(false); }
+  }
+
+  async function cargarReporteAsesor() {
+    setLoadingRepAsesor(true);
+    setRepAsesorError(null);
+    try {
+      const params: Record<string, string> = { desde: repAsesorDesde, hasta: repAsesorHasta };
+      if (repAsesorFiltroAsesor !== "todos") params.asesorId = repAsesorFiltroAsesor;
+      if (repAsesorFiltroTipo !== "todos")   params.tipo     = repAsesorFiltroTipo;
+      const { data } = await api.get("/cotizaciones/reporte", { params });
+      setRepAsesorData(data);
+    } catch (e: any) {
+      setRepAsesorError(e?.response?.data?.message ?? "Error al generar el reporte");
+      setRepAsesorData(null);
+    } finally {
+      setLoadingRepAsesor(false);
+    }
+  }
+
+  function abrirReporteAsesor() {
+    setModalReporteAsesor(true);
+    cargarReporteAsesor();
   }
 
   function getCotizacionesSemana(): Cotizacion[] {
@@ -1124,6 +1183,11 @@ export default function Cotizaciones() {
               📊 Reporte semanal
             </button>
           )}
+          {["developer", "gerencia"].includes(rol) && (
+            <button className="btn btn-secondary" onClick={abrirReporteAsesor}>
+              👤 Reporte por asesor
+            </button>
+          )}
           <button className="btn btn-primary" onClick={openNew}>+ Nueva cotización</button>
         </div>
       </div>
@@ -1433,6 +1497,161 @@ export default function Cotizaciones() {
             <div className="modal-footer" style={{ paddingTop: 12 }}>
               <button className="btn btn-secondary" onClick={() => setModalReporte(false)}>Cerrar</button>
               <button className="btn btn-secondary" onClick={() => window.print()}>🖨️ Imprimir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalReporteAsesor && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporteAsesor(false); }}>
+          <div className="modal" style={{ maxWidth: 1040, width: "96vw", display: "flex", flexDirection: "column" }}>
+            <button className="modal-close" onClick={() => setModalReporteAsesor(false)}>✕</button>
+            <h2 className="modal-title" style={{ marginBottom: 4 }}>👤 Reporte de cotizaciones por asesor</h2>
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>
+              Incluye todos los tipos de cotización. La comisión solo se calcula sobre las facturadas.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 16 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Desde</label>
+                <input className="form-input" type="date" value={repAsesorDesde} onChange={e => setRepAsesorDesde(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Hasta</label>
+                <input className="form-input" type="date" value={repAsesorHasta} onChange={e => setRepAsesorHasta(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Asesor</label>
+                <select className="form-select" value={repAsesorFiltroAsesor} onChange={e => setRepAsesorFiltroAsesor(e.target.value)}>
+                  <option value="todos">Todos</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Tipo</label>
+                <select className="form-select" value={repAsesorFiltroTipo} onChange={e => setRepAsesorFiltroTipo(e.target.value)}>
+                  <option value="todos">Todos los tipos</option>
+                  <option value="servicio">Servicio</option>
+                  <option value="renta">Renta</option>
+                  <option value="venta">Venta</option>
+                  <option value="refacciones">Refacciones</option>
+                  <option value="curso">Curso</option>
+                </select>
+              </div>
+              <button className="btn btn-primary" onClick={cargarReporteAsesor} disabled={loadingRepAsesor}>
+                {loadingRepAsesor ? "Buscando..." : "🔍 Buscar"}
+              </button>
+            </div>
+
+            {repAsesorError && (
+              <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "var(--radius-sm)", color: "var(--red)", fontSize: "0.85rem", marginBottom: 16 }}>
+                {repAsesorError}
+              </div>
+            )}
+
+            {loadingRepAsesor ? (
+              <div className="loading-state"><div className="spinner" /></div>
+            ) : !repAsesorData ? (
+              <div className="empty-state"><span className="empty-icon">👤</span><p>Selecciona un rango y busca</p></div>
+            ) : (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+                  {[
+                    { label: "Activas",    data: repAsesorData.totales.activas,    color: "#22c55e", icon: "📄" },
+                    { label: "Facturadas", data: repAsesorData.totales.facturadas, color: "#3b82f6", icon: "🧾" },
+                    { label: "Canceladas", data: repAsesorData.totales.canceladas, color: "#6b7280", icon: "❌" },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>{s.icon} {s.label}</span>
+                        <span style={{ fontWeight: 700, color: s.color }}>{s.data.cantidad}</span>
+                      </div>
+                      <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--text)" }}>${s.data.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  ))}
+                  <div style={{ background: "rgba(245,158,11,0.08)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid rgba(245,158,11,0.25)" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--accent)", textTransform: "uppercase", fontWeight: 700 }}>💰 Comisión total</span>
+                    <p style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)", marginTop: 6 }}>
+                      ${repAsesorData.totales.facturadas.comision!.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ overflowX: "auto", marginBottom: 20 }}>
+                  <table style={{ fontSize: "0.82rem", minWidth: 760 }}>
+                    <thead>
+                      <tr>
+                        <th>Asesor</th>
+                        <th style={{ textAlign: "center" }}>Activas</th>
+                        <th style={{ textAlign: "center" }}>Facturadas</th>
+                        <th style={{ textAlign: "center" }}>Canceladas</th>
+                        <th style={{ textAlign: "right" }}>Total facturado</th>
+                        <th style={{ textAlign: "right" }}>Comisión</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {repAsesorData.porAsesor.length === 0 ? (
+                        <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--text-muted)", padding: 20 }}>Sin datos en este periodo</td></tr>
+                      ) : repAsesorData.porAsesor.map((g, i) => (
+                        <tr key={g.asesorId ?? `sin-${i}`}>
+                          <td style={{ fontWeight: 600 }}>
+                            {g.asesorNombre}
+                            {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
+                          </td>
+                          <td style={{ textAlign: "center" }}>{g.activas.cantidad}</td>
+                          <td style={{ textAlign: "center" }}>{g.facturadas.cantidad}</td>
+                          <td style={{ textAlign: "center" }}>{g.canceladas.cantidad}</td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${g.facturadas.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--accent)" }}>${(g.facturadas.comision ?? 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
+                  Detalle ({repAsesorData.operaciones.length} cotizaciones)
+                </p>
+                <div style={{ overflowX: "auto", maxHeight: 320, overflowY: "auto" }}>
+                  <table style={{ fontSize: "0.78rem", minWidth: 820 }}>
+                    <thead>
+                      <tr>
+                        <th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th>
+                        <th style={{ textAlign: "right" }}>Subtotal</th><th style={{ textAlign: "right" }}>Total</th>
+                        <th>Estatus</th><th style={{ textAlign: "right" }}>Comisión</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {repAsesorData.operaciones.map(op => (
+                        <tr key={op.id}>
+                          <td style={{ fontFamily: "monospace", fontWeight: 700 }}>{op.folio}</td>
+                          <td style={{ textTransform: "capitalize" }}>{op.tipo}</td>
+                          <td>{op.cliente?.nombre ?? "—"}</td>
+                          <td style={{ color: "var(--text-muted)" }}>{op.asesor?.nombre ?? "Sin asesor"}</td>
+                          <td style={{ textAlign: "right" }}>${op.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          <td style={{ textAlign: "right", fontWeight: 700 }}>${op.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</td>
+                          <td>
+                            <span className={`badge ${ESTATUS_BADGE[op.estatus] ?? "badge-gray"}`}>
+                              {op.estatus === "activa" ? "Activa" : op.estatus === "facturada" ? "Facturada" : "Cancelada"}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right", color: op.comision ? "var(--accent)" : "var(--text-muted)" }}>
+                            {op.comision ? `$${op.comision.monto.toLocaleString("es-MX", { minimumFractionDigits: 2 })}` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 12, fontStyle: "italic" }}>
+                  ⚠ {repAsesorData.meta.advertencia}
+                </p>
+              </>
+            )}
+
+            <div className="modal-footer" style={{ paddingTop: 12 }}>
+              <button className="btn btn-secondary" onClick={() => setModalReporteAsesor(false)}>Cerrar</button>
             </div>
           </div>
         </div>
