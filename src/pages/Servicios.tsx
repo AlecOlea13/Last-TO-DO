@@ -810,25 +810,8 @@ export default function Servicios() {
     }));
   }
 
-  async function subirFotoRefacciones(file: File, accionId?: string) {
-    setUploadingFoto("refacciones");
-    try {
-      if (online) {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("upload_preset", UPLOAD_PRESET);
-        const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-        const data = await res.json();
-        setCerrarForm((p: any) => ({ ...p, fotoRefacciones: data.secure_url }));
-      } else {
-        if (!accionId) return;
-        const base64 = await fileToBase64(file);
-        await guardarFotoOffline({ id: nanoid(), accionId, tipo: "refacciones", base64, fileName: file.name });
-        setCerrarForm((p: any) => ({ ...p, fotoRefacciones: base64 }));
-      }
-    } catch { alert("Error al procesar la imagen"); }
-    finally { setUploadingFoto(null); }
-  }
+  // subirFotoRefacciones eliminado: la foto de refacciones utilizadas ya no
+  // se captura en el flujo de cierre de servicio (ni técnico ni escritorio).
 
   async function obtenerUbicacion(): Promise<{ lat: number; lng: number } | null> {
     if (!("geolocation" in navigator)) return null;
@@ -938,7 +921,11 @@ export default function Servicios() {
     try {
       const ubicacion = await obtenerUbicacion();
       const payload: any = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
-      if (esTecnico) delete payload.estatusMonta;
+      // Estatus del equipo y próximo servicio ya no se capturan en la UI:
+      // el backend calcula estatusRegreso automáticamente al cerrar, y el
+      // próximo servicio se programa solo (cada mes), sin input manual.
+      delete payload.estatusMonta;
+      delete payload.proximoServicio;
       if (online) {
         await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
         await guardarPendientes(
@@ -1256,35 +1243,7 @@ export default function Servicios() {
     );
   }
 
-  function FotoRefaccionesUpload() {
-    const ref = useRef<HTMLInputElement>(null);
-    const url = cerrarForm.fotoRefacciones;
-    return (
-      <div>
-        <label className="form-label">
-          🔩 Foto de refacciones utilizadas
-          {!online && <span style={{ fontSize: "0.68rem", color: "var(--accent)", marginLeft: 6 }}>📵 se guardará offline</span>}
-        </label>
-        <div onClick={() => ref.current?.click()}
-          style={{ border: "2px dashed var(--border)", borderRadius: "var(--radius-sm)", padding: 12, textAlign: "center", cursor: "pointer", background: "var(--surface2)" }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--accent)")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}>
-          {url ? (
-            <img src={url} alt="Refacciones" style={{ width: "100%", maxHeight: 140, objectFit: "cover", borderRadius: 6 }} />
-          ) : uploadingFoto === "refacciones" ? (
-            <div className="spinner" style={{ width: 24, height: 24, margin: "auto" }} />
-          ) : (
-            <div>
-              <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-muted)" }}>📷 Toca para subir foto</p>
-              <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: "var(--text-muted)" }}>Cámara o galería</p>
-            </div>
-          )}
-        </div>
-        <input ref={ref} type="file" accept="image/*" style={{ display: "none" }}
-          onChange={e => { const f = e.target.files?.[0]; if (f) subirFotoRefacciones(f, cerrarAccionId); }} />
-      </div>
-    );
-  }
+  // FotoRefaccionesUpload eliminado: ya no se usa en ningún modal de cierre.
 
   function FirmaInline() {
     const firma = cerrarForm.firmaCliente;
@@ -1437,13 +1396,9 @@ export default function Servicios() {
               )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
               <div className="form-grid">
-                <div className="form-group">
+                <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Horómetro al cierre</label>
                   <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} placeholder="0" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Próximo servicio</label>
-                  <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
                 </div>
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Notas / trabajos realizados</label>
@@ -1454,7 +1409,6 @@ export default function Servicios() {
                   </div>
                 </div>
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
-                <div className="form-group"><FotoRefaccionesUpload /></div>
                 <FirmaInline />
                 <PendientesInline pendientesTexto={pendientesTexto} setPendientesTexto={setPendientesTexto} />
               </div>
@@ -1882,20 +1836,9 @@ export default function Servicios() {
               </div>
             )}
             <div className="form-grid">
-              <div className="form-group">
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Horómetro al cierre</label>
                 <input className="form-input" type="number" value={cerrarForm.horometro} onChange={e => setCerrarForm((p: any) => ({ ...p, horometro: +e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Próximo servicio</label>
-                <input className="form-input" type="date" value={cerrarForm.proximoServicio} onChange={e => setCerrarForm((p: any) => ({ ...p, proximoServicio: e.target.value }))} />
-              </div>
-              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-                <label className="form-label">Estatus del equipo al cerrar</label>
-                <select className="form-select" value={cerrarForm.estatusMonta} onChange={e => setCerrarForm((p: any) => ({ ...p, estatusMonta: e.target.value }))}>
-                  <option value="disponible">Disponible</option>
-                  <option value="rentado">Rentado</option>
-                </select>
               </div>
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Notas de cierre / trabajos realizados</label>
@@ -1905,7 +1848,6 @@ export default function Servicios() {
                 </div>
               </div>
               <div className="form-group" style={{ gridColumn: "1 / -1" }}><FotosEquipoUpload /></div>
-              <div className="form-group"><FotoRefaccionesUpload /></div>
               <FirmaInline />
               <PendientesInline pendientesTexto={pendientesTexto} setPendientesTexto={setPendientesTexto} />
             </div>
