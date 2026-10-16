@@ -181,9 +181,10 @@ type OperacionRenta = {
   equipo: { id: string; numeroEconomico: string; marca: string; modelo: string } | null;
   cliente: { id: string | null; nombre: string } | null;
   asesor:  { id: string | null; nombre: string } | null;
-  comision: { diasCobro: number; porcentaje: number; monto: number } | null;
+  comision: { diasCobro: number; porcentaje: number; monto: number; fechaPago?: string; folioFactura?: string | null } | null;
   porcentajeComision: number | null;
   comisionAntesIva:   number | null;
+  estadoComision?: "calculada" | "pendiente_pago";
 };
 type ResultadoRentas = {
   resumen:       ResumenRentas;
@@ -489,7 +490,7 @@ export default function ReporteVentas() {
         op.subtotal,
         op.iva,
         op.total,
-        op.comision ? `${op.comision.porcentaje}% · $${op.comision.monto}` : "—",
+        op.comision ? `${op.comision.porcentaje}% · $${op.comision.monto}` : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago" : "—"),
       ].map(escaparCSV).join(","));
       const csv = [cabecera, ...filas].join("\n");
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
@@ -637,7 +638,7 @@ export default function ReporteVentas() {
           <td style="text-align:right">$${fmtMXN(op.subtotal)}</td>
           <td style="text-align:right">$${fmtMXN(op.iva)}</td>
           <td style="text-align:right;font-weight:700">$${fmtMXN(op.total)}</td>
-          <td style="font-size:0.8em">${op.comision ? escaparHTML(`${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)}`) : "—"}</td>
+          <td style="font-size:0.8em">${op.comision ? escaparHTML(`${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)}`) : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago" : "—")}</td>
         </tr>`).join("");
       const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Rentas Activas</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
@@ -1962,6 +1963,22 @@ export default function ReporteVentas() {
                                           {op.comision.porcentaje}% · {op.comision.diasCobro}d
                                         </span>
                                       </div>
+                                    ) : op.estadoComision === "pendiente_pago" ? (
+                                      <span
+                                        title="Aún no se detecta un pago cobrado en CxC vinculado a esta renta"
+                                        style={{
+                                          display: "inline-block",
+                                          padding: "2px 7px",
+                                          borderRadius: 999,
+                                          background: "rgba(245,184,0,0.15)",
+                                          color: "#B8860B",
+                                          fontWeight: 600,
+                                          fontSize: "0.68rem",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        Pendiente de pago
+                                      </span>
                                     ) : (
                                       <span style={{ color: "var(--text-muted)" }}>—</span>
                                     )}
@@ -2303,7 +2320,12 @@ export default function ReporteVentas() {
                   { label: "Renovaciones",     val: op.renovacionesCount > 0 ? `${op.renovacionesCount} renovación${op.renovacionesCount !== 1 ? "es" : ""}` : undefined },
                   { label: "Flete",            val: op.flete > 0 ? `$${fmtMXN(op.flete)}` : undefined },
                   { label: "Depósito",         val: op.deposito > 0 ? `$${fmtMXN(op.deposito)}` : undefined },
-                  { label: "Comisión calculada", val: op.comision ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días desde inicio)` : undefined },
+                  {
+                    label: "Comisión calculada",
+                    val: op.comision
+                      ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días hasta pago${op.comision.folioFactura ? ` · factura ${op.comision.folioFactura}` : ""})`
+                      : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago — aún no se registra cobro de la factura vinculada en CxC" : undefined),
+                  },
                 ].map(item => item.val ? (
                   <div key={item.label}>
                     <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>

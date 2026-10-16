@@ -37,6 +37,7 @@ type CxC = {
   comentarios?: string;
   notas?: string;
   pagos?: PagoHistorial[];
+  rentaId?: string | null;
 };
 
 type PagoRep = { uuid: string; montoPagado: number };
@@ -371,6 +372,25 @@ export default function CuentasCobrar() {
             });
             setRenovacionItems(items);
             setModalRentaDetectada({ clienteNombre: rentaData.clienteNombre, items });
+
+            // ── Vincula el CxC recién creado con la Renta detectada por número
+            //    económico, para que el reporte de comisiones pueda saber cuándo
+            //    esta renta fue pagada (ver reporteVentasRentas.service.js).
+            //    El match se resuelve DESPUÉS del POST /cxc (requiere la búsqueda
+            //    por RFC), así que se persiste con un PUT inmediato sobre el
+            //    documento ya creado. Solo se vincula cuando hay exactamente un
+            //    match, para no adivinar en facturas con varios conceptos de
+            //    renta ambiguos.
+            const matchesUnicos = items.filter(i => i.renta);
+            if (matchesUnicos.length === 1 && matchesUnicos[0].renta) {
+              const rentaIdDetectada = matchesUnicos[0].renta._id;
+              try {
+                await api.put(`/cxc/${data._id}`, { rentaId: rentaIdDetectada });
+                setCxcs(prev => prev.map(c => c._id === data._id ? { ...c, rentaId: rentaIdDetectada } as any : c));
+              } catch (err) {
+                console.error("Error vinculando CxC con Renta:", err);
+              }
+            }
           }
         } catch (err) {
           console.error("Error buscando rentas por RFC:", err);
