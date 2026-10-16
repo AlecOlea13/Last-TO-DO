@@ -980,7 +980,12 @@ export default function ReporteVentas() {
         </div>
 
         {/* ── Categorías pendientes ─────────────────────────────────────────── */}
-        {categoria !== "equipos" && (
+        {/* BUG HISTÓRICO corregido: esta condición decía "categoria !== 'equipos'",
+            es decir, mostraba el placeholder de "pendiente de integración" para
+            TODAS las demás categorías (Servicios, Refacciones, Rentas, Comisiones)
+            aunque ya estuvieran completamente implementadas. Ahora solo se muestra
+            para categorías realmente marcadas pendiente:true en CATS (hoy, "otros"). */}
+        {CATS.find(c => c.key === categoria)?.pendiente && (
           <div
             className="table-card"
             style={{ marginTop: 16 }}
