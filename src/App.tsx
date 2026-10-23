@@ -5,6 +5,7 @@ import Dashboard       from "./pages/Dashboard";
 import Profile         from "./pages/Profile";
 import Clientes        from "./pages/Clientes";
 import Montacargas     from "./pages/Montacargas";
+import EquiposCliente  from "./pages/EquiposCliente";      // ← NUEVO
 import Rentas          from "./pages/Rentas";
 import Servicios       from "./pages/Servicios";
 import Pendientes      from "./pages/Pendientes";
@@ -47,6 +48,10 @@ function AppRoutes() {
 
         <Route path="montacargas" element={<Montacargas />} />
         <Route path="servicios"   element={<Servicios />} />
+        {/* NUEVO — equipos propiedad del cliente. También: Dashboard.tsx allNav, app.js /api/equipos-cliente */}
+        <Route path="equipos-cliente" element={
+          <ProtectedRoute roles={["developer","gerencia","oficina","tecnico"]}><EquiposCliente /></ProtectedRoute>
+        } />
         <Route path="almacen"     element={<Almacen />} />
 
         <Route path="clientes" element={

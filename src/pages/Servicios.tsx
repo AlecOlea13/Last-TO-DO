@@ -29,7 +29,7 @@ type Pausa = {
 type Servicio = {
   _id: string;
   folio: string;
-  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string };
+  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string; esDeCliente?: boolean };
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; email?: string };
   tipoServicio?: { _id: string; nombre: string };
   tecnicoAsignado?: { _id: string; nombre: string };
@@ -59,7 +59,7 @@ type TipoServicio = { _id: string; nombre: string; intervaloHrs?: number };
 type Usuario      = { _id: string; nombre: string; rol: string };
 
 const emptyForm = {
-  montacargas: "", cliente: "", tipoServicio: "", tecnicoAsignado: "",
+  montacargas: "", equipoCliente: "", cliente: "", tipoServicio: "", tecnicoAsignado: "",
   fechaReporte: new Date().toISOString().split("T")[0],
   problema: "", horometro: 0,
 };
@@ -610,6 +610,12 @@ export default function Servicios() {
   const [montas, setMontas]             = useState<Monta[]>([]);
   const [clientes, setClientes]         = useState<Cliente[]>([]);
   const [tipos, setTipos]               = useState<TipoServicio[]>([]);
+  // ── Equipos del cliente (módulo aparte, no son inventario Pipsa) ──
+  const [equiposCliente, setEquiposCliente] = useState<any[]>([]);
+  const [tipoEquipo, setTipoEquipo]         = useState<"pipsa" | "cliente">("pipsa");
+  const [regEqAbierto, setRegEqAbierto]     = useState(false);
+  const [regEqForm, setRegEqForm]           = useState({ numeroEconomico: "", marca: "", modelo: "", serie: "", tipo: "", capacidad: "" });
+  const [regEqSaving, setRegEqSaving]       = useState(false);
   const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState("");
@@ -700,6 +706,10 @@ export default function Servicios() {
         setTipos(t.data);
         if (esTecnico) await cachearServicios(s.data);
       } catch {}
+      try {
+        const { data } = await api.get("/equipos-cliente");
+        setEquiposCliente(data);
+      } catch {}
       if (["developer", "gerencia", "oficina", "supervisor_almacen"].includes(rol)) {
         try {
           const { data } = await api.get("/users");
@@ -720,10 +730,15 @@ export default function Servicios() {
   }, [online]);
 
   async function save() {
-    if (!form.montacargas || !form.problema.trim()) return;
+    const equipoElegido = tipoEquipo === "cliente" ? form.equipoCliente : form.montacargas;
+    if (!equipoElegido || !form.problema.trim()) return;
     setSaving(true);
     try {
-      const { data } = await api.post("/servicios", form);
+      const payload: any = { ...form };
+      // Uno u otro, nunca ambos
+      if (tipoEquipo === "cliente") payload.montacargas = "";
+      else payload.equipoCliente = "";
+      const { data } = await api.post("/servicios", payload);
       setServicios(prev => [data, ...prev]);
       setModal(false);
       load();
@@ -735,7 +750,8 @@ export default function Servicios() {
   function abrirEditar(s: Servicio) {
     setEditarForm({
       cliente:         s.cliente?._id         ?? "",
-      montacargas:     s.montacargas?._id      ?? "",
+      // Si es equipo del cliente, `montacargas` viene aplanado (otro id): no se reenvía como Montacargas
+      montacargas:     s.montacargas?.esDeCliente ? "" : (s.montacargas?._id ?? ""),
       tipoServicio:    s.tipoServicio?._id     ?? "",
       tecnicoAsignado: s.tecnicoAsignado?._id  ?? "",
       fechaReporte:    s.fechaReporte ? s.fechaReporte.split("T")[0] : "",
@@ -930,7 +946,7 @@ export default function Servicios() {
         await api.post(`/servicios/${cerrarModal._id}/cerrar`, payload);
         await guardarPendientes(
           cerrarModal._id,
-          cerrarModal.montacargas?._id,
+          cerrarModal.montacargas?.esDeCliente ? undefined : cerrarModal.montacargas?._id,
           cerrarModal.cliente?._id,
           cerrarModal.tecnicoAsignado?._id ?? userId
         );
@@ -1003,8 +1019,39 @@ export default function Servicios() {
       ...p,
       cliente: clienteId,
       montacargas: montasFiltradas.length === 1 ? montasFiltradas[0]._id : "",
+      equipoCliente: "",
     }));
   }
+
+  function onEquipoClienteChange(eqId: string) {
+    const eq = equiposCliente.find(e => e._id === eqId);
+    setForm((p: any) => ({ ...p, equipoCliente: eqId, horometro: eq?.horometroActual ?? p.horometro }));
+  }
+
+  async function registrarEquipoCliente() {
+    if (!form.cliente) { alert("Primero selecciona el cliente dueño del equipo"); return; }
+    const f = regEqForm;
+    if (!f.marca.trim() && !f.modelo.trim() && !f.serie.trim() && !f.numeroEconomico.trim()) {
+      alert("Captura al menos marca, modelo, serie o número del equipo");
+      return;
+    }
+    setRegEqSaving(true);
+    try {
+      const { data } = await api.post("/equipos-cliente", { ...f, cliente: form.cliente });
+      setEquiposCliente(prev => [data, ...prev]);
+      setForm((p: any) => ({ ...p, equipoCliente: data._id, horometro: data.horometroActual ?? p.horometro }));
+      setRegEqForm({ numeroEconomico: "", marca: "", modelo: "", serie: "", tipo: "", capacidad: "" });
+      setRegEqAbierto(false);
+    } catch (e: any) {
+      alert(e?.response?.data?.message ?? "Error al registrar el equipo");
+    } finally {
+      setRegEqSaving(false);
+    }
+  }
+
+  const equiposClienteFiltrados = form.cliente
+    ? equiposCliente.filter(e => (e.cliente?._id ?? e.cliente) === form.cliente)
+    : [];
 
   const montasFiltradas  = form.cliente ? montas.filter(m => m.clienteActual?._id === form.cliente) : montas;
   const montasSinCliente = form.cliente && montasFiltradas.length === 0;
@@ -1448,7 +1495,7 @@ export default function Servicios() {
             <button className="btn btn-secondary" onClick={() => setModalReporte(true)}>📊 Reporte</button>
           )}
           {canCreate && (
-            <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setModal(true); }}>+ Nuevo servicio</button>
+            <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setTipoEquipo("pipsa"); setRegEqAbierto(false); setModal(true); }}>+ Nuevo servicio</button>
           )}
         </div>
       </div>
@@ -1732,16 +1779,89 @@ export default function Servicios() {
                 <label className="form-label">Cliente</label>
                 <BuscadorCliente clientes={clientes} value={form.cliente} onChange={onClienteChange} />
               </div>
-              <div className="form-group">
-                <label className="form-label">Montacargas *</label>
-                {montasSinCliente && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Este cliente no tiene equipos asignados — mostrando todos</p>}
-                {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente</p>}
-                <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
-                  <option value="">Selecciona equipo...</option>
-                  {(montasSinCliente ? montas : montasFiltradas).map(m => (
-                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label className="form-label">Equipo *</label>
+                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                  {([["pipsa", "🏭 Equipo Pipsa"], ["cliente", "🏢 Equipo del cliente"]] as const).map(([k, lbl]) => (
+                    <button key={k} type="button"
+                      className={`btn btn-sm ${tipoEquipo === k ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => setTipoEquipo(k)}>{lbl}</button>
                   ))}
-                </select>
+                </div>
+
+                {tipoEquipo === "pipsa" ? (
+                  <>
+                    {montasSinCliente && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Este cliente no tiene equipos asignados — mostrando todos</p>}
+                    {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente</p>}
+                    <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
+                      <option value="">Selecciona equipo...</option>
+                      {(montasSinCliente ? montas : montasFiltradas).map(m => (
+                        <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    {!form.cliente ? (
+                      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Selecciona primero el cliente dueño del equipo.</p>
+                    ) : (
+                      <>
+                        <select className="form-select" value={form.equipoCliente} onChange={e => onEquipoClienteChange(e.target.value)}>
+                          <option value="">
+                            {equiposClienteFiltrados.length === 0 ? "Este cliente no tiene equipos registrados" : "Selecciona equipo del cliente..."}
+                          </option>
+                          {equiposClienteFiltrados.map(e => (
+                            <option key={e._id} value={e._id}>
+                              {[e.numeroEconomico, e.marca, e.modelo, e.serie && `S/N ${e.serie}`].filter(Boolean).join(" — ")}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }}
+                          onClick={() => setRegEqAbierto(v => !v)}>
+                          {regEqAbierto ? "Cancelar registro" : "+ Registrar equipo del cliente"}
+                        </button>
+                        {regEqAbierto && (
+                          <div style={{ marginTop: 8, padding: 12, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", background: "var(--surface2)" }}>
+                            <div className="form-grid">
+                              <div className="form-group">
+                                <label className="form-label">No. / identificador</label>
+                                <input className="form-input" value={regEqForm.numeroEconomico} onChange={e => setRegEqForm(p => ({ ...p, numeroEconomico: e.target.value }))} placeholder="Como lo llama el cliente" />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Marca</label>
+                                <input className="form-input" value={regEqForm.marca} onChange={e => setRegEqForm(p => ({ ...p, marca: e.target.value }))} />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Modelo</label>
+                                <input className="form-input" value={regEqForm.modelo} onChange={e => setRegEqForm(p => ({ ...p, modelo: e.target.value }))} />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Serie</label>
+                                <input className="form-input" value={regEqForm.serie} onChange={e => setRegEqForm(p => ({ ...p, serie: e.target.value }))} />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Tipo</label>
+                                <select className="form-select" value={regEqForm.tipo} onChange={e => setRegEqForm(p => ({ ...p, tipo: e.target.value }))}>
+                                  <option value="">—</option>
+                                  <option value="electrico">Eléctrico</option>
+                                  <option value="gas">Gas LP</option>
+                                  <option value="diesel">Diésel</option>
+                                </select>
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label">Capacidad</label>
+                                <input className="form-input" value={regEqForm.capacidad} onChange={e => setRegEqForm(p => ({ ...p, capacidad: e.target.value }))} placeholder="5000 lbs..." />
+                              </div>
+                            </div>
+                            <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={registrarEquipoCliente} disabled={regEqSaving}>
+                              {regEqSaving ? "Guardando..." : "Guardar y seleccionar"}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Tipo de servicio</label>
@@ -1772,7 +1892,7 @@ export default function Servicios() {
                 <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema o trabajo a realizar..." rows={3} />
               </div>
             </div>
-            {form.tipoServicio && (
+            {form.tipoServicio && tipoEquipo === "pipsa" && (
               <div style={{ padding: "10px 14px", background: "rgba(255,180,0,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", fontSize: "0.82rem", color: "var(--accent)", marginTop: 8 }}>
                 ⚡ Se generará automáticamente una orden de refacciones al guardar.
               </div>
