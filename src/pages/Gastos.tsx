@@ -950,7 +950,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
-                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 140px 130px",
+                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 140px",
                       gap: 0, padding: "12px 20px", borderBottom: "1px solid var(--border)",
                       background: g.estatus === "cancelada" ? "rgba(107,114,128,0.04)" : g.estatus === "parcial" ? "rgba(245,158,11,0.03)" : pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.05)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem", opacity: g.estatus === "cancelada" ? 0.65 : 1,
@@ -989,16 +989,17 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                         {g.moneda === "MXN" && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>MXN</span>}
                       </div>
                       <div><EstatusPago g={g} /></div>
-                      <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)} title="Ver detalle">👁️</button>
-                        {canDelete && g.estatus !== "cancelada" && <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)} title="Editar">✏️</button>}
+                      {/* Barra de acciones: horizontal, debajo de la factura */}
+                      <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, marginLeft: 32, paddingTop: 10, borderTop: "1px dashed var(--border)" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleF(g)}>👁️ Ver detalle</button>
+                        {canDelete && g.estatus !== "cancelada" && <button className="btn btn-secondary btn-sm" onClick={() => openEditF(g)}>✏️ Editar</button>}
                         {g.estatus !== "pagado" && g.estatus !== "cancelada" && canDelete && (
-                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => abrirModalPago(g._id, "fiscal", g)} title="Registrar pago">💳</button>
+                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => abrirModalPago(g._id, "fiscal", g)}>💳 Registrar pago</button>
                         )}
                         {g.estatus !== "pagado" && g.estatus !== "cancelada" && canCancel && (
-                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }} onClick={() => cancelarFiscal(g)} title="Cancelar factura">🚫</button>
+                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--text-muted)", borderColor: "rgba(107,114,128,0.3)" }} onClick={() => cancelarFiscal(g)}>🚫 Cancelar factura</button>
                         )}
-                        {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)} title="Eliminar">🗑️</button>}
+                        {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteFiscal(g._id)}>🗑️ Eliminar</button>}
                       </div>
                     </div>
                   ))}
@@ -1045,7 +1046,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                     return paginadosNF.map((g, idx) => {
                       acum += g.monto;
                       return (
-                        <div key={g._id} style={{ display: "grid", gridTemplateColumns: "110px 90px 80px 110px 110px 1fr 120px 90px", gap: 0, padding: "12px 20px", borderBottom: "1px solid var(--border)", background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)", alignItems: "start", fontSize: "0.8rem" }}>
+                        <div key={g._id} style={{ display: "grid", gridTemplateColumns: "110px 90px 80px 110px 110px 1fr 120px", gap: 0, padding: "12px 20px", borderBottom: "1px solid var(--border)", background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)", alignItems: "start", fontSize: "0.8rem" }}>
                           <div><p style={{ whiteSpace: "nowrap" }}>{fmt(g.fecha)}</p></div>
                           <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.asesor?.nombre ?? "—"}</p></div>
                           <div><p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{g.entrada ?? "—"}</p></div>
@@ -1057,10 +1058,10 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                             {g.notas && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{g.notas}</p>}
                           </div>
                           <div><EstatusPagoNF estatus={g.estatus} fechaPago={g.fechaPago} comprobante={g.comprobantePago} /></div>
-                          <div style={{ display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️</button>
-                            {g.estatus !== "pagado" && canDelete && <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => abrirModalPago(g._id, "nofiscal")}>💳</button>}
-                            {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️</button>}
+                          <div style={{ gridColumn: "1 / -1", display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--border)" }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => openEditNF(g)}>✏️ Editar</button>
+                            {g.estatus !== "pagado" && canDelete && <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }} onClick={() => abrirModalPago(g._id, "nofiscal")}>💳 Registrar pago</button>}
+                            {canDelete && <button className="btn btn-danger btn-sm" onClick={() => deleteNF(g._id)}>🗑️ Eliminar</button>}
                           </div>
                         </div>
                       );

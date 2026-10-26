@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import MenuAcciones from "../components/MenuAcciones";
 
 type ServicioHistorial = {
   _id: string;
@@ -566,13 +567,13 @@ export default function Montacargas() {
                       )}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
-                        {canEditarVenta && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => abrirEditarVenta(m)} title="Editar venta">✏️</button>
-                        )}
-                        {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => deshacerVenta(m)} title="Deshacer venta">↩️</button>}
-                      </div>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)} title="Ver detalle">👁️ Ver</button>
+                          <MenuAcciones acciones={[
+                            { icon: "✏️", label: "Editar venta",  onClick: () => abrirEditarVenta(m), hidden: !canEditarVenta },
+                            { icon: "↩️", label: "Deshacer venta", onClick: () => deshacerVenta(m),   hidden: !canEdit },
+                          ]} />
+                        </div>
                     </td>
                   </tr>
                 ) : (
@@ -593,21 +594,16 @@ export default function Montacargas() {
                     <td>{m.costoMes ? `$${m.costoMes.toLocaleString()}` : "—"}</td>
                     <td>{m.precioVenta ? `$${m.precioVenta.toLocaleString()}` : "—"}</td>
                     <td>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)}>👁️</button>
-                        {canVerHistorial && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => abrirHistorial(m)} title="Historial de servicios">📋</button>
-                        )}
-                        {canEdit && <button className="btn btn-secondary btn-sm" onClick={() => openEdit(m)}>✏️</button>}
-                        {canEdit && m.estatus === "disponible" && (
-                          <button className="btn btn-primary btn-sm" onClick={() => { setAsignarModal(m); setClienteSel(""); }}>Asignar</button>
-                        )}
-                        {canEdit && m.estatus !== "vendido" && (
-                          <button className="btn btn-secondary btn-sm" style={{ color: "var(--green)", borderColor: "rgba(34,197,94,0.3)" }}
-                            onClick={() => abrirVenta(m)} title="Marcar como vendido">💰 Vender</button>
-                        )}
-                        {canEdit && <button className="btn btn-danger btn-sm" onClick={() => remove(m._id)}>🗑️</button>}
-                      </div>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)} title="Ver detalle">👁️ Ver</button>
+                          <MenuAcciones acciones={[
+                            { icon: "📋", label: "Historial de servicios", onClick: () => abrirHistorial(m), hidden: !canVerHistorial },
+                            { icon: "✏️", label: "Editar equipo",          onClick: () => openEdit(m),       hidden: !canEdit },
+                            { icon: "👤", label: "Asignar a cliente",      onClick: () => { setAsignarModal(m); setClienteSel(""); }, hidden: !(canEdit && m.estatus === "disponible") },
+                            { icon: "💰", label: "Marcar como vendido",    onClick: () => abrirVenta(m),     hidden: !(canEdit && m.estatus !== "vendido") },
+                            { icon: "🗑️", label: "Eliminar",               onClick: () => remove(m._id),     hidden: !canEdit, danger: true },
+                          ]} />
+                        </div>
                     </td>
                   </tr>
                 ))}

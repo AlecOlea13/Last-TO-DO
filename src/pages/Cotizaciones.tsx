@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { createPortal } from "react-dom";
+import MenuAcciones from "../components/MenuAcciones";
 import { api } from "../api";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
@@ -114,82 +114,6 @@ const TIPO_BADGE: Record<string, string> = {
 const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada: "badge-blue", cancelada: "badge-gray" };
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
-
-// ── Menú de acciones con portal: se dibuja en document.body para no ser recortado
-//    por contenedores con overflow (como la tabla con scroll horizontal) ──
-function MenuAcciones({ items }: { items: { label: string; icon: string; onClick: () => void; danger?: boolean; disabled?: boolean }[] }) {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0 });
-  const btnRef  = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (
-        btnRef.current && !btnRef.current.contains(e.target as Node) &&
-        menuRef.current && !menuRef.current.contains(e.target as Node)
-      ) setOpen(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    function reposicionar() {
-      if (!btnRef.current) return;
-      const rect = btnRef.current.getBoundingClientRect();
-      const menuWidth = 190;
-      const left = rect.right - menuWidth < 8 ? rect.left : rect.right - menuWidth;
-      setCoords({ top: rect.bottom + 6, left });
-    }
-    reposicionar();
-    window.addEventListener("scroll", reposicionar, true);
-    window.addEventListener("resize", reposicionar);
-    return () => {
-      window.removeEventListener("scroll", reposicionar, true);
-      window.removeEventListener("resize", reposicionar);
-    };
-  }, [open]);
-
-  function toggleOpen() {
-    if (!open && btnRef.current) {
-      const rect = btnRef.current.getBoundingClientRect();
-      const menuWidth = 190;
-      const left = rect.right - menuWidth < 8 ? rect.left : rect.right - menuWidth;
-      setCoords({ top: rect.bottom + 6, left });
-    }
-    setOpen(v => !v);
-  }
-
-  return (
-    <>
-      <button ref={btnRef} onClick={toggleOpen}
-        style={{ background: open ? "var(--surface2)" : "transparent", border: "1.5px solid var(--border)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: "1rem", color: "var(--text-muted)", lineHeight: 1 }}
-        title="Más acciones">⋯</button>
-      {open && createPortal(
-        <div ref={menuRef} style={{
-          position: "fixed", top: coords.top, left: coords.left, zIndex: 9999,
-          background: "var(--surface)", border: "1.5px solid var(--border)",
-          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-          minWidth: 190, overflow: "hidden",
-        }}>
-          {items.map((item, i) => (
-            <button key={i} disabled={item.disabled}
-              onClick={() => { if (!item.disabled) { item.onClick(); setOpen(false); } }}
-              style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", display: "flex", alignItems: "center", gap: 10, cursor: item.disabled ? "not-allowed" : "pointer", color: item.danger ? "var(--red)" : "var(--text)", fontSize: "0.88rem", fontWeight: 500, textAlign: "left", opacity: item.disabled ? 0.4 : 1, borderBottom: i < items.length - 1 ? "1px solid var(--border)" : "none" }}
-              onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = "var(--surface2)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
-              <span style={{ fontSize: "1rem", width: 20, textAlign: "center" }}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}
 
 function getMartes(date: Date): Date {
   const d = new Date(date);
@@ -1242,7 +1166,7 @@ export default function Cotizaciones() {
           ) : (
             <table>
               <thead>
-                <tr><th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Moneda</th><th>Precio base</th><th>Total c/IVA</th><th>Estatus</th><th>Comentarios</th><th></th></tr>
+                <tr><th>Folio</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Fecha</th><th>Moneda</th><th>Precio base</th><th>Total c/IVA</th><th>Estatus</th><th>Comentarios</th><th style={{ position: "sticky", right: 0, zIndex: 2, background: "var(--surface2)", boxShadow: "-8px 0 12px -8px rgba(0,0,0,0.5)" }}></th></tr>
               </thead>
               <tbody>
                 {filtered.map(c => {
@@ -1317,7 +1241,7 @@ export default function Cotizaciones() {
                           </button>
                         )}
                       </td>
-                      <td>
+                      <td style={{ position: "sticky", right: 0, zIndex: 1, background: "var(--surface)", boxShadow: "-8px 0 12px -8px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           {/* Botón PDF siempre visible */}
                           <button className="btn btn-primary btn-sm"
@@ -1325,7 +1249,7 @@ export default function Cotizaciones() {
                             title="Descargar PDF">📥 PDF</button>
 
                           {/* Menú ⋯ */}
-                          <MenuAcciones items={[
+                          <MenuAcciones acciones={[
                             { label: "Ver cotización",  icon: "👁️", onClick: () => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda }) },
                             { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
                             { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
