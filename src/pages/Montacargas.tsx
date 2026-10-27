@@ -846,44 +846,28 @@ export default function Montacargas() {
                 <label className="form-label">
                   Fecha de pago del cliente
                   <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 6 }}>
-                    (opcional — desde aquí se calcula la comisión)
+                    (opcional — informativo; la comisión de equipos es 3% fijo y no depende de esta fecha)
                   </span>
                 </label>
                 <input className="form-input" type="date" value={formVenta.fechaPago}
                   onChange={e => setFormVenta(p => ({ ...p, fechaPago: e.target.value }))} />
-                {formVenta.fechaPago && formVenta.fecha && (() => {
-                  const dias = Math.round(
-                    (new Date(formVenta.fechaPago).getTime() - new Date(formVenta.fecha).getTime())
-                    / (1000 * 60 * 60 * 24)
-                  );
-                  const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
-                  const base = (Number(formVenta.montoFacturado) || 0) * 1.16
-                             + (Number(formVenta.montoEfectivo)  || 0);
-                  const monto = Math.round(base * (pct / 100) * 100) / 100;
+                {(previewFacturado > 0 || previewEfectivo > 0) && (() => {
+                  // Equipos: 3% FIJO sobre (subtotal facturado SIN IVA + efectivo) (se asume cobrado al marcarse vendido).
+                  // Mismo criterio que reporteVentasEquipos.service.js.
+                  const baseComision = previewFacturado + previewEfectivo; // facturado sin IVA + efectivo
+                  const monto = Math.round(baseComision * 0.03 * 100) / 100;
                   return (
                     <div style={{
                       marginTop: 6, padding: "8px 12px",
-                      background: pct > 0 ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
-                      border: `1px solid ${pct > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                      background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)",
                       borderRadius: "var(--radius-sm)", fontSize: "0.78rem", lineHeight: 1.6,
                     }}>
-                      <strong>{dias} días de cobro</strong>
-                      {" → "}
-                      <strong style={{ color: pct > 0 ? "var(--green)" : "var(--red)" }}>
-                        {pct}% de comisión
-                      </strong>
-                      {pct > 0 && base > 0 && (
-                        <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                          ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      )}
-                      {pct === 0 && (
-                        <span style={{ color: "var(--red)", marginLeft: 6 }}>
-                          requiere autorización de Dirección
-                        </span>
-                      )}
+                      <strong style={{ color: "var(--green)" }}>3% de comisión</strong>
+                      <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                       <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>
-                        ⚠ El % final depende también del margen bruto. Consulta la política de comisiones.
+                        Calculada sobre ${baseComision.toLocaleString("es-MX", { minimumFractionDigits: 2 })} (subtotal facturado sin IVA + efectivo). El % final puede depender del margen bruto según la política vigente.
                       </div>
                     </div>
                   );

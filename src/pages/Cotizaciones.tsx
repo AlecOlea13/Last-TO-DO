@@ -112,6 +112,14 @@ const TIPO_BADGE: Record<string, string> = {
   refacciones: "badge-purple", curso: "badge-red",
 };
 const ESTATUS_BADGE: Record<string, string> = { activa: "badge-green", facturada: "badge-blue", cancelada: "badge-gray" };
+
+// Base de comisión: SIEMPRE el subtotal SIN IVA (con fallback para documentos antiguos sin subtotal).
+// Mismo criterio que comisiones.util.js en el backend.
+// Tipo de cambio FIJO USD→MXN para comisiones (mantener igual que comisiones.util.js en el backend).
+const TIPO_CAMBIO_USD = 18.8;
+const factorMXN = (c: { moneda?: string }) => (c.moneda === "USD" ? TIPO_CAMBIO_USD : 1);
+const baseSinIva = (c: { subtotal?: number; total?: number }) =>
+  (c.subtotal ?? 0) > 0 ? (c.subtotal as number) : Math.round(((c.total ?? 0) / 1.16) * 100) / 100;
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
 const UPLOAD_PRESET  = "pipsa productos";
 
@@ -1623,7 +1631,7 @@ export default function Cotizaciones() {
                   return new Date(y, m - 1, d).getTime();
                 };
                 const dias = Math.floor(
-                  (parseFechaLocal(fechaPagoInput) - parseFechaLocal(facturaModal.fecha))
+                  (parseFechaLocal(fechaPagoInput) - parseFechaLocal(fechaFacturadaInput || facturaModal.fecha))
                   / (1000 * 60 * 60 * 24)
                 );
                 if (dias < 0) return (
@@ -1632,7 +1640,7 @@ export default function Cotizaciones() {
                   </div>
                 );
                 const pct  = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
-                const monto = Math.round(facturaModal.total * (pct / 100) * 100) / 100;
+                const monto = Math.round(baseSinIva(facturaModal) * factorMXN(facturaModal) * (pct / 100) * 100) / 100; // sobre subtotal SIN IVA
                 return (
                   <div style={{
                     marginTop: 6, padding: "8px 12px",
@@ -1647,7 +1655,7 @@ export default function Cotizaciones() {
                     </strong>
                     {pct > 0 && (
                       <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{facturaModal.moneda === "USD" ? ` MXN (TC $${TIPO_CAMBIO_USD})` : ""}
                       </span>
                     )}
                     {pct === 0 && (
@@ -1723,7 +1731,7 @@ export default function Cotizaciones() {
                   </div>
                 );
                 const pct   = dias <= 30 ? 3.0 : dias <= 60 ? 2.0 : dias <= 90 ? 1.0 : 0.0;
-                const monto = Math.round(pagoModal.total * (pct / 100) * 100) / 100;
+                const monto = Math.round(baseSinIva(pagoModal) * factorMXN(pagoModal) * (pct / 100) * 100) / 100; // sobre subtotal SIN IVA
                 return (
                   <div style={{
                     marginTop: 6, padding: "8px 12px",
@@ -1738,7 +1746,7 @@ export default function Cotizaciones() {
                     </strong>
                     {pct > 0 && (
                       <span style={{ color: "var(--text-muted)", marginLeft: 6 }}>
-                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ≈ ${monto.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{pagoModal!.moneda === "USD" ? ` MXN (TC $${TIPO_CAMBIO_USD})` : ""}
                       </span>
                     )}
                     {pct === 0 && (
