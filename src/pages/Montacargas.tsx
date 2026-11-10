@@ -30,6 +30,13 @@ type Venta = {
   clienteNombre?: string;
   asesor?: { _id: string; nombre: string } | null;
   notas?: string;
+  permuta?: {
+    activa?: boolean;
+    equipoRecibido?: { _id: string; numeroEconomico?: string; marca?: string; modelo?: string } | string | null;
+    equipoRecibidoTexto?: string;
+    valorEquipoRecibido?: number;
+    diferenciaForma?: "efectivo" | "transferencia" | "facturado" | "";
+  };
 };
 
 type Monta = {
@@ -168,6 +175,9 @@ export default function Montacargas() {
     fechaPago: "",
     esClienteCatalogo: true, clienteId: "", clienteNombre: "",
     asesorId: "", notas: "",
+    // Permuta
+    permutaActiva: false, permutaEquipoId: "", permutaEquipoTexto: "",
+    permutaValor: "", permutaDiferencia: "", permutaForma: "" as "" | "efectivo" | "transferencia" | "facturado",
   });
   const [savingVenta, setSavingVenta]   = useState(false);
 
@@ -304,6 +314,8 @@ export default function Montacargas() {
       fechaPago: "",
       esClienteCatalogo: true, clienteId: "", clienteNombre: "",
       asesorId: "", notas: "",
+      permutaActiva: false, permutaEquipoId: "", permutaEquipoTexto: "",
+      permutaValor: "", permutaDiferencia: "", permutaForma: "",
     });
   }
 
@@ -322,20 +334,31 @@ export default function Montacargas() {
       clienteNombre: m.venta?.clienteNombre ?? "",
       asesorId: m.venta?.asesor?._id ?? "",
       notas: m.venta?.notas ?? "",
+      permutaActiva:      !!m.venta?.permuta?.activa,
+      permutaEquipoId:    typeof m.venta?.permuta?.equipoRecibido === "object" ? (m.venta?.permuta?.equipoRecibido?._id ?? "") : (m.venta?.permuta?.equipoRecibido ?? ""),
+      permutaEquipoTexto: m.venta?.permuta?.equipoRecibidoTexto ?? "",
+      permutaValor:       m.venta?.permuta?.valorEquipoRecibido ? String(m.venta.permuta.valorEquipoRecibido) : "",
+      permutaDiferencia:  m.venta?.permuta?.activa ? String((m.venta?.montoFacturado || 0) + (m.venta?.montoEfectivo || 0)) : "",
+      permutaForma:       m.venta?.permuta?.diferenciaForma ?? "",
     });
   }
 
   // Vista previa del IVA/total — el backend vuelve a calcular esto como fuente de verdad
-  const previewFacturado = Number(formVenta.montoFacturado) || 0;
-  const previewEfectivo  = Number(formVenta.montoEfectivo) || 0;
+  // En permuta solo hay UNA diferencia de dinero; según cómo se pagó va a facturado o a efectivo/sin factura.
+  const permutaDif       = Number(formVenta.permutaDiferencia) || 0;
+  const previewFacturado = formVenta.permutaActiva ? (formVenta.permutaForma === "facturado" ? permutaDif : 0) : (Number(formVenta.montoFacturado) || 0);
+  const previewEfectivo  = formVenta.permutaActiva ? (formVenta.permutaForma && formVenta.permutaForma !== "facturado" ? permutaDif : 0) : (Number(formVenta.montoEfectivo) || 0);
+  const permutaValida    = !formVenta.permutaActiva ||
+    (!!(formVenta.permutaEquipoId || formVenta.permutaEquipoTexto.trim()) && !!formVenta.permutaForma && permutaDif > 0);
   const previewIva       = previewFacturado * 0.16;
   const previewTotal     = previewFacturado + previewIva + previewEfectivo;
 
   async function confirmarVenta() {
     if (!ventaModal) return;
-    const facturado = Number(formVenta.montoFacturado) || 0;
-    const efectivo  = Number(formVenta.montoEfectivo) || 0;
+    const facturado = previewFacturado;
+    const efectivo  = previewEfectivo;
     if (facturado <= 0 && efectivo <= 0) return;
+    if (!permutaValida) return;
     setSavingVenta(true);
     try {
       const payload: any = {
@@ -346,6 +369,14 @@ export default function Montacargas() {
         fechaPago: formVenta.fechaPago || null,
         asesorId: formVenta.asesorId || null,
         notas: formVenta.notas,
+        permuta: formVenta.permutaActiva ? {
+          activa: true,
+          equipoRecibido: formVenta.permutaEquipoId || null,
+          equipoRecibidoTexto: formVenta.permutaEquipoTexto.trim(),
+          valorEquipoRecibido: Number(formVenta.permutaValor) || 0,
+          diferencia: permutaDif,
+          diferenciaForma: formVenta.permutaForma,
+        } : { activa: false },
       };
       if (formVenta.esClienteCatalogo) {
         payload.clienteId = formVenta.clienteId || null;
@@ -555,7 +586,15 @@ export default function Montacargas() {
                   <tr key={m._id}>
                     <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{m.numeroEconomico}</td>
                     <td><span style={{ fontWeight: 600 }}>{m.marca}</span>{m.modelo && <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}> {m.modelo}</span>}</td>
-                    <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
+                    <td>{m.venta?.cliente?.nombre ?? m.venta?.clienteNombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}
+                      {m.venta?.permuta?.activa && (
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent)" }}>
+                          🔄 Permuta: {typeof m.venta.permuta.equipoRecibido === "object" && m.venta.permuta.equipoRecibido
+                            ? `${m.venta.permuta.equipoRecibido.numeroEconomico ?? ""} ${m.venta.permuta.equipoRecibido.marca ?? ""} ${m.venta.permuta.equipoRecibido.modelo ?? ""}`.trim()
+                            : (m.venta.permuta.equipoRecibidoTexto || "equipo recibido")}
+                        </div>
+                      )}
+                    </td>
                     <td>{m.venta?.asesor?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                     <td>{fmt(m.venta?.fecha)}</td>
                     <td style={{ fontWeight: 700, color: "var(--green)" }}>
@@ -795,16 +834,69 @@ export default function Montacargas() {
               </div>
             )}
             <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Monto facturado ($, sin IVA)</label>
-                <input className="form-input" type="number" min={0} value={formVenta.montoFacturado}
-                  onChange={e => setFormVenta(p => ({ ...p, montoFacturado: e.target.value }))} placeholder="Ej. 150000" autoFocus />
+              <div className="form-group span-2" style={{ margin: 0 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={formVenta.permutaActiva}
+                    onChange={e => setFormVenta(p => ({ ...p, permutaActiva: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: "var(--accent)" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>🔄 Es permuta (el cliente entrega un equipo a cambio)</span>
+                </label>
               </div>
-              <div className="form-group">
-                <label className="form-label">Monto en efectivo / sin factura ($)</label>
-                <input className="form-input" type="number" min={0} value={formVenta.montoEfectivo}
-                  onChange={e => setFormVenta(p => ({ ...p, montoEfectivo: e.target.value }))} placeholder="Ej. 20000" />
-              </div>
+              {formVenta.permutaActiva ? (
+                <>
+                  <div className="form-group span-2">
+                    <label className="form-label">Equipo que se recibe en permuta *</label>
+                    <select className="form-select" value={formVenta.permutaEquipoId}
+                      onChange={e => setFormVenta(p => ({ ...p, permutaEquipoId: e.target.value }))}>
+                      <option value="">Otro / no está en el catálogo…</option>
+                      {montas.filter(x => x._id !== ventaModal._id).map(x => (
+                        <option key={x._id} value={x._id}>{x.numeroEconomico} — {x.marca} {x.modelo}</option>
+                      ))}
+                    </select>
+                    {!formVenta.permutaEquipoId && (
+                      <input className="form-input" style={{ marginTop: 6 }} value={formVenta.permutaEquipoTexto}
+                        onChange={e => setFormVenta(p => ({ ...p, permutaEquipoTexto: e.target.value }))}
+                        placeholder="Describe el equipo: marca, modelo, serie…" />
+                    )}
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Valor del equipo recibido ($)</label>
+                    <input className="form-input" type="number" min={0} value={formVenta.permutaValor}
+                      onChange={e => setFormVenta(p => ({ ...p, permutaValor: e.target.value }))} placeholder="Opcional" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Diferencia de dinero ($, sin IVA) *</label>
+                    <input className="form-input" type="number" min={0} value={formVenta.permutaDiferencia}
+                      onChange={e => setFormVenta(p => ({ ...p, permutaDiferencia: e.target.value }))} placeholder="Ej. 80000" autoFocus />
+                  </div>
+                  <div className="form-group span-2">
+                    <label className="form-label">¿Cómo se pagó la diferencia? *</label>
+                    <select className="form-select" value={formVenta.permutaForma}
+                      onChange={e => setFormVenta(p => ({ ...p, permutaForma: e.target.value as any }))}>
+                      <option value="">— Selecciona —</option>
+                      <option value="efectivo">Efectivo</option>
+                      <option value="transferencia">Transferencia (sin factura)</option>
+                      <option value="facturado">Facturado</option>
+                    </select>
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                      La comisión se calcula sobre la diferencia, antes de IVA. La fecha de venta es la de la factura nueva.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Monto facturado ($, sin IVA)</label>
+                    <input className="form-input" type="number" min={0} value={formVenta.montoFacturado}
+                      onChange={e => setFormVenta(p => ({ ...p, montoFacturado: e.target.value }))} placeholder="Ej. 150000" autoFocus />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Monto en efectivo / sin factura ($)</label>
+                    <input className="form-input" type="number" min={0} value={formVenta.montoEfectivo}
+                      onChange={e => setFormVenta(p => ({ ...p, montoEfectivo: e.target.value }))} placeholder="Ej. 20000" />
+                  </div>
+                </>
+              )}
               {(previewFacturado > 0 || previewEfectivo > 0) && (
                 <div className="form-group span-2" style={{ margin: 0 }}>
                   <div style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -908,7 +1000,7 @@ export default function Montacargas() {
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setVentaModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmarVenta}
-                disabled={savingVenta || (previewFacturado <= 0 && previewEfectivo <= 0)}
+                disabled={savingVenta || (previewFacturado <= 0 && previewEfectivo <= 0) || !permutaValida}
                 style={{ background: "var(--green)", color: "#fff" }}>
                 {savingVenta ? "Guardando..." : modoEdicionVenta ? "✅ Guardar cambios" : "✅ Confirmar venta"}
               </button>
