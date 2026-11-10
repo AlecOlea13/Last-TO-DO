@@ -402,6 +402,10 @@ export default function Montacargas() {
         : await api.post(`/montacargas/${ventaModal._id}/vender`, payload);
       setMontas(prev => prev.map(m => m._id === data._id ? data : m));
       setVentaModal(null);
+      // La permuta puede cambiar el estatus de OTRO equipo (el que nos entregan): recargar la flota
+      if (formVenta.permutaActiva) {
+        try { const r = await api.get("/montacargas"); setMontas(r.data ?? []); } catch { /* se verá al recargar */ }
+      }
     } catch (e: any) {
       if (e?.response?.data?.message) alert(e.response.data.message);
     } finally {
@@ -860,7 +864,7 @@ export default function Montacargas() {
               {formVenta.permutaActiva ? (
                 <>
                   <div className="form-group span-2">
-                    <label className="form-label">Equipo que se recibe en permuta *</label>
+                    <label className="form-label">Equipo que nos entregan en permuta *</label>
                     <select className="form-select" value={formVenta.permutaEquipoId}
                       onChange={e => setFormVenta(p => ({ ...p, permutaEquipoId: e.target.value }))}>
                       <option value="">Otro / no está en el catálogo…</option>
@@ -868,6 +872,9 @@ export default function Montacargas() {
                         <option key={x._id} value={x._id}>{x.numeroEconomico} — {x.marca} {x.modelo}</option>
                       ))}
                     </select>
+                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                      Este equipo regresa a inventario: si estaba vendido, sale de "Vendidos" y queda Disponible.
+                    </span>
                     {!formVenta.permutaEquipoId && (
                       <input className="form-input" style={{ marginTop: 6 }} value={formVenta.permutaEquipoTexto}
                         onChange={e => setFormVenta(p => ({ ...p, permutaEquipoTexto: e.target.value }))}
