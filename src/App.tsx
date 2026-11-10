@@ -101,7 +101,7 @@ function AppRoutes() {
         } />
         {/* NUEVO — Reporte de ventas. Ver también: Dashboard.tsx allNav, app.js /api/reportes */}
         <Route path="reporte-ventas" element={
-          <ProtectedRoute roles={["developer","gerencia"]}><ReporteVentas /></ProtectedRoute>
+          <ProtectedRoute roles={["developer","gerencia","oficina"]}><ReporteVentas /></ProtectedRoute>
         } />
       </Route>
 

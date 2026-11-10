@@ -1,2507 +1,354 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+/**
+ * ReporteVentas.tsx  →  src/pages/ReporteVentas.tsx (reemplaza el anterior)
+ * Reemplaza al Excel: cada vendedor captura SUS comisiones del mes eligiendo la
+ * venta (equipo / renta / refacciones / servicio), corrige montos, días y %, y
+ * escribe la comisión. developer y gerencia ven todo; oficina solo lo suyo.
+ */
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
-// ── Logo oficial ───────────────────────────────────────────────────────────────
-const LOGO_URL =
-  "https://res.cloudinary.com/dijxgoytw/image/upload/v1790702340/LOGO_OFI_zwzayb.png";
+type Tipo = "equipo" | "renta" | "refacciones" | "servicio" | "otro";
+type Asesor = { _id: string; nombre: string };
+type Linea = {
+  _id: string; tipo: Tipo; origenRef?: string | null; origenId?: string | null;
+  referencia: string; descripcion: string; cliente: string;
+  asesor: Asesor | null; creadoPor?: { _id: string; nombre: string } | null;
+  fechaVenta: string | null; fechaPago: string | null; periodo: string;
+  moneda: "MXN" | "USD"; subtotal: number; tipoCambio: number;
+  dias: number; porcentaje: number; comision: number; notas: string;
+};
+type Origen = {
+  origenRef: string; origenId: string; referencia: string; descripcion: string; cliente: string;
+  asesor: string | null; asesorNombre: string; fechaVenta: string | null; fechaPago: string | null;
+  moneda: "MXN" | "USD"; subtotal: number;
+};
+type Resumen = { total: number; cantidad: number; porAsesor: { asesor: string; comision: number }[]; porTipo: Record<string, number> };
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
-type Asesor   = { _id: string; nombre: string };
+const TIPO_CAMBIO_USD = 18.8; // mismo valor fijo que usa Cotizaciones
+const TIPOS: { v: Tipo; label: string; icon: string }[] = [
+  { v: "equipo", label: "Equipos", icon: "🏗️" },
+  { v: "renta", label: "Rentas", icon: "📋" },
+  { v: "refacciones", label: "Refacciones", icon: "🔩" },
+  { v: "servicio", label: "Servicios", icon: "🔧" },
+  { v: "otro", label: "Otro", icon: "➕" },
+];
+const tipoInfo = (t: Tipo) => TIPOS.find(x => x.v === t)!;
 
-type ResumenEquipos = {
-  equiposVendidos:             number;
-  ventaComercialTotal:         number;
-  subtotalFacturadoRegistrado: number;
-  ivaRegistrado:               number;
-  ventaEfectivo:               number;
-  ticketPromedio:              number;
-};
+const mxn = (n: number) => (n ?? 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const aInputFecha = (v?: string | null) => (v ? new Date(v).toISOString().slice(0, 10) : "");
+const fmtFecha = (v?: string | null) => (v ? new Date(v).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-type ResumenServicios = {
-  serviciosVendidos:   number;
-  manoObraTotal:       number | null;
-  refaccionesTotal:    number | null;
-  subtotalComercial:   number;
-  ivaRegistrado:       number | null;
-  ventaComercialTotal: number;
-  ticketPromedio:      number;
-};
-
-type OperacionServicio = {
-  id:              string;
-  cotizacionId:    string;
-  folio:           string;
-  fecha:           string | null;
-  moneda:          string;
-  subtotal:        number;
-  iva:             number;
-  total:           number;
-  numeroFactura:   string | null;
-  descripcion:     string | null;
-  itemsCount:      number;
-  equipoMarca:     string | null;
-  equipoModelo:    string | null;
-  equipoSerie:     string | null;
-  fechaFacturada:    string | null;
-  fechaReferencia:   string | null;
-  fechaPagoComision: { inicio: string; fin: string; etiqueta: string } | null;
-  fechaPago:         string | null;
-  comision:        { diasCobro: number; porcentaje: number; monto: number } | null;
-  cliente:         { id: string | null; nombre: string } | null;
-  asesor:          { id: string | null; nombre: string } | null;
-};
-
-type PorAsesorServicio = {
-  asesorId:            string | null;
-  asesorNombre:        string;
-  serviciosVendidos:   number;
-  ventaComercialTotal: number;
-  subtotalComercial:   number;
-  ivaRegistrado:       number;
-  manoObraTotal:       number | null;
-  refaccionesTotal:    number | null;
-  ticketPromedio:      number;
-  participacion:       number;
-};
-
-type ResultadoServicios = {
-  resumen:       ResumenServicios;
-  porAsesor:     PorAsesorServicio[];
-  operaciones:   OperacionServicio[];
-  paginacion:    Paginacion;
-  disponibilidad: { facturacionConciliada: boolean; cobranza: boolean; saldo: boolean };
-  meta:          { fuenteFecha: string; advertencia: string; manoObra: string };
-};
-
-type PorAsesor = {
-  asesorId:                    string | null;
-  asesorNombre:                string;
-  equiposVendidos:             number;
-  ventaComercialTotal:         number;
-  subtotalFacturadoRegistrado: number;
-  ivaRegistrado:               number;
-  ventaEfectivo:               number;
-  ticketPromedio:              number;
-  participacion:               number;
-};
-
-type VentaDetalle = {
-  fecha:             string | null;
-  importe:           number;
-  montoFacturado:    number;
-  ivaFacturado:      number;
-  montoEfectivo:     number;
-  importeCalculado?:  number;
-  diferenciaImporte?: number;
-  requiereRevision?:  boolean;
-  numeroFactura:     string | null;
-  notas:             string | null;
-  cliente:           { id: string | null; nombre: string } | null;
-  asesor:            { id: string | null; nombre: string } | null;
-};
-
-type Operacion = {
-  id:              string;
-  montacargasId:   string;
-  numeroEconomico: string;
-  marca:           string;
-  modelo:          string;
-  serie:           string;
-  capacidad:       string;
-  tipoCombustible: string;
-  venta:           VentaDetalle;
-};
-
-type Paginacion = { page: number; limit: number; total: number; pages: number };
-
-// ── Refacciones: mismo shape que Servicios, pero con refaccionesVendidas ────
-type ResumenRefacciones = {
-  refaccionesVendidas: number;
-  manoObraTotal:       number | null;
-  refaccionesTotal:    number | null;
-  subtotalComercial:   number;
-  ivaRegistrado:       number | null;
-  ventaComercialTotal: number;
-  ticketPromedio:      number;
-};
-type OperacionRefaccion = OperacionServicio;
-type PorAsesorRefaccion = {
-  asesorId:            string | null;
-  asesorNombre:        string;
-  refaccionesVendidas: number;
-  ventaComercialTotal: number;
-  subtotalComercial:   number;
-  ivaRegistrado:       number;
-  manoObraTotal:       number | null;
-  refaccionesTotal:    number | null;
-  ticketPromedio:      number;
-  participacion:       number;
-};
-type ResultadoRefacciones = {
-  resumen:       ResumenRefacciones;
-  porAsesor:     PorAsesorRefaccion[];
-  operaciones:   OperacionRefaccion[];
-  paginacion:    Paginacion;
-  disponibilidad: { facturacionConciliada: boolean; cobranza: boolean; saldo: boolean };
-  meta:          { fuenteFecha: string; advertencia: string; manoObra: string };
-};
-
-// ── Rentas ────────────────────────────────────────────────────────────────────
-type ResumenRentas = {
-  rentasActivas:       number;
-  subtotalComercial:   number;
-  ivaRegistrado:       number;
-  ventaComercialTotal: number;
-  ticketPromedio:      number;
-};
-type PorAsesorRenta = {
-  asesorId:            string | null;
-  asesorNombre:        string;
-  rentasActivas:       number;
-  subtotalComercial:   number;
-  ivaRegistrado:       number;
-  ventaComercialTotal: number;
-  ticketPromedio:      number;
-  participacion:       number;
-};
-type OperacionRenta = {
-  id:            string;
-  rentaId:       string;
-  fechaInicio:   string | null;
-  fechaFin:      string | null;
-  tipoPeriodo:   string;
-  subtotal:      number;
-  iva:           number;
-  total:         number;
-  flete:         number;
-  deposito:      number;
-  estatus:       string;
-  estado:        string;
-  renovacionesCount: number;
-  equipo: { id: string; numeroEconomico: string; marca: string; modelo: string } | null;
-  cliente: { id: string | null; nombre: string } | null;
-  asesor:  { id: string | null; nombre: string } | null;
-  comision: { diasCobro: number; porcentaje: number; monto: number; fechaPago?: string; folioFactura?: string | null } | null;
-  porcentajeComision: number | null;
-  comisionAntesIva:   number | null;
-  estadoComision?: "calculada" | "pendiente_pago";
-};
-type ResultadoRentas = {
-  resumen:       ResumenRentas;
-  porAsesor:     PorAsesorRenta[];
-  operaciones:   OperacionRenta[];
-  paginacion:    Paginacion;
-  disponibilidad: { facturacionConciliada: boolean; cobranza: boolean; saldo: boolean };
-  meta:          { fuenteFecha: string; advertencia: string; manoObra: string; tecnico: string };
-};
-
-// ── Comisiones (reporte unificado) ──────────────────────────────────────────
-type BucketComision = { cantidad: number; comision: number };
-type GrupoAsesorComision = {
-  asesorId: string | null;
-  asesorNombre: string;
-  equipos: BucketComision;
-  servicios: BucketComision;
-  refacciones: BucketComision;
-  rentas: BucketComision;
-  comisionTotal: number;
-};
-type ResultadoComisiones = {
-  totales: {
-    equipos: BucketComision; servicios: BucketComision;
-    refacciones: BucketComision; rentas: BucketComision;
-    comisionTotal: number;
-  };
-  porAsesor: GrupoAsesorComision[];
-  disponibilidad: { equipos: boolean; servicios: boolean; refacciones: boolean; rentas: boolean };
-  meta: { advertencia: string };
-};
-
-type ResultadoEquipos = {
-  resumen:       ResumenEquipos;
-  porAsesor:     PorAsesor[];
-  operaciones:   Operacion[];
-  paginacion:    Paginacion;
-  disponibilidad: { facturacionConciliada: boolean; cobranza: boolean; saldo: boolean };
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Formatea número como moneda MXN sin desfase. */
-function fmtMXN(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "0.00";
-  return v.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function porcentajePorDias(d: number) { return d <= 30 ? 3 : d <= 60 ? 2 : d <= 90 ? 1 : 0; }
+function diasEntre(a?: string, b?: string) {
+  if (!a || !b) return 0;
+  const [y1, m1, d1] = a.split("-").map(Number), [y2, m2, d2] = b.split("-").map(Number);
+  return Math.max(0, Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000));
 }
 
-/** "YYYY-MM-DD" | ISO → "DD MMM YYYY" sin desfase UTC */
-function fmtFecha(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
-  const s = dateStr.split("T")[0];
-  const [y, m, d] = s.split("-");
-  if (!y || !m || !d) return "—";
-  return new Date(+y, +m - 1, +d).toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-/** Primer día del mes anterior en "YYYY-MM-DD" */
-function primerDiaMesAnterior(): string {
-  const d = new Date();
-  d.setDate(1);          // ir al día 1 del mes actual
-  d.setMonth(d.getMonth() - 1);  // retroceder un mes
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/** Último día del mes anterior en "YYYY-MM-DD" */
-function ultimoDiaMesAnterior(): string {
-  const d = new Date();
-  d.setDate(1);          // día 1 del mes actual
-  d.setDate(0);          // retroceder al último día del mes anterior
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-
-
-// ── Componentes auxiliares ────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  value,
-  color = "var(--green)",
-  sub,
-  noDisponible = false,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-  sub?: string;
-  noDisponible?: boolean;
-}) {
-  return (
-    <div className="stat-card" style={{ position: "relative" }}>
-      <p className="stat-card-label">{label}</p>
-      {noDisponible ? (
-        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 6, fontStyle: "italic" }}>
-          No disponible
-        </p>
-      ) : (
-        <p className="stat-card-value" style={{ color, fontSize: "1.5rem" }}>
-          {value}
-        </p>
-      )}
-      {sub && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>{sub}</p>}
-      <div className="stat-card-accent" style={{ background: noDisponible ? "var(--surface3)" : color }} />
-    </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <div className="loading-state">
-      <div className="spinner" />
-      <p>Cargando reporte…</p>
-    </div>
-  );
-}
-
-// ── Tipo de columna para el tooltip ──────────────────────────────────────────
-type ColKey =
-  | "fecha" | "equipo" | "marca" | "serie" | "capacidad" | "tipo"
-  | "cliente" | "asesor" | "refFactura" | "subtotal" | "iva" | "efectivo" | "total";
-
-const TOOLTIPS: Record<string, string> = {
-  refFactura: "Texto capturado manualmente al registrar la venta. No representa una conciliación con el CFDI.",
-  subtotal:   "Corresponde al campo montoFacturado. No representa una conciliación con el CFDI.",
+type Form = {
+  _id?: string; tipo: Tipo; origenRef: string | null; origenId: string | null;
+  referencia: string; descripcion: string; cliente: string; asesor: string;
+  fechaVenta: string; fechaPago: string; periodo: string;
+  moneda: "MXN" | "USD"; subtotal: string; dias: string; porcentaje: string; comision: string; notas: string;
 };
+const formVacio = (periodo: string, tipo: Tipo = "equipo"): Form => ({
+  tipo, origenRef: null, origenId: null, referencia: "", descripcion: "", cliente: "", asesor: "",
+  fechaVenta: "", fechaPago: "", periodo, moneda: "MXN", subtotal: "", dias: "", porcentaje: "", comision: "", notas: "",
+});
 
-// ── Componente principal ──────────────────────────────────────────────────────
 export default function ReporteVentas() {
-  // ── Filtros ──────────────────────────────────────────────────────────────
-  const [desde,     setDesde]    = useState(primerDiaMesAnterior());
-  const [hasta,     setHasta]    = useState(ultimoDiaMesAnterior());
-  const [asesorId,  setAsesorId] = useState("todos");
-  const [buscar,    setBuscar]   = useState("");
-  const [page,      setPage]     = useState(1);
-  const [limit]                  = useState(20);
-  const [sortBy,    setSortBy]   = useState("venta.fecha");
-  const [sortDir,   setSortDir]  = useState<"asc" | "desc">("desc");
-  const [categoria, setCategoria] = useState<"equipos" | "rentas" | "servicios" | "refacciones" | "comisiones" | "otros">("equipos");
+  const rol = localStorage.getItem("rol") ?? "";
+  const esAdmin = rol === "developer" || rol === "gerencia";
 
-  // ── Datos ────────────────────────────────────────────────────────────────
-  const [asesores, setAsesores]   = useState<Asesor[]>([]);
-  const [resultado, setResultado] = useState<ResultadoEquipos | ResultadoServicios | ResultadoRefacciones | ResultadoRentas | null>(null);
+  const [periodo, setPeriodo] = useState(mesActual());
+  const [filtroAsesor, setFiltroAsesor] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState<"" | Tipo>("");
+  const [lineas, setLineas] = useState<Linea[]>([]);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [asesores, setAsesores] = useState<Asesor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Comisiones es un reporte distinto (no paginado, estructura propia) — state separado
-  const [resultadoComisiones, setResultadoComisiones] = useState<ResultadoComisiones | null>(null);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
+  const [modal, setModal] = useState(false);
+  const [form, setForm] = useState<Form>(formVacio(mesActual()));
+  const [origenes, setOrigenes] = useState<Origen[]>([]);
+  const [buscar, setBuscar] = useState("");
+  const [cargandoOrig, setCargandoOrig] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errForm, setErrForm] = useState("");
+  const [comisionManual, setComisionManual] = useState(false);
 
-  // ── Detalle modal ────────────────────────────────────────────────────────
-  const [detalle, setDetalle] = useState<Operacion | null>(null);
-
-  // ── Tooltip estado ───────────────────────────────────────────────────────
-  const [tooltip, setTooltip] = useState<{ key: ColKey; x: number; y: number } | null>(null);
-
-  // ── Cargar asesores una sola vez ─────────────────────────────────────────
-  useEffect(() => {
-    api.get("/asesores").then((r: { data: Asesor[] }) => setAsesores(r.data)).catch(() => {});
-  }, []);
-
-  // ── Carga de datos ───────────────────────────────────────────────────────
-  const ENDPOINT_POR_CATEGORIA: Record<string, string> = {
-    equipos:     "/reportes/ventas/equipos",
-    servicios:   "/reportes/ventas/servicios",
-    refacciones: "/reportes/ventas/refacciones",
-    rentas:      "/reportes/ventas/rentas",
-  };
-
-  const cargar = useCallback(async (resetPage = false) => {
-    if (categoria === "otros") return;
-    setLoading(true);
-    setError(null);
-    const currentPage = resetPage ? 1 : page;
-    if (resetPage) setPage(1);
-
+  async function cargar() {
+    setLoading(true); setError("");
     try {
-      if (categoria === "comisiones") {
-        const params: Record<string, string> = { desde, hasta };
-        if (asesorId !== "todos") params.asesorId = asesorId;
-        const { data } = await api.get("/reportes/ventas/comisiones", { params });
-        setResultadoComisiones(data);
-        setResultado(null);
-        return;
-      }
-
-      const params: Record<string, string> = {
-        desde, hasta, page: String(currentPage), limit: String(limit),
-        sortBy, sortDir,
-      };
-      if (asesorId !== "todos") params.asesorId = asesorId;
-      if (buscar.trim())        params.buscar   = buscar.trim();
-
-      const endpoint = ENDPOINT_POR_CATEGORIA[categoria];
-      const { data } = await api.get(endpoint, { params });
-      setResultado(data);
-      setResultadoComisiones(null);
+      const { data } = await api.get("/comisiones", {
+        params: { periodo, asesorId: filtroAsesor || undefined, tipo: filtroTipo || undefined },
+      });
+      setLineas(data.lineas ?? []); setResumen(data.resumen ?? null);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? "Error al cargar el reporte.");
-    } finally {
-      setLoading(false);
-    }
-  }, [categoria, desde, hasta, asesorId, buscar, page, limit, sortBy, sortDir]);
+      setError(e?.response?.data?.message ?? "No se pudieron cargar las comisiones.");
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [periodo, filtroAsesor, filtroTipo]);
+  useEffect(() => { api.get("/asesores").then(r => setAsesores(r.data ?? [])).catch(() => {}); }, []);
 
+  // Cargar ventas seleccionables al abrir el modal / cambiar tipo / buscar
   useEffect(() => {
-    cargar();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoria, desde, hasta, asesorId, page, sortBy, sortDir]);
+    if (!modal || form._id || form.tipo === "otro") { setOrigenes([]); return; }
+    let vivo = true;
+    setCargandoOrig(true);
+    const t = setTimeout(() => {
+      api.get("/comisiones/origenes", { params: { tipo: form.tipo, buscar: buscar || undefined } })
+        .then(r => { if (vivo) setOrigenes(r.data ?? []); })
+        .catch(() => { if (vivo) setOrigenes([]); })
+        .finally(() => { if (vivo) setCargandoOrig(false); });
+    }, 250);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [modal, form.tipo, form._id, buscar]);
 
-  // ── Helpers de exportación segura ───────────────────────────────────────
-  // Escapa valores para CSV: comas, comillas, saltos de línea y fórmulas Excel
-  function escaparCSV(val: unknown): string {
-    const s = String(val ?? "");
-    const neutralized = /^[=+\-@]/.test(s) ? `'${s}` : s;
-    return `"${neutralized.replace(/"/g, '""')}"`;
+  function abrirNueva() { setForm(formVacio(periodo)); setBuscar(""); setErrForm(""); setComisionManual(false); setModal(true); }
+  function abrirEditar(l: Linea) {
+    setForm({
+      _id: l._id, tipo: l.tipo, origenRef: l.origenRef ?? null, origenId: l.origenId ?? null,
+      referencia: l.referencia, descripcion: l.descripcion, cliente: l.cliente, asesor: l.asesor?._id ?? "",
+      fechaVenta: aInputFecha(l.fechaVenta), fechaPago: aInputFecha(l.fechaPago), periodo: l.periodo,
+      moneda: l.moneda, subtotal: String(l.subtotal), dias: String(l.dias), porcentaje: String(l.porcentaje),
+      comision: String(l.comision), notas: l.notas,
+    });
+    setErrForm(""); setComisionManual(true); setModal(true);
   }
 
-  // Escapa contenido HTML para evitar XSS en el reporte imprimible
-  function escaparHTML(s: unknown): string {
-    return String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  // ── Exportar CSV ─────────────────────────────────────────────────────────
-  function exportarCSV() {
-    if (categoria !== "comisiones" && !resultado) return;
-    if (categoria === "comisiones" && !resultadoComisiones) return;
-
-    if (categoria === "servicios") {
-      const rs = resultado as ResultadoServicios;
-      const cabecera = [
-        "Fecha","Folio","Cliente","Asesor","No. Factura",
-        "Equipo","Subtotal","IVA","Total comercial","Comisión aprox.",
-      ].map(escaparCSV).join(",");
-      const filas = rs.operaciones.map(op => [
-        fmtFecha(op.fecha),
-        op.folio,
-        op.cliente?.nombre ?? "—",
-        op.asesor?.nombre  ?? "Sin asesor asignado",
-        op.numeroFactura   ?? "—",
-        [op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—",
-        op.subtotal,
-        op.iva,
-        op.total,
-        op.fechaPagoComision?.etiqueta ?? "—",
-      ].map(escaparCSV).join(","));
-      const csv = [cabecera, ...filas].join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `reporte-servicios-facturados_${desde}_${hasta}.csv`; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "refacciones") {
-      const rr = resultado as ResultadoRefacciones;
-      const cabecera = [
-        "Fecha","Folio","Cliente","Asesor","No. Factura",
-        "Equipo","Subtotal","IVA","Total comercial","Comisión aprox.",
-      ].map(escaparCSV).join(",");
-      const filas = rr.operaciones.map(op => [
-        fmtFecha(op.fecha),
-        op.folio,
-        op.cliente?.nombre ?? "—",
-        op.asesor?.nombre  ?? "Sin asesor asignado",
-        op.numeroFactura   ?? "—",
-        [op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—",
-        op.subtotal,
-        op.iva,
-        op.total,
-        op.fechaPagoComision?.etiqueta ?? "—",
-      ].map(escaparCSV).join(","));
-      const csv = [cabecera, ...filas].join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `reporte-refacciones-facturadas_${desde}_${hasta}.csv`; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "rentas") {
-      const rt = resultado as ResultadoRentas;
-      const cabecera = [
-        "Inicio","Fin","Equipo","Cliente","Asesor","Periodo",
-        "Subtotal","IVA","Total","Comisión aprox.",
-      ].map(escaparCSV).join(",");
-      const filas = rt.operaciones.map(op => [
-        fmtFecha(op.fechaInicio),
-        op.fechaFin ? fmtFecha(op.fechaFin) : "—",
-        op.equipo ? `${op.equipo.numeroEconomico} — ${op.equipo.marca}` : "—",
-        op.cliente?.nombre ?? "—",
-        op.asesor?.nombre  ?? "Sin asesor asignado",
-        op.tipoPeriodo,
-        op.subtotal,
-        op.iva,
-        op.total,
-        op.comision ? `${op.comision.porcentaje}% · $${op.comision.monto}` : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago" : "—"),
-      ].map(escaparCSV).join(","));
-      const csv = [cabecera, ...filas].join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `reporte-rentas-activas_${desde}_${hasta}.csv`; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "comisiones") {
-      if (!resultadoComisiones) return;
-      const cabecera = [
-        "Asesor","Equipos ($)","Servicios ($)","Refacciones ($)","Rentas ($)","Comisión total ($)",
-      ].map(escaparCSV).join(",");
-      const filas = resultadoComisiones.porAsesor.map(g => [
-        g.asesorNombre, g.equipos.comision, g.servicios.comision,
-        g.refacciones.comision, g.rentas.comision, g.comisionTotal,
-      ].map(escaparCSV).join(","));
-      const csv = [cabecera, ...filas].join("\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `reporte-comisiones_${desde}_${hasta}.csv`; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    // Categoría equipos (lógica original)
-    const re = resultado as ResultadoEquipos;
-    const cabecera = [
-      "Fecha","N° Económico","Marca","Modelo","Serie","Capacidad","Tipo",
-      "Cliente","Asesor","Ref. Factura (manual)",
-      "Subtotal registrado","IVA registrado","Efectivo","Total comercial",
-      "Importe calculado","Diferencia","Requiere revisión","Notas",
-    ].map(escaparCSV).join(",");
-
-    const filas = re.operaciones.map(op => [
-      fmtFecha(op.venta.fecha),
-      op.numeroEconomico,
-      op.marca,
-      op.modelo,
-      op.serie,
-      op.capacidad,
-      op.tipoCombustible,
-      op.venta.cliente?.nombre ?? "—",
-      op.venta.asesor?.nombre  ?? "Sin asesor asignado",
-      op.venta.numeroFactura   ?? "—",
-      op.venta.montoFacturado,
-      op.venta.ivaFacturado,
-      op.venta.montoEfectivo,
-      op.venta.importe,
-      op.venta.importeCalculado  ?? "",
-      op.venta.diferenciaImporte ?? "",
-      op.venta.requiereRevision  ? "Sí" : "No",
-      op.venta.notas ?? "",
-    ].map(escaparCSV).join(","));
-
-    const csv = [cabecera, ...filas].join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `reporte-equipos-vendidos_${desde}_${hasta}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
-  // ── Exportar HTML imprimible ──────────────────────────────────────────────
-  function exportarHTML() {
-    if (categoria !== "comisiones" && !resultado) return;
-    if (categoria === "comisiones" && !resultadoComisiones) return;
-
-    if (categoria === "servicios") {
-      const rs = resultado as ResultadoServicios;
-      const filas = rs.operaciones.map(op => `
-        <tr>
-          <td>${escaparHTML(fmtFecha(op.fecha))}</td>
-          <td>${escaparHTML(op.folio)}</td>
-          <td>${escaparHTML(op.cliente?.nombre ?? "—")}</td>
-          <td>${escaparHTML(op.asesor?.nombre ?? "Sin asesor")}</td>
-          <td>${escaparHTML(op.numeroFactura ?? "—")}</td>
-          <td>${escaparHTML([op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—")}</td>
-          <td style="text-align:right">$${fmtMXN(op.subtotal)}</td>
-          <td style="text-align:right">$${fmtMXN(op.iva)}</td>
-          <td style="text-align:right;font-weight:700">$${fmtMXN(op.total)}</td>
-          <td style="font-size:0.8em">${escaparHTML(op.fechaPagoComision?.etiqueta ?? "—")}</td>
-        </tr>`).join("");
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Servicios Facturados</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header"><img src="${LOGO_URL}" class="logo" alt="PIPSA"/><div><h1>Reporte de Servicios Facturados</h1><p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p><p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p></div></div>
-<div class="aviso">⚠ El filtro usa la fecha de cotización, no de facturación. No. factura es texto libre.</div>
-<div class="resumen"><div class="box"><div class="val">${rs.resumen.serviciosVendidos}</div><div class="lbl">Servicios</div></div><div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(rs.resumen.ventaComercialTotal)}</div><div class="lbl">Total comercial</div></div><div class="box"><div class="val">$${fmtMXN(rs.resumen.ticketPromedio)}</div><div class="lbl">Ticket prom.</div></div></div>
-<table><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Asesor</th><th>Factura*</th><th>Equipo</th><th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Comisión</th></tr></thead><tbody>${filas || "<tr><td colspan='10'>Sin datos</td></tr>"}</tbody></table>
-<p style="font-size:7.5pt;color:#aaa">* Texto libre, sin conciliación con CFDI.</p>
-</body></html>`;
-      const blob = new Blob([html], { type: "text/html" });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "refacciones") {
-      const rr = resultado as ResultadoRefacciones;
-      const filas = rr.operaciones.map(op => `
-        <tr>
-          <td>${escaparHTML(fmtFecha(op.fecha))}</td>
-          <td>${escaparHTML(op.folio)}</td>
-          <td>${escaparHTML(op.cliente?.nombre ?? "—")}</td>
-          <td>${escaparHTML(op.asesor?.nombre ?? "Sin asesor")}</td>
-          <td>${escaparHTML(op.numeroFactura ?? "—")}</td>
-          <td>${escaparHTML([op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—")}</td>
-          <td style="text-align:right">$${fmtMXN(op.subtotal)}</td>
-          <td style="text-align:right">$${fmtMXN(op.iva)}</td>
-          <td style="text-align:right;font-weight:700">$${fmtMXN(op.total)}</td>
-          <td style="font-size:0.8em">${escaparHTML(op.fechaPagoComision?.etiqueta ?? "—")}</td>
-        </tr>`).join("");
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Refacciones Facturadas</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header"><img src="${LOGO_URL}" class="logo" alt="PIPSA"/><div><h1>Reporte de Refacciones Facturadas</h1><p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p><p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p></div></div>
-<div class="aviso">⚠ El filtro usa la fecha de cotización, no de facturación. No. factura es texto libre.</div>
-<div class="resumen"><div class="box"><div class="val">${rr.resumen.refaccionesVendidas}</div><div class="lbl">Refacciones</div></div><div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(rr.resumen.ventaComercialTotal)}</div><div class="lbl">Total comercial</div></div><div class="box"><div class="val">$${fmtMXN(rr.resumen.ticketPromedio)}</div><div class="lbl">Ticket prom.</div></div></div>
-<table><thead><tr><th>Fecha</th><th>Folio</th><th>Cliente</th><th>Asesor</th><th>Factura*</th><th>Equipo</th><th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Comisión</th></tr></thead><tbody>${filas || "<tr><td colspan='10'>Sin datos</td></tr>"}</tbody></table>
-<p style="font-size:7.5pt;color:#aaa">* Texto libre, sin conciliación con CFDI.</p>
-</body></html>`;
-      const blob = new Blob([html], { type: "text/html" });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "rentas") {
-      const rt = resultado as ResultadoRentas;
-      const filas = rt.operaciones.map(op => `
-        <tr>
-          <td>${escaparHTML(fmtFecha(op.fechaInicio))}</td>
-          <td>${escaparHTML(op.equipo ? `${op.equipo.numeroEconomico} — ${op.equipo.marca}` : "—")}</td>
-          <td>${escaparHTML(op.cliente?.nombre ?? "—")}</td>
-          <td>${escaparHTML(op.asesor?.nombre ?? "Sin asesor")}</td>
-          <td>${escaparHTML(op.tipoPeriodo)}</td>
-          <td style="text-align:right">$${fmtMXN(op.subtotal)}</td>
-          <td style="text-align:right">$${fmtMXN(op.iva)}</td>
-          <td style="text-align:right;font-weight:700">$${fmtMXN(op.total)}</td>
-          <td style="font-size:0.8em">${op.comision ? escaparHTML(`${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)}`) : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago" : "—")}</td>
-        </tr>`).join("");
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Rentas Activas</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header"><img src="${LOGO_URL}" class="logo" alt="PIPSA"/><div><h1>Reporte de Rentas Activas</h1><p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p><p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p></div></div>
-<div class="aviso">⚠ Solo contratos con estatus "activa". La comisión se calcula desde la fecha de inicio, sin fecha de pago registrada.</div>
-<div class="resumen"><div class="box"><div class="val">${rt.resumen.rentasActivas}</div><div class="lbl">Rentas activas</div></div><div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(rt.resumen.ventaComercialTotal)}</div><div class="lbl">Total comercial</div></div><div class="box"><div class="val">$${fmtMXN(rt.resumen.ticketPromedio)}</div><div class="lbl">Ticket prom.</div></div></div>
-<table><thead><tr><th>Inicio</th><th>Equipo</th><th>Cliente</th><th>Asesor</th><th>Periodo</th><th style="text-align:right">Subtotal</th><th style="text-align:right">IVA</th><th style="text-align:right">Total</th><th>Comisión</th></tr></thead><tbody>${filas || "<tr><td colspan='9'>Sin datos</td></tr>"}</tbody></table>
-</body></html>`;
-      const blob = new Blob([html], { type: "text/html" });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (categoria === "comisiones") {
-      if (!resultadoComisiones) return;
-      const rc = resultadoComisiones;
-      const filas = rc.porAsesor.map(g => `
-        <tr>
-          <td>${escaparHTML(g.asesorNombre)}</td>
-          <td style="text-align:right">$${fmtMXN(g.equipos.comision)}</td>
-          <td style="text-align:right">$${fmtMXN(g.servicios.comision)}</td>
-          <td style="text-align:right">$${fmtMXN(g.refacciones.comision)}</td>
-          <td style="text-align:right">$${fmtMXN(g.rentas.comision)}</td>
-          <td style="text-align:right;font-weight:700">$${fmtMXN(g.comisionTotal)}</td>
-        </tr>`).join("");
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Comisiones</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px}.header{display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}.logo{height:52px;object-fit:contain}h1{font-size:13pt;font-weight:900}p.sub{font-size:8.5pt;color:#555}.aviso{font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px}.resumen{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}.box{border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px}.box .val{font-size:14pt;font-weight:900}.box .lbl{font-size:7.5pt;color:#666;text-transform:uppercase}table{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px}thead{background:#222;color:#fff}thead th{padding:5px 8px;text-align:left}tbody tr:nth-child(even){background:#f5f5f5}td{padding:4px 8px;border-bottom:1px solid #ddd}tfoot td{font-weight:700;border-top:2px solid #222}.print-btn{position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer}@media print{.print-btn{display:none}}</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header"><img src="${LOGO_URL}" class="logo" alt="PIPSA"/><div><h1>Reporte de Comisiones</h1><p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p><p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p></div></div>
-<div class="aviso">⚠ ${escaparHTML(rc.meta.advertencia)}</div>
-<div class="resumen"><div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(rc.totales.comisionTotal)}</div><div class="lbl">Comisión total</div></div></div>
-<table><thead><tr><th>Asesor</th><th style="text-align:right">Equipos</th><th style="text-align:right">Servicios</th><th style="text-align:right">Refacciones</th><th style="text-align:right">Rentas</th><th style="text-align:right">Total</th></tr></thead><tbody>${filas || "<tr><td colspan='6'>Sin datos</td></tr>"}</tbody>
-<tfoot><tr><td>Total</td><td style="text-align:right">$${fmtMXN(rc.totales.equipos.comision)}</td><td style="text-align:right">$${fmtMXN(rc.totales.servicios.comision)}</td><td style="text-align:right">$${fmtMXN(rc.totales.refacciones.comision)}</td><td style="text-align:right">$${fmtMXN(rc.totales.rentas.comision)}</td><td style="text-align:right">$${fmtMXN(rc.totales.comisionTotal)}</td></tr></tfoot>
-</table>
-</body></html>`;
-      const blob = new Blob([html], { type: "text/html" });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    // Categoría equipos
-    const re2 = resultado as ResultadoEquipos;
-    const r = re2.resumen;
-    const filas = re2.operaciones.map(op => `
-      <tr>
-        <td>${escaparHTML(fmtFecha(op.venta.fecha))}</td>
-        <td>${escaparHTML(op.numeroEconomico)}</td>
-        <td>${escaparHTML(op.marca)} ${escaparHTML(op.modelo)}</td>
-        <td>${escaparHTML(op.serie || "—")}</td>
-        <td>${escaparHTML(op.capacidad || "—")}</td>
-        <td>${escaparHTML(op.tipoCombustible || "—")}</td>
-        <td>${escaparHTML(op.venta.cliente?.nombre ?? "—")}</td>
-        <td>${escaparHTML(op.venta.asesor?.nombre  ?? "Sin asesor")}</td>
-        <td>${escaparHTML(op.venta.numeroFactura   ?? "—")}</td>
-        <td style="text-align:right">$${fmtMXN(op.venta.montoFacturado)}</td>
-        <td style="text-align:right">$${fmtMXN(op.venta.ivaFacturado)}</td>
-        <td style="text-align:right">$${fmtMXN(op.venta.montoEfectivo)}</td>
-        <td style="text-align:right;font-weight:700">$${fmtMXN(op.venta.importe)}</td>
-        ${op.venta.requiereRevision ? '<td style="color:#ef4444;font-size:0.75em">⚠ revisar</td>' : '<td></td>'}
-      </tr>`).join("");
-
-    const porAsesorRows = (re2.porAsesor as PorAsesor[]).map(g => `
-      <tr>
-        <td>${escaparHTML(g.asesorNombre)}</td>
-        <td style="text-align:center">${g.equiposVendidos}</td>
-        <td style="text-align:right">$${fmtMXN(g.subtotalFacturadoRegistrado)}</td>
-        <td style="text-align:right">$${fmtMXN(g.ivaRegistrado)}</td>
-        <td style="text-align:right">$${fmtMXN(g.ventaEfectivo)}</td>
-        <td style="text-align:right;font-weight:700">$${fmtMXN(g.ventaComercialTotal)}</td>
-        <td style="text-align:right">${g.participacion.toFixed(1)}%</td>
-      </tr>`).join("");
-
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Reporte de Equipos Vendidos</title>
-<style>
-  * { margin:0;padding:0;box-sizing:border-box; }
-  body { font-family:Arial,sans-serif;font-size:9pt;color:#222;padding:20px; }
-  .header { display:flex;align-items:center;gap:14px;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px; }
-  .logo { height:52px;object-fit:contain; }
-  h1 { font-size:13pt;font-weight:900; }
-  p.sub { font-size:8.5pt;color:#555; }
-  .aviso { font-size:8pt;color:#888;margin:8px 0;font-style:italic;border-left:3px solid #ccc;padding-left:8px; }
-  .resumen { display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap; }
-  .box { border:1px solid #ddd;border-radius:4px;padding:10px 16px;text-align:center;min-width:120px; }
-  .box .val { font-size:14pt;font-weight:900; } .box .lbl { font-size:7.5pt;color:#666;text-transform:uppercase; }
-  h2 { font-size:10pt;font-weight:700;margin:16px 0 8px;border-left:3px solid #222;padding-left:6px; }
-  table { width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:16px; }
-  thead { background:#222;color:#fff; } thead th { padding:5px 8px;text-align:left; }
-  tbody tr:nth-child(even) { background:#f5f5f5; } td { padding:4px 8px;border-bottom:1px solid #ddd; }
-  .print-btn { position:fixed;top:16px;right:16px;padding:10px 24px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer; }
-  @media print { .print-btn { display:none; } }
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
-<div class="header">
-  <img src="${LOGO_URL}" class="logo" alt="PIPSA Montacargas" />
-  <div>
-    <h1>Reporte de Equipos Vendidos</h1>
-    <p class="sub">Equipos Industriales y Montacargas de Guadalajara S de RL de CV</p>
-    <p class="sub">Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}</p>
-  </div>
-</div>
-<div class="aviso">⚠️ Los datos de subtotal y folio de factura son capturados manualmente. No representan una conciliación con el CFDI emitido. Cobrado y saldo no disponibles en esta fase.</div>
-<div class="resumen">
-  <div class="box"><div class="val">${r.equiposVendidos}</div><div class="lbl">Equipos vendidos</div></div>
-  <div class="box"><div class="val" style="color:#16a34a">$${fmtMXN(r.ventaComercialTotal)}</div><div class="lbl">Venta comercial total</div></div>
-  <div class="box"><div class="val">$${fmtMXN(r.subtotalFacturadoRegistrado)}</div><div class="lbl">Subtotal registrado</div></div>
-  <div class="box"><div class="val">$${fmtMXN(r.ivaRegistrado)}</div><div class="lbl">IVA registrado</div></div>
-  <div class="box"><div class="val">$${fmtMXN(r.ventaEfectivo)}</div><div class="lbl">Efectivo</div></div>
-  <div class="box"><div class="val">$${fmtMXN(r.ticketPromedio)}</div><div class="lbl">Ticket promedio</div></div>
-</div>
-<h2>Ventas por asesor</h2>
-<table>
-  <thead><tr><th>Asesor</th><th>Equipos</th><th style="text-align:right">Subtotal reg.</th><th style="text-align:right">IVA</th><th style="text-align:right">Efectivo</th><th style="text-align:right">Total comercial</th><th style="text-align:right">%</th></tr></thead>
-  <tbody>${porAsesorRows || '<tr><td colspan="7" style="text-align:center;color:#aaa">Sin datos</td></tr>'}</tbody>
-</table>
-<h2>Detalle de operaciones (página ${re2.paginacion.page} de ${re2.paginacion.pages})</h2>
-<table>
-  <thead><tr><th>Fecha</th><th>#</th><th>Marca/Modelo</th><th>Serie</th><th>Cap.</th><th>Tipo</th><th>Cliente</th><th>Asesor</th><th>Ref. Factura*</th><th style="text-align:right">Subtotal*</th><th style="text-align:right">IVA*</th><th style="text-align:right">Efectivo</th><th style="text-align:right">Total</th></tr></thead>
-  <tbody>${filas || '<tr><td colspan="13" style="text-align:center;color:#aaa">Sin operaciones en este periodo</td></tr>'}</tbody>
-</table>
-<p style="font-size:7.5pt;color:#aaa">* Datos capturados manualmente, no conciliados con CFDI.</p>
-</body></html>`;
-
-    const blob = new Blob([html], { type: "text/html" });
-    const url  = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  }
-
-  // ── Cambio de columna de orden ─────────────────────────────────────────────
-  function toggleSort(col: string) {
-    if (sortBy === col) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(col);
-      setSortDir("desc");
-    }
-  }
-
-  const SortIcon = ({ col }: { col: string }) => {
-    if (sortBy !== col) return <span style={{ opacity: 0.3 }}>↕</span>;
-    return <span style={{ color: "var(--accent)" }}>{sortDir === "asc" ? "↑" : "↓"}</span>;
-  };
-
-  // ── Cerrar tooltip al hacer click fuera ───────────────────────────────────
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const fn = (e: MouseEvent) => {
-      if (tooltipRef.current && !tooltipRef.current.contains(e.target as Node)) {
-        setTooltip(null);
-      }
+  function elegirOrigen(o: Origen) {
+    const fv = aInputFecha(o.fechaVenta), fp = aInputFecha(o.fechaPago);
+    const dias = fv && fp ? diasEntre(fv, fp) : 0;
+    const pct = fv && fp ? porcentajePorDias(dias) : 0;
+    const f: Form = {
+      ...form, origenRef: o.origenRef, origenId: o.origenId, referencia: o.referencia, descripcion: o.descripcion,
+      cliente: o.cliente, asesor: o.asesor ?? form.asesor, fechaVenta: fv, fechaPago: fp,
+      moneda: o.moneda, subtotal: String(o.subtotal), dias: fv && fp ? String(dias) : "", porcentaje: fv && fp ? String(pct) : "",
+      comision: "",
     };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, []);
+    f.comision = sugerida(f);
+    setForm(f); setComisionManual(false);
+  }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  const CATS = [
-    { key: "equipos",     label: "Equipos",     pendiente: false },
-    { key: "servicios",   label: "Servicios",   pendiente: false },
-    { key: "rentas",      label: "Rentas",       pendiente: false },
-    { key: "refacciones", label: "Refacciones",  pendiente: false },
-    { key: "comisiones",  label: "Comisiones",   pendiente: false },
-    { key: "otros",       label: "Otros",        pendiente: true  },
-  ] as const;
+  // Comisión sugerida = subtotal sin IVA × % × TC (solo ayuda; se puede sobrescribir)
+  function sugerida(f: Form) {
+    const sub = Number(f.subtotal) || 0, pct = Number(f.porcentaje) || 0;
+    const tc = f.moneda === "USD" ? TIPO_CAMBIO_USD : 1;
+    return pct > 0 && sub > 0 ? String(round2(sub * (pct / 100) * tc)) : "";
+  }
+  function cambiar<K extends keyof Form>(k: K, v: Form[K]) {
+    setForm(prev => {
+      const n = { ...prev, [k]: v } as Form;
+      if (k === "fechaVenta" || k === "fechaPago") {
+        if (n.fechaVenta && n.fechaPago) { const d = diasEntre(n.fechaVenta, n.fechaPago); n.dias = String(d); n.porcentaje = String(porcentajePorDias(d)); }
+      }
+      if (k === "dias") { const d = Number(v); if (!isNaN(d) && String(v) !== "") n.porcentaje = String(porcentajePorDias(d)); }
+      if (!comisionManual && ["subtotal", "porcentaje", "moneda", "dias", "fechaVenta", "fechaPago"].includes(k as string)) n.comision = sugerida(n);
+      return n;
+    });
+  }
+
+  async function guardar() {
+    setErrForm("");
+    if (!form.asesor) return setErrForm("Selecciona el asesor.");
+    if (form.comision === "" || isNaN(Number(form.comision))) return setErrForm("Captura la comisión (en pesos).");
+    setGuardando(true);
+    try {
+      const body = {
+        ...form, subtotal: Number(form.subtotal) || 0, dias: Number(form.dias) || 0, porcentaje: Number(form.porcentaje) || 0,
+        comision: Number(form.comision), tipoCambio: form.moneda === "USD" ? TIPO_CAMBIO_USD : 1,
+      };
+      if (form._id) await api.put(`/comisiones/${form._id}`, body); else await api.post("/comisiones", body);
+      setModal(false); cargar();
+    } catch (e: any) {
+      setErrForm(e?.response?.data?.message ?? "No se pudo guardar.");
+    } finally { setGuardando(false); }
+  }
+  async function borrar(l: Linea) {
+    if (!window.confirm(`¿Borrar la comisión de ${l.referencia || l.cliente || "esta línea"}?`)) return;
+    try { await api.delete(`/comisiones/${l._id}`); cargar(); }
+    catch (e: any) { alert(e?.response?.data?.message ?? "No se pudo borrar."); }
+  }
+
+  function exportarCSV() {
+    const enc = ["Periodo", "Asesor", "Tipo", "Referencia", "Cliente", "Descripción", "Fecha venta", "Fecha pago", "Moneda", "Subtotal sin IVA", "Días", "%", "Comisión MXN", "Notas"];
+    const filas = lineas.map(l => [l.periodo, l.asesor?.nombre ?? "", tipoInfo(l.tipo).label, l.referencia, l.cliente, l.descripcion,
+      aInputFecha(l.fechaVenta), aInputFecha(l.fechaPago), l.moneda, l.subtotal, l.dias, l.porcentaje, l.comision, l.notas]);
+    const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = "﻿" + [enc, ...filas].map(r => r.map(esc).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `reporte_ventas_${periodo}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  const totalMostrado = useMemo(() => lineas.reduce((s, l) => s + l.comision, 0), [lineas]);
+  const f = form;
 
   return (
-    <>
-      {/* ── Encabezado ─────────────────────────────────────────────────────── */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Reporte de ventas</h1>
-          <p className="page-subtitle">Análisis general del desempeño comercial</p>
-        </div>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+        <h1 className="page-title">📈 Reporte de ventas{esAdmin ? "" : " — mis ventas"}</h1>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            className="btn btn-secondary"
-            onClick={exportarCSV}
-            disabled={loading || (categoria === "comisiones" ? !resultadoComisiones : !resultado) || categoria === "otros"}
-            title="Exportar CSV con los filtros activos"
-          >
-            CSV
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={exportarHTML}
-            disabled={loading || (categoria === "comisiones" ? !resultadoComisiones : !resultado) || categoria === "otros"}
-            title="Abrir reporte imprimible / PDF"
-          >
-            Imprimir / PDF
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => cargar(true)}
-            disabled={loading}
-          >
-            {loading ? "Cargando…" : "Actualizar"}
-          </button>
+          <button className="btn btn-secondary" onClick={exportarCSV} disabled={!lineas.length}>⬇️ Exportar CSV</button>
+          <button className="btn btn-primary" onClick={abrirNueva}>+ Agregar venta</button>
         </div>
       </div>
 
-      <div className="page-content">
+      <div className="table-toolbar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        <div><label className="form-label">Mes</label>
+          <input type="month" className="form-input" value={periodo} onChange={e => e.target.value && setPeriodo(e.target.value)} /></div>
+        {esAdmin && (
+          <div><label className="form-label">Asesor</label>
+            <select className="form-select" value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
+              <option value="">Todos</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+            </select></div>
+        )}
+        <div><label className="form-label">Tipo</label>
+          <select className="form-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
+            <option value="">Todos</option>{TIPOS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+          </select></div>
+      </div>
 
-        {/* ── Filtros ─────────────────────────────────────────────────────── */}
-        <div
-          className="table-card"
-          style={{ padding: "16px 20px", marginBottom: 0 }}
-        >
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-              alignItems: "flex-end",
-            }}
-          >
-            <div className="form-group" style={{ margin: 0, opacity: categoria === "rentas" ? 0.45 : 1 }}>
-              <label className="form-label">Desde</label>
-              <input
-                className="form-input"
-                type="date"
-                value={desde}
-                onChange={e => setDesde(e.target.value)}
-                disabled={categoria === "rentas"}
-                title={categoria === "rentas" ? "No aplica a Rentas: se muestran todas las activas sin importar la fecha" : undefined}
-                style={{ width: 160 }}
-              />
-            </div>
-            <div className="form-group" style={{ margin: 0, opacity: categoria === "rentas" ? 0.45 : 1 }}>
-              <label className="form-label">Hasta</label>
-              <input
-                className="form-input"
-                type="date"
-                value={hasta}
-                onChange={e => setHasta(e.target.value)}
-                disabled={categoria === "rentas"}
-                title={categoria === "rentas" ? "No aplica a Rentas: se muestran todas las activas sin importar la fecha" : undefined}
-                style={{ width: 160 }}
-              />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Asesor</label>
-              <select
-                className="form-select"
-                value={asesorId}
-                onChange={e => setAsesorId(e.target.value)}
-                style={{ width: 200 }}
-              >
-                <option value="todos">Todos</option>
-                {asesores.map(a => (
-                  <option key={a._id} value={a._id}>{a.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label">Buscar</label>
-              <input
-                className="form-input"
-                placeholder="Equipo, cliente, asesor…"
-                value={buscar}
-                onChange={e => setBuscar(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") cargar(true); }}
-                style={{ width: 220 }}
-              />
-            </div>
-            <button
-              className="btn btn-primary"
-              onClick={() => cargar(true)}
-              disabled={loading}
-            >
-              {loading ? "Cargando…" : "Buscar"}
-            </button>
-            {(asesorId !== "todos" || buscar) && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => { setAsesorId("todos"); setBuscar(""); }}
-                style={{ alignSelf: "flex-end" }}
-              >
-                Limpiar filtros
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Pestañas de categoría ─────────────────────────────────────────── */}
-        <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginTop: 16 }}>
-          {CATS.map(c => (
-            <button
-              key={c.key}
-              onClick={() => {
-                if (categoria === c.key) return;  // ya estamos aquí, no hacer nada
-                setCategoria(c.key);
-                setResultado(null);
-                setPage(1);
-                // NO limpiar buscar, desde, hasta ni asesorId — conservar filtros al cambiar pestaña
-              }}
-              style={{
-                padding: "10px 22px",
-                border: "none",
-                cursor: "pointer",
-                background: "transparent",
-                fontFamily: "var(--font-head)",
-                fontWeight: 700,
-                fontSize: "0.88rem",
-                color: categoria === c.key ? "var(--accent)" : "var(--text-muted)",
-                borderBottom:
-                  categoria === c.key
-                    ? "2px solid var(--accent)"
-                    : "2px solid transparent",
-                transition: "all 0.15s",
-                position: "relative",
-              }}
-            >
-              {c.label}
-              {c.pendiente && (
-                <span
-                  style={{
-                    fontSize: "0.6rem",
-                    background: "var(--surface3)",
-                    color: "var(--text-muted)",
-                    padding: "1px 5px",
-                    borderRadius: 4,
-                    marginLeft: 6,
-                    fontFamily: "var(--font-body)",
-                    fontWeight: 500,
-                    verticalAlign: "middle",
-                  }}
-                >
-                  próx.
-                </span>
-              )}
-            </button>
+      {resumen && (
+        <div className="stats-grid" style={{ marginBottom: 16 }}>
+          <div className="stat-card"><div className="stat-card-label">Comisiones del mes</div><div className="stat-card-value">{mxn(totalMostrado)}</div></div>
+          <div className="stat-card"><div className="stat-card-label">Ventas capturadas</div><div className="stat-card-value">{resumen.cantidad}</div></div>
+          {TIPOS.filter(t => resumen.porTipo[t.v]).map(t => (
+            <div className="stat-card" key={t.v}><div className="stat-card-label">{t.icon} {t.label}</div><div className="stat-card-value">{mxn(resumen.porTipo[t.v])}</div></div>
           ))}
         </div>
+      )}
 
-        {/* ── Categorías pendientes ─────────────────────────────────────────── */}
-        {/* BUG HISTÓRICO corregido: esta condición decía "categoria !== 'equipos'",
-            es decir, mostraba el placeholder de "pendiente de integración" para
-            TODAS las demás categorías (Servicios, Refacciones, Rentas, Comisiones)
-            aunque ya estuvieran completamente implementadas. Ahora solo se muestra
-            para categorías realmente marcadas pendiente:true en CATS (hoy, "otros"). */}
-        {CATS.find(c => c.key === categoria)?.pendiente && (
-          <div
-            className="table-card"
-            style={{ marginTop: 16 }}
-          >
-            <div className="empty-state" style={{ padding: "80px 24px" }}>
-              <span style={{ fontSize: "2rem" }}>🔧</span>
-              <p style={{ fontWeight: 600, color: "var(--text)", fontSize: "1rem" }}>
-                Categoría pendiente de integración
-              </p>
-              <p style={{ textAlign: "center", maxWidth: 480, color: "var(--text-muted)", fontSize: "0.88rem" }}>
-                Esta categoría estará disponible cuando se complete su integración comercial.
-                Los modelos de datos requeridos aún no han sido auditados y aprobados para esta fase.
-              </p>
+      {esAdmin && resumen && resumen.porAsesor.length > 0 && (
+        <div className="table-card" style={{ marginBottom: 16 }}>
+          <div className="table-card-header"><span className="table-card-title">Por asesor</span></div>
+          <table><thead><tr><th>Asesor</th><th style={{ textAlign: "right" }}>Comisión</th></tr></thead>
+            <tbody>{resumen.porAsesor.map(a => <tr key={a.asesor}><td>{a.asesor}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{mxn(a.comision)}</td></tr>)}</tbody></table>
+        </div>
+      )}
+
+      <div className="table-card">
+        <div className="table-card-header"><span className="table-card-title">Detalle del mes</span></div>
+        {loading ? <div className="loading-state"><div className="spinner" /></div>
+          : error ? <div className="empty-state">{error}</div>
+          : lineas.length === 0 ? <div className="empty-state"><div className="empty-icon">💵</div>Aún no hay ventas capturadas en este mes.</div>
+          : (
+            <div style={{ overflowX: "auto" }}>
+              <table>
+                <thead><tr>
+                  <th>Tipo</th>{esAdmin && <th>Asesor</th>}<th>Referencia</th><th>Cliente</th>
+                  <th style={{ textAlign: "right" }}>Subtotal s/IVA</th><th style={{ textAlign: "right" }}>Días</th><th style={{ textAlign: "right" }}>%</th>
+                  <th style={{ textAlign: "right" }}>Comisión</th><th />
+                </tr></thead>
+                <tbody>
+                  {lineas.map(l => (
+                    <tr key={l._id}>
+                      <td>{tipoInfo(l.tipo).icon} {tipoInfo(l.tipo).label}</td>
+                      {esAdmin && <td>{l.asesor?.nombre ?? "—"}</td>}
+                      <td>{l.referencia || "—"}{l.descripcion && <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{l.descripcion}</div>}</td>
+                      <td>{l.cliente || "—"}</td>
+                      <td style={{ textAlign: "right" }}>{l.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} {l.moneda}</td>
+                      <td style={{ textAlign: "right" }}>{l.dias || "—"}</td>
+                      <td style={{ textAlign: "right" }}>{l.porcentaje ? `${l.porcentaje}%` : "—"}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700 }}>{mxn(l.comision)}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(l)}>✏️</button>{" "}
+                        <button className="btn btn-danger btn-sm" onClick={() => borrar(l)}>🗑️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
+          )}
+      </div>
 
-        {/* ══ CATEGORÍA EQUIPOS ══════════════════════════════════════════════ */}
-        {categoria === "equipos" && (() => {
-          const reE = resultado as ResultadoEquipos | null;
-          const r   = reE?.resumen;
-          return (
-          <>
-            {/* ── Aviso de limitaciones ─────────────────────────────────────── */}
-            <div
-              style={{
-                marginTop: 16,
-                padding: "10px 16px",
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: "var(--radius-sm)",
-                fontSize: "0.78rem",
-                color: "var(--text-muted)",
-                lineHeight: 1.6,
-              }}
-            >
-              <strong style={{ color: "var(--accent)" }}>Fase 1 — Solo categoría Equipos.</strong>
-              {" "}La venta todavía no está vinculada con el módulo de Facturación. Los datos de cobranza y saldo no están disponibles.
-              Los campos de subtotal y folio de factura son texto capturado manualmente al registrar la venta y no representan una conciliación con el CFDI.
-            </div>
+      {modal && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
+          <div className="modal" style={{ maxWidth: 720, maxHeight: "90vh", overflowY: "auto" }}>
+            <button className="modal-close" onClick={() => setModal(false)}>✕</button>
+            <h2 className="modal-title">{f._id ? "Editar comisión" : "Agregar venta al reporte"}</h2>
 
-            {/* ── Métricas ─────────────────────────────────────────────────── */}
-            {error ? (
-              <div
-                style={{
-                  marginTop: 16,
-                  padding: "20px 24px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius)",
-                  color: "var(--red)",
-                  fontSize: "0.88rem",
-                }}
-              >
-                {error}
-              </div>
-            ) : (
+            {!f._id && (
               <>
-                <div
-                  className="stats-grid"
-                  style={{
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                    marginTop: 16,
-                  }}
-                >
-                  <StatCard
-                    label="Equipos vendidos"
-                    value={loading ? "—" : String(r?.equiposVendidos ?? 0)}
-                    color="var(--blue)"
-                  />
-                  <StatCard
-                    label="Venta comercial total"
-                    value={loading ? "—" : `$${fmtMXN(r?.ventaComercialTotal ?? 0)}`}
-                    color="var(--green)"
-                    sub="importe registrado (subtotal + IVA + efectivo)"
-                  />
-                  <StatCard
-                    label="Subtotal facturado reg."
-                    value={loading ? "—" : `$${fmtMXN(r?.subtotalFacturadoRegistrado ?? 0)}`}
-                    color="var(--accent)"
-                    sub="sin IVA, capturado manualmente"
-                  />
-                  <StatCard
-                    label="IVA registrado"
-                    value={loading ? "—" : `$${fmtMXN(r?.ivaRegistrado ?? 0)}`}
-                    color="var(--accent)"
-                  />
-                  <StatCard
-                    label="Venta en efectivo"
-                    value={loading ? "—" : `$${fmtMXN(r?.ventaEfectivo ?? 0)}`}
-                    color="var(--purple)"
-                    sub="sin factura"
-                  />
-                  <StatCard
-                    label="Ticket promedio"
-                    value={loading ? "—" : `$${fmtMXN(r?.ticketPromedio ?? 0)}`}
-                    color="var(--text)"
-                  />
-                  <StatCard
-                    label="Total cobrado"
-                    value=""
-                    noDisponible
-                    sub="requiere vinculación con Facturación"
-                  />
-                  <StatCard
-                    label="Saldo pendiente"
-                    value=""
-                    noDisponible
-                    sub="requiere vinculación con Facturación"
-                  />
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                  {TIPOS.map(t => (
+                    <button key={t.v} type="button" className={`btn btn-sm ${f.tipo === t.v ? "btn-primary" : "btn-secondary"}`}
+                      onClick={() => { setForm({ ...formVacio(f.periodo, t.v), asesor: f.asesor }); setBuscar(""); setComisionManual(false); }}>
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
                 </div>
-
-                {/* ── Ventas por asesor ────────────────────────────────────── */}
-                {!loading && resultado && resultado.porAsesor.length > 0 && (
-                  <div className="table-card" style={{ marginTop: 16 }}>
-                    <div className="table-card-header">
-                      <p className="table-card-title">Ventas por asesor</p>
-                    </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Asesor</th>
-                            <th style={{ textAlign: "right" }}>Equipos</th>
-                            <th style={{ textAlign: "right" }}>Subtotal reg.</th>
-                            <th style={{ textAlign: "right" }}>IVA reg.</th>
-                            <th style={{ textAlign: "right" }}>Efectivo</th>
-                            <th style={{ textAlign: "right" }}>Total comercial</th>
-                            <th style={{ textAlign: "right" }}>Ticket prom.</th>
-                            <th style={{ textAlign: "right" }}>%</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reE!.porAsesor.map((g, i) => (
-                            <tr key={g.asesorId ?? `sin-${i}`}>
-                              <td style={{ fontWeight: 600 }}>
-                                {g.asesorNombre}
-                                {!g.asesorId && (
-                                  <span
-                                    style={{
-                                      marginLeft: 6,
-                                      fontSize: "0.68rem",
-                                      color: "var(--text-muted)",
-                                      fontWeight: 400,
-                                    }}
-                                  >
-                                    (sin asignar)
-                                  </span>
-                                )}
-                              </td>
-                              <td style={{ textAlign: "right" }}>{g.equiposVendidos}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(g.subtotalFacturadoRegistrado)}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(g.ivaRegistrado)}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(g.ventaEfectivo)}</td>
-                              <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>
-                                ${fmtMXN(g.ventaComercialTotal)}
-                              </td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(g.ticketPromedio)}</td>
-                              <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
-                                {g.participacion.toFixed(1)}%
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {f.tipo !== "otro" && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="form-label">Selecciona la venta (se llenan los datos y los puedes corregir)</label>
+                    <input className="form-input" placeholder="Buscar por # económico, folio, cliente o asesor…" value={buscar} onChange={e => setBuscar(e.target.value)} />
+                    <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, marginTop: 6 }}>
+                      {cargandoOrig ? <div style={{ padding: 12 }}>Cargando…</div>
+                        : origenes.length === 0 ? <div style={{ padding: 12, opacity: 0.7 }}>No hay ventas que coincidan.</div>
+                        : origenes.map(o => (
+                          <div key={o.origenId} onClick={() => elegirOrigen(o)}
+                            style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)",
+                              background: f.origenId === o.origenId ? "var(--surface2)" : "transparent" }}>
+                            <strong>{o.referencia || "—"}</strong> · {o.cliente || "Sin cliente"}
+                            <span style={{ opacity: 0.7 }}> · {o.asesorNombre || "Sin asesor"} · {fmtFecha(o.fechaVenta)} · {o.subtotal.toLocaleString("es-MX")} {o.moneda}</span>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 )}
-
-                {/* ── Tabla de operaciones ──────────────────────────────────── */}
-                <div className="table-card" style={{ marginTop: 16 }}>
-                  <div className="table-card-header">
-                    <p className="table-card-title">
-                      Operaciones
-                      {resultado && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: "0.75rem",
-                            color: "var(--text-muted)",
-                            fontWeight: 400,
-                          }}
-                        >
-                          {resultado.paginacion.total} total
-                          {resultado.paginacion.total !== resultado.operaciones.length &&
-                            ` · página ${resultado.paginacion.page} de ${resultado.paginacion.pages}`}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-
-                  {loading ? (
-                    <Spinner />
-                  ) : !resultado || resultado.operaciones.length === 0 ? (
-                    <div className="empty-state">
-                      <span style={{ fontSize: "2rem" }}>📊</span>
-                      <p>Sin operaciones en este periodo</p>
-                      <p style={{ fontSize: "0.8rem" }}>
-                        Ajusta el rango de fechas o los filtros
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Tabla — scroll interno solo si es necesario */}
-                      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                        <table style={{ fontSize: "0.82rem", minWidth: 900 }}>
-                          <thead>
-                            <tr>
-                              <th
-                                onClick={() => toggleSort("venta.fecha")}
-                                style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                              >
-                                Fecha <SortIcon col="venta.fecha" />
-                              </th>
-                              <th
-                                onClick={() => toggleSort("numeroEconomico")}
-                                style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                              >
-                                # Económico <SortIcon col="numeroEconomico" />
-                              </th>
-                              <th
-                                onClick={() => toggleSort("marca")}
-                                style={{ cursor: "pointer" }}
-                              >
-                                Marca/Modelo <SortIcon col="marca" />
-                              </th>
-                              <th>Serie</th>
-                              <th>Cap.</th>
-                              <th>Tipo</th>
-                              <th>Cliente</th>
-                              <th>Asesor</th>
-                              <th>
-                                Ref. Factura
-                                {" "}
-                                <span
-                                  style={{ cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem" }}
-                                  onClick={e => setTooltip({ key: "refFactura", x: e.clientX, y: e.clientY })}
-                                  title={TOOLTIPS.refFactura}
-                                >
-                                  ⓘ
-                                </span>
-                              </th>
-                              <th style={{ textAlign: "right" }}>
-                                Subtotal reg.
-                                {" "}
-                                <span
-                                  style={{ cursor: "pointer", color: "var(--text-muted)", fontSize: "0.8rem" }}
-                                  onClick={e => setTooltip({ key: "subtotal", x: e.clientX, y: e.clientY })}
-                                  title={TOOLTIPS.subtotal}
-                                >
-                                  ⓘ
-                                </span>
-                              </th>
-                              <th style={{ textAlign: "right" }}>IVA reg.</th>
-                              <th style={{ textAlign: "right" }}>Efectivo</th>
-                              <th
-                                onClick={() => toggleSort("venta.importe")}
-                                style={{ textAlign: "right", cursor: "pointer", whiteSpace: "nowrap" }}
-                              >
-                                Total comercial <SortIcon col="venta.importe" />
-                              </th>
-                              <th style={{ width: 40 }}></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {reE!.operaciones.map(op => (
-                              <tr key={op.id}>
-                                <td style={{ whiteSpace: "nowrap" }}>
-                                  {fmtFecha(op.venta.fecha)}
-                                </td>
-                                <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>
-                                  {op.numeroEconomico}
-                                </td>
-                                <td>
-                                  <span style={{ fontWeight: 600 }}>{op.marca}</span>
-                                  {op.modelo && (
-                                    <span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                      {" "}{op.modelo}
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                  {op.serie || "—"}
-                                </td>
-                                <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                  {op.capacidad || "—"}
-                                </td>
-                                <td>
-                                  {op.tipoCombustible ? (
-                                    <span
-                                      className={`badge ${
-                                        op.tipoCombustible === "electrico"
-                                          ? "badge-blue"
-                                          : op.tipoCombustible === "gas"
-                                          ? "badge-amber"
-                                          : "badge-gray"
-                                      }`}
-                                    >
-                                      {op.tipoCombustible}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: "var(--text-muted)" }}>—</span>
-                                  )}
-                                </td>
-                                <td>
-                                  {op.venta.cliente?.nombre ?? (
-                                    <span style={{ color: "var(--text-muted)" }}>—</span>
-                                  )}
-                                </td>
-                                <td>
-                                  {op.venta.asesor?.nombre ?? (
-                                    <span
-                                      style={{
-                                        color: "var(--text-muted)",
-                                        fontSize: "0.75rem",
-                                        fontStyle: "italic",
-                                      }}
-                                    >
-                                      Sin asesor asignado
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                  {op.venta.numeroFactura ?? "—"}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  {op.venta.montoFacturado > 0
-                                    ? `$${fmtMXN(op.venta.montoFacturado)}`
-                                    : <span style={{ color: "var(--text-muted)" }}>—</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  {op.venta.ivaFacturado > 0
-                                    ? `$${fmtMXN(op.venta.ivaFacturado)}`
-                                    : <span style={{ color: "var(--text-muted)" }}>—</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  {op.venta.montoEfectivo > 0
-                                    ? `$${fmtMXN(op.venta.montoEfectivo)}`
-                                    : <span style={{ color: "var(--text-muted)" }}>—</span>}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "right",
-                                    fontWeight: 700,
-                                    color: "var(--green)",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  ${fmtMXN(op.venta.importe)}
-                                </td>
-                                <td>
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => setDetalle(op)}
-                                    title="Ver detalle"
-                                  >
-                                    Ver
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Paginación */}
-                      {reE!.paginacion.pages > 1 && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "12px 20px",
-                            borderTop: "1px solid var(--border)",
-                            fontSize: "0.82rem",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          <span>
-                            {(page - 1) * limit + 1}–
-                            {Math.min(page * limit, reE!.paginacion.total)} de{" "}
-                            {reE!.paginacion.total}
-                          </span>
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setPage(1)}
-                              disabled={page === 1}
-                            >
-                              «
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setPage(p => p - 1)}
-                              disabled={page === 1}
-                            >
-                              ‹
-                            </button>
-                            {Array.from({ length: resultado.paginacion.pages }, (_, i) => i + 1)
-                              .filter(p => Math.abs(p - page) <= 2 || p === 1 || p === resultado.paginacion.pages)
-                              .reduce<(number | "…")[]>((acc, p, idx, arr) => {
-                                if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push("…");
-                                acc.push(p);
-                                return acc;
-                              }, [])
-                              .map((p, i) =>
-                                p === "…" ? (
-                                  <span key={`e${i}`} style={{ padding: "0 4px" }}>…</span>
-                                ) : (
-                                  <button
-                                    key={p}
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => setPage(p as number)}
-                                    style={{
-                                      minWidth: 32,
-                                      background: page === p ? "var(--accent)" : undefined,
-                                      color: page === p ? "#000" : undefined,
-                                      fontWeight: page === p ? 700 : undefined,
-                                    }}
-                                  >
-                                    {p}
-                                  </button>
-                                )
-                              )}
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setPage(p => p + 1)}
-                              disabled={page === reE!.paginacion.pages}
-                            >
-                              ›
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setPage(resultado.paginacion.pages)}
-                              disabled={page === reE!.paginacion.pages}
-                            >
-                              »
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
               </>
             )}
-          </>
-          );
-        })()}
 
-        {/* ══ CATEGORÍA SERVICIOS ══════════════════════════════════════════ */}
-        {categoria === "servicios" && (() => {
-          const rs = resultado as ResultadoServicios | null;
-          const r  = rs?.resumen;
-          return (
-            <>
-              {/* Aviso de limitaciones */}
-              <div style={{
-                marginTop: 16, padding: "10px 16px",
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.78rem",
-                color: "var(--text-muted)", lineHeight: 1.6,
-              }}>
-                <strong style={{ color: "var(--accent)" }}>Servicios — Cotizaciones facturadas.</strong>
-                {" "}Se muestran cotizaciones de tipo "servicio" con estatus "facturada".
-                El filtro de fechas usa la fecha de la cotización, no la fecha de facturación (campo inexistente en el modelo).
-                Mano de obra y refacciones no están desglosadas: los conceptos son texto libre.
-                La fecha de pago de comisión corresponde a la segunda semana del mes siguiente.
-              </div>
-
-              {error ? (
-                <div style={{
-                  marginTop: 16, padding: "20px 24px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius)", color: "var(--red)", fontSize: "0.88rem",
-                }}>
-                  {error}
-                </div>
-              ) : (
-                <>
-                  {/* KPIs */}
-                  <div className="stats-grid" style={{
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginTop: 16,
-                  }}>
-                    <StatCard label="Servicios facturados" value={loading ? "—" : String(r?.serviciosVendidos ?? 0)} color="var(--blue)" />
-                    <StatCard label="Total comercial" value={loading ? "—" : `$${fmtMXN(r?.ventaComercialTotal ?? 0)}`} color="var(--green)" sub="total c/IVA" />
-                    <StatCard label="Subtotal (sin IVA)" value={loading ? "—" : `$${fmtMXN(r?.subtotalComercial ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="IVA registrado" value={loading ? "—" : `$${fmtMXN(r?.ivaRegistrado ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="Ticket promedio" value={loading ? "—" : `$${fmtMXN(r?.ticketPromedio ?? 0)}`} color="var(--text)" />
-                    <StatCard label="Mano de obra" value="" noDisponible sub="items sin categoría" />
-                    <StatCard label="Total cobrado" value="" noDisponible sub="sin vinculación fiscal" />
-                    <StatCard label="Saldo pendiente" value="" noDisponible sub="sin vinculación fiscal" />
-                  </div>
-
-                  {/* Por asesor */}
-                  {!loading && rs && rs.porAsesor.length > 0 && (
-                    <div className="table-card" style={{ marginTop: 16 }}>
-                      <div className="table-card-header">
-                        <p className="table-card-title">Servicios por asesor</p>
-                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic" }}>
-                          Fecha de pago de comisión: segunda semana del mes siguiente a la cotización
-                        </p>
-                      </div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Asesor</th>
-                              <th style={{ textAlign: "right" }}>Servicios</th>
-                              <th style={{ textAlign: "right" }}>Subtotal</th>
-                              <th style={{ textAlign: "right" }}>IVA</th>
-                              <th style={{ textAlign: "right" }}>Total comercial</th>
-                              <th style={{ textAlign: "right" }}>Ticket prom.</th>
-                              <th style={{ textAlign: "right" }}>%</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rs.porAsesor.map((g, i) => (
-                              <tr key={g.asesorId ?? `sin-${i}`}>
-                                <td style={{ fontWeight: 600 }}>
-                                  {g.asesorNombre}
-                                  {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>{g.serviciosVendidos}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.subtotalComercial)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ivaRegistrado)}</td>
-                                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${fmtMXN(g.ventaComercialTotal)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ticketPromedio)}</td>
-                                <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{g.participacion.toFixed(1)}%</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tabla de operaciones */}
-                  <div className="table-card" style={{ marginTop: 16 }}>
-                    <div className="table-card-header">
-                      <p className="table-card-title">
-                        Cotizaciones facturadas — Servicios
-                        {rs && <span style={{ marginLeft: 8, fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 400 }}>{rs.paginacion.total} total</span>}
-                      </p>
-                    </div>
-                    {loading ? (
-                      <div className="loading-state"><div className="spinner" /></div>
-                    ) : !rs || rs.operaciones.length === 0 ? (
-                      <div className="empty-state">
-                        <span style={{ fontSize: "2rem" }}>🔧</span>
-                        <p>Sin servicios facturados en este periodo</p>
-                        <p style={{ fontSize: "0.8rem" }}>Ajusta el rango de fechas o los filtros</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                          <table style={{ fontSize: "0.82rem", minWidth: 860 }}>
-                            <thead>
-                              <tr>
-                                <th>Fecha</th>
-                                <th>Folio</th>
-                                <th>Cliente</th>
-                                <th>Asesor</th>
-                                <th>Factura</th>
-                                <th>Equipo</th>
-                                <th style={{ textAlign: "right" }}>Subtotal</th>
-                                <th style={{ textAlign: "right" }}>IVA</th>
-                                <th style={{ textAlign: "right" }}>Total</th>
-                                <th>Comisión</th>
-                                <th style={{ width: 40 }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rs.operaciones.map(op => (
-                                <tr key={op.id}>
-                                  <td style={{ whiteSpace: "nowrap" }}>{fmtFecha(op.fecha)}</td>
-                                  <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{op.folio}</td>
-                                  <td>{op.cliente?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
-                                  <td>
-                                    {op.asesor?.nombre ?? (
-                                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic" }}>Sin asesor asignado</span>
-                                    )}
-                                  </td>
-                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>{op.numeroFactura ?? "—"}</td>
-                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                    {[op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—"}
-                                  </td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.subtotal)}</td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.iva)}</td>
-                                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${fmtMXN(op.total)}</td>
-                                  <td style={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
-                                    {op.comision ? (
-                                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <span style={{ fontWeight: 700, color: "var(--green)" }}>
-                                          ${fmtMXN(op.comision.monto)}
-                                        </span>
-                                        <span style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>
-                                          {op.comision.porcentaje}% · {op.comision.diasCobro}d
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <span style={{ color: "var(--text-muted)" }}>
-                                        {op.fechaPagoComision?.etiqueta ?? "—"}
-                                        {!op.fechaPago && (
-                                          <span style={{ display: "block", fontSize: "0.65rem", color: "rgba(156,163,175,0.7)" }}>
-                                            sin fecha de pago
-                                          </span>
-                                        )}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => setDetalle({ ...op, _tipoDetalle: "servicio" } as any)} title="Ver detalle">Ver</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {/* Paginación igual que equipos */}
-                        {rs.paginacion.pages > 1 && (
-                          <div style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "12px 20px", borderTop: "1px solid var(--border)",
-                            fontSize: "0.82rem", color: "var(--text-muted)",
-                          }}>
-                            <span>{(page - 1) * limit + 1}–{Math.min(page * limit, rs.paginacion.total)} de {rs.paginacion.total}</span>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(1)} disabled={page === 1}>«</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page === rs.paginacion.pages}>›</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(rs.paginacion.pages)} disabled={page === rs.paginacion.pages}>»</button>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </>
-          );
-        })()}
-        {categoria === "refacciones" && (() => {
-          const rs = resultado as ResultadoRefacciones | null;
-          const r  = rs?.resumen;
-          return (
-            <>
-              {/* Aviso de limitaciones */}
-              <div style={{
-                marginTop: 16, padding: "10px 16px",
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.78rem",
-                color: "var(--text-muted)", lineHeight: 1.6,
-              }}>
-                <strong style={{ color: "var(--accent)" }}>Refacciones — Cotizaciones facturadas.</strong>
-                {" "}Se muestran cotizaciones de tipo "refacciones" con estatus "facturada".
-                El filtro de fechas usa la fecha de la cotización, no la fecha de facturación (campo inexistente en el modelo).
-                Mano de obra y refacciones no están desglosadas: los conceptos son texto libre.
-                La fecha de pago de comisión corresponde a la segunda semana del mes siguiente.
-              </div>
-
-              {error ? (
-                <div style={{
-                  marginTop: 16, padding: "20px 24px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius)", color: "var(--red)", fontSize: "0.88rem",
-                }}>
-                  {error}
-                </div>
-              ) : (
-                <>
-                  {/* KPIs */}
-                  <div className="stats-grid" style={{
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginTop: 16,
-                  }}>
-                    <StatCard label="Refacciones facturadas" value={loading ? "—" : String(r?.refaccionesVendidas ?? 0)} color="var(--blue)" />
-                    <StatCard label="Total comercial" value={loading ? "—" : `$${fmtMXN(r?.ventaComercialTotal ?? 0)}`} color="var(--green)" sub="total c/IVA" />
-                    <StatCard label="Subtotal (sin IVA)" value={loading ? "—" : `$${fmtMXN(r?.subtotalComercial ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="IVA registrado" value={loading ? "—" : `$${fmtMXN(r?.ivaRegistrado ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="Ticket promedio" value={loading ? "—" : `$${fmtMXN(r?.ticketPromedio ?? 0)}`} color="var(--text)" />
-                    <StatCard label="Mano de obra" value="" noDisponible sub="items sin categoría" />
-                    <StatCard label="Total cobrado" value="" noDisponible sub="sin vinculación fiscal" />
-                    <StatCard label="Saldo pendiente" value="" noDisponible sub="sin vinculación fiscal" />
-                  </div>
-
-                  {/* Por asesor */}
-                  {!loading && rs && rs.porAsesor.length > 0 && (
-                    <div className="table-card" style={{ marginTop: 16 }}>
-                      <div className="table-card-header">
-                        <p className="table-card-title">Refacciones por asesor</p>
-                        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontStyle: "italic" }}>
-                          Fecha de pago de comisión: segunda semana del mes siguiente a la cotización
-                        </p>
-                      </div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Asesor</th>
-                              <th style={{ textAlign: "right" }}>Refacciones</th>
-                              <th style={{ textAlign: "right" }}>Subtotal</th>
-                              <th style={{ textAlign: "right" }}>IVA</th>
-                              <th style={{ textAlign: "right" }}>Total comercial</th>
-                              <th style={{ textAlign: "right" }}>Ticket prom.</th>
-                              <th style={{ textAlign: "right" }}>%</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rs.porAsesor.map((g, i) => (
-                              <tr key={g.asesorId ?? `sin-${i}`}>
-                                <td style={{ fontWeight: 600 }}>
-                                  {g.asesorNombre}
-                                  {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>{g.refaccionesVendidas}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.subtotalComercial)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ivaRegistrado)}</td>
-                                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${fmtMXN(g.ventaComercialTotal)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ticketPromedio)}</td>
-                                <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{g.participacion.toFixed(1)}%</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tabla de operaciones */}
-                  <div className="table-card" style={{ marginTop: 16 }}>
-                    <div className="table-card-header">
-                      <p className="table-card-title">
-                        Cotizaciones facturadas — Refacciones
-                        {rs && <span style={{ marginLeft: 8, fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 400 }}>{rs.paginacion.total} total</span>}
-                      </p>
-                    </div>
-                    {loading ? (
-                      <div className="loading-state"><div className="spinner" /></div>
-                    ) : !rs || rs.operaciones.length === 0 ? (
-                      <div className="empty-state">
-                        <span style={{ fontSize: "2rem" }}>🔩</span>
-                        <p>Sin refacciones facturadas en este periodo</p>
-                        <p style={{ fontSize: "0.8rem" }}>Ajusta el rango de fechas o los filtros</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                          <table style={{ fontSize: "0.82rem", minWidth: 860 }}>
-                            <thead>
-                              <tr>
-                                <th>Fecha</th>
-                                <th>Folio</th>
-                                <th>Cliente</th>
-                                <th>Asesor</th>
-                                <th>Factura</th>
-                                <th>Equipo</th>
-                                <th style={{ textAlign: "right" }}>Subtotal</th>
-                                <th style={{ textAlign: "right" }}>IVA</th>
-                                <th style={{ textAlign: "right" }}>Total</th>
-                                <th>Comisión</th>
-                                <th style={{ width: 40 }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rs.operaciones.map(op => (
-                                <tr key={op.id}>
-                                  <td style={{ whiteSpace: "nowrap" }}>{fmtFecha(op.fecha)}</td>
-                                  <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>{op.folio}</td>
-                                  <td>{op.cliente?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
-                                  <td>
-                                    {op.asesor?.nombre ?? (
-                                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic" }}>Sin asesor asignado</span>
-                                    )}
-                                  </td>
-                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>{op.numeroFactura ?? "—"}</td>
-                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                                    {[op.equipoMarca, op.equipoModelo].filter(Boolean).join(" ") || "—"}
-                                  </td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.subtotal)}</td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.iva)}</td>
-                                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${fmtMXN(op.total)}</td>
-                                  <td style={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
-                                    {op.comision ? (
-                                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <span style={{ fontWeight: 700, color: "var(--green)" }}>
-                                          ${fmtMXN(op.comision.monto)}
-                                        </span>
-                                        <span style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>
-                                          {op.comision.porcentaje}% · {op.comision.diasCobro}d
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <span style={{ color: "var(--text-muted)" }}>
-                                        {op.fechaPagoComision?.etiqueta ?? "—"}
-                                        {!op.fechaPago && (
-                                          <span style={{ display: "block", fontSize: "0.65rem", color: "rgba(156,163,175,0.7)" }}>
-                                            sin fecha de pago
-                                          </span>
-                                        )}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => setDetalle({ ...op, _tipoDetalle: "refaccion" } as any)} title="Ver detalle">Ver</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {/* Paginación igual que equipos */}
-                        {rs.paginacion.pages > 1 && (
-                          <div style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "12px 20px", borderTop: "1px solid var(--border)",
-                            fontSize: "0.82rem", color: "var(--text-muted)",
-                          }}>
-                            <span>{(page - 1) * limit + 1}–{Math.min(page * limit, rs.paginacion.total)} de {rs.paginacion.total}</span>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(1)} disabled={page === 1}>«</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page === rs.paginacion.pages}>›</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(rs.paginacion.pages)} disabled={page === rs.paginacion.pages}>»</button>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </>
-          );
-        })()}
-
-        {categoria === "rentas" && (() => {
-          const rr = resultado as ResultadoRentas | null;
-          const r  = rr?.resumen;
-          return (
-            <>
-              {/* Aviso de limitaciones */}
-              <div style={{
-                marginTop: 16, padding: "10px 16px",
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.78rem",
-                color: "var(--text-muted)", lineHeight: 1.6,
-              }}>
-                <strong style={{ color: "var(--accent)" }}>Rentas — Contratos activos.</strong>
-                {" "}Se muestran TODAS las rentas con estatus "activa", sin importar cuándo inició el contrato; en cuanto pasa a "terminada" deja de contar aquí.
-                Los filtros de fecha no aplican a esta categoría (una renta activa es vigente hoy, no un evento puntual).
-                La comisión se calcula desde la fecha de inicio hasta hoy, ya que este módulo no registra una fecha de pago separada.
-              </div>
-
-              {error ? (
-                <div style={{
-                  marginTop: 16, padding: "20px 24px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius)", color: "var(--red)", fontSize: "0.88rem",
-                }}>
-                  {error}
-                </div>
-              ) : (
-                <>
-                  {/* KPIs */}
-                  <div className="stats-grid" style={{
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginTop: 16,
-                  }}>
-                    <StatCard label="Rentas activas" value={loading ? "—" : String(r?.rentasActivas ?? 0)} color="var(--blue)" />
-                    <StatCard label="Total comercial" value={loading ? "—" : `$${fmtMXN(r?.ventaComercialTotal ?? 0)}`} color="var(--green)" sub="total c/IVA, mensual" />
-                    <StatCard label="Subtotal (sin IVA)" value={loading ? "—" : `$${fmtMXN(r?.subtotalComercial ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="IVA registrado" value={loading ? "—" : `$${fmtMXN(r?.ivaRegistrado ?? 0)}`} color="var(--accent)" />
-                    <StatCard label="Ticket promedio" value={loading ? "—" : `$${fmtMXN(r?.ticketPromedio ?? 0)}`} color="var(--text)" />
-                  </div>
-
-                  {/* Por asesor */}
-                  {!loading && rr && rr.porAsesor.length > 0 && (
-                    <div className="table-card" style={{ marginTop: 16 }}>
-                      <div className="table-card-header">
-                        <p className="table-card-title">Rentas por asesor</p>
-                      </div>
-                      <div style={{ overflowX: "auto" }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Asesor</th>
-                              <th style={{ textAlign: "right" }}>Rentas</th>
-                              <th style={{ textAlign: "right" }}>Subtotal</th>
-                              <th style={{ textAlign: "right" }}>IVA</th>
-                              <th style={{ textAlign: "right" }}>Total comercial</th>
-                              <th style={{ textAlign: "right" }}>Ticket prom.</th>
-                              <th style={{ textAlign: "right" }}>%</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rr.porAsesor.map((g, i) => (
-                              <tr key={g.asesorId ?? `sin-${i}`}>
-                                <td style={{ fontWeight: 600 }}>
-                                  {g.asesorNombre}
-                                  {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>{g.rentasActivas}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.subtotalComercial)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ivaRegistrado)}</td>
-                                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${fmtMXN(g.ventaComercialTotal)}</td>
-                                <td style={{ textAlign: "right" }}>${fmtMXN(g.ticketPromedio)}</td>
-                                <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{g.participacion.toFixed(1)}%</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tabla de operaciones */}
-                  <div className="table-card" style={{ marginTop: 16 }}>
-                    <div className="table-card-header">
-                      <p className="table-card-title">
-                        Contratos activos — Rentas
-                        {rr && <span style={{ marginLeft: 8, fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: 400 }}>{rr.paginacion.total} total</span>}
-                      </p>
-                    </div>
-                    {loading ? (
-                      <div className="loading-state"><div className="spinner" /></div>
-                    ) : !rr || rr.operaciones.length === 0 ? (
-                      <div className="empty-state">
-                        <span style={{ fontSize: "2rem" }}>📦</span>
-                        <p>Sin rentas activas en este periodo</p>
-                        <p style={{ fontSize: "0.8rem" }}>Ajusta el rango de fechas o los filtros</p>
-                      </div>
-                    ) : (
-                      <>
-                        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                          <table style={{ fontSize: "0.82rem", minWidth: 860 }}>
-                            <thead>
-                              <tr>
-                                <th>Inicio</th>
-                                <th>Equipo</th>
-                                <th>Cliente</th>
-                                <th>Asesor</th>
-                                <th>Periodo</th>
-                                <th style={{ textAlign: "right" }}>Subtotal</th>
-                                <th style={{ textAlign: "right" }}>IVA</th>
-                                <th style={{ textAlign: "right" }}>Total</th>
-                                <th>Comisión</th>
-                                <th style={{ width: 40 }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rr.operaciones.map(op => (
-                                <tr key={op.id}>
-                                  <td style={{ whiteSpace: "nowrap" }}>{fmtFecha(op.fechaInicio)}</td>
-                                  <td style={{ fontFamily: "var(--font-head)", fontWeight: 700 }}>
-                                    {op.equipo ? `${op.equipo.numeroEconomico} — ${op.equipo.marca}` : "—"}
-                                  </td>
-                                  <td>{op.cliente?.nombre ?? <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
-                                  <td>
-                                    {op.asesor?.nombre ?? (
-                                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic" }}>Sin asesor asignado</span>
-                                    )}
-                                  </td>
-                                  <td style={{ color: "var(--text-muted)", fontSize: "0.78rem", textTransform: "capitalize" }}>{op.tipoPeriodo}</td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.subtotal)}</td>
-                                  <td style={{ textAlign: "right" }}>${fmtMXN(op.iva)}</td>
-                                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", whiteSpace: "nowrap" }}>${fmtMXN(op.total)}</td>
-                                  <td style={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
-                                    {op.comision ? (
-                                      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                        <span style={{ fontWeight: 700, color: "var(--green)" }}>
-                                          ${fmtMXN(op.comision.monto)}
-                                        </span>
-                                        <span style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>
-                                          {op.comision.porcentaje}% · {op.comision.diasCobro}d
-                                        </span>
-                                      </div>
-                                    ) : op.estadoComision === "pendiente_pago" ? (
-                                      <span
-                                        title="Aún no se detecta un pago cobrado en CxC vinculado a esta renta"
-                                        style={{
-                                          display: "inline-block",
-                                          padding: "2px 7px",
-                                          borderRadius: 999,
-                                          background: "rgba(245,184,0,0.15)",
-                                          color: "#B8860B",
-                                          fontWeight: 600,
-                                          fontSize: "0.68rem",
-                                          whiteSpace: "nowrap",
-                                        }}
-                                      >
-                                        Pendiente de pago
-                                      </span>
-                                    ) : (
-                                      <span style={{ color: "var(--text-muted)" }}>—</span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => setDetalle({ ...op, _tipoDetalle: "renta" } as any)} title="Ver detalle">Ver</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        {rr.paginacion.pages > 1 && (
-                          <div style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "12px 20px", borderTop: "1px solid var(--border)",
-                            fontSize: "0.82rem", color: "var(--text-muted)",
-                          }}>
-                            <span>{(page - 1) * limit + 1}–{Math.min(page * limit, rr.paginacion.total)} de {rr.paginacion.total}</span>
-                            <div style={{ display: "flex", gap: 4 }}>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(1)} disabled={page === 1}>«</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p - 1)} disabled={page === 1}>‹</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(p => p + 1)} disabled={page === rr.paginacion.pages}>›</button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setPage(rr.paginacion.pages)} disabled={page === rr.paginacion.pages}>»</button>
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-            </>
-          );
-        })()}
-
-        {categoria === "comisiones" && (() => {
-          const rc = resultadoComisiones;
-          return (
-            <>
-              <div style={{
-                marginTop: 16, padding: "10px 16px",
-                background: "rgba(245,158,11,0.06)",
-                border: "1px solid rgba(245,158,11,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.78rem",
-                color: "var(--text-muted)", lineHeight: 1.6,
-              }}>
-                <strong style={{ color: "var(--accent)" }}>Reporte unificado de comisiones.</strong>
-                {" "}{rc?.meta.advertencia ?? "Combina Equipos, Servicios, Refacciones y Rentas por asesor."}
-              </div>
-
-              {error ? (
-                <div style={{
-                  marginTop: 16, padding: "20px 24px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius)", color: "var(--red)", fontSize: "0.88rem",
-                }}>
-                  {error}
-                </div>
-              ) : loading ? (
-                <div className="loading-state" style={{ marginTop: 16 }}><div className="spinner" /></div>
-              ) : !rc ? (
-                <div className="empty-state" style={{ marginTop: 16 }}>
-                  <span style={{ fontSize: "2rem" }}>💰</span>
-                  <p>Sin datos para este periodo</p>
-                </div>
-              ) : (
-                <>
-                  {/* KPIs por categoría */}
-                  <div className="stats-grid" style={{
-                    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", marginTop: 16,
-                  }}>
-                    <StatCard label="Comisión total" value={`$${fmtMXN(rc.totales.comisionTotal)}`} color="var(--green)" sub="equipos + servicios + refacciones + rentas" />
-                    <StatCard label="Equipos" value={`$${fmtMXN(rc.totales.equipos.comision)}`} color="var(--blue)" sub={`${rc.totales.equipos.cantidad} con comisión`} />
-                    <StatCard label="Servicios" value={`$${fmtMXN(rc.totales.servicios.comision)}`} color="var(--accent)" sub={`${rc.totales.servicios.cantidad} con comisión`} />
-                    <StatCard label="Refacciones" value={`$${fmtMXN(rc.totales.refacciones.comision)}`} color="#a855f7" sub={`${rc.totales.refacciones.cantidad} con comisión`} />
-                    <StatCard label="Rentas" value={`$${fmtMXN(rc.totales.rentas.comision)}`} color="#f59e0b" sub={`${rc.totales.rentas.cantidad} con comisión`} />
-                  </div>
-
-                  {/* Por asesor — tabla con desglose de las 4 categorías */}
-                  <div className="table-card" style={{ marginTop: 16 }}>
-                    <div className="table-card-header">
-                      <p className="table-card-title">Comisiones por asesor</p>
-                    </div>
-                    {rc.porAsesor.length === 0 ? (
-                      <div className="empty-state">
-                        <span style={{ fontSize: "2rem" }}>💰</span>
-                        <p>Sin comisiones generadas en este periodo</p>
-                      </div>
-                    ) : (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ minWidth: 820 }}>
-                          <thead>
-                            <tr>
-                              <th>Asesor</th>
-                              <th style={{ textAlign: "right" }}>Equipos</th>
-                              <th style={{ textAlign: "right" }}>Servicios</th>
-                              <th style={{ textAlign: "right" }}>Refacciones</th>
-                              <th style={{ textAlign: "right" }}>Rentas</th>
-                              <th style={{ textAlign: "right" }}>Comisión total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rc.porAsesor.map((g, i) => (
-                              <tr key={g.asesorId ?? `sin-${i}`}>
-                                <td style={{ fontWeight: 600 }}>
-                                  {g.asesorNombre}
-                                  {!g.asesorId && <span style={{ marginLeft: 6, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>(sin asignar)</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  ${fmtMXN(g.equipos.comision)}
-                                  {g.equipos.cantidad > 0 && <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)" }}>{g.equipos.cantidad} op.</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  ${fmtMXN(g.servicios.comision)}
-                                  {g.servicios.cantidad > 0 && <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)" }}>{g.servicios.cantidad} op.</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  ${fmtMXN(g.refacciones.comision)}
-                                  {g.refacciones.cantidad > 0 && <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)" }}>{g.refacciones.cantidad} op.</span>}
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  ${fmtMXN(g.rentas.comision)}
-                                  {g.rentas.cantidad > 0 && <span style={{ display: "block", fontSize: "0.68rem", color: "var(--text-muted)" }}>{g.rentas.cantidad} op.</span>}
-                                </td>
-                                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)", fontSize: "0.95rem" }}>
-                                  ${fmtMXN(g.comisionTotal)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
-                              <td>Total</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(rc.totales.equipos.comision)}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(rc.totales.servicios.comision)}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(rc.totales.refacciones.comision)}</td>
-                              <td style={{ textAlign: "right" }}>${fmtMXN(rc.totales.rentas.comision)}</td>
-                              <td style={{ textAlign: "right", color: "var(--green)" }}>${fmtMXN(rc.totales.comisionTotal)}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </>
-          );
-        })()}
-
-      </div>
-
-      {/* ── Tooltip flotante ─────────────────────────────────────────────── */}
-      {tooltip && (
-        <div
-          ref={tooltipRef}
-          style={{
-            position: "fixed",
-            top: tooltip.y + 12,
-            left: Math.min(tooltip.x, window.innerWidth - 320),
-            zIndex: 9999,
-            background: "var(--surface2)",
-            border: "1px solid var(--border2)",
-            borderRadius: "var(--radius-sm)",
-            padding: "10px 14px",
-            maxWidth: 300,
-            fontSize: "0.8rem",
-            color: "var(--text)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-            lineHeight: 1.5,
-          }}
-        >
-          {TOOLTIPS[tooltip.key]}
-        </div>
-      )}
-
-      {/* ── Modal de detalle servicios ──────────────────────────────────── */}
-      {detalle && (detalle as any)._tipoDetalle === "servicio" && (() => {
-        const op = detalle as any as OperacionServicio & { _tipoDetalle: string };
-        return (
-          <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
-            <div className="modal" style={{ maxWidth: 500 }}>
-              <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-              <h2 className="modal-title">
-                {op.folio}
-                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> — Servicio facturado</span>
-              </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 12 }}>
-                {[
-                  { label: "Fecha de cotización", val: fmtFecha(op.fecha) },
-                  { label: "Cliente",             val: op.cliente?.nombre },
-                  { label: "Asesor",              val: op.asesor?.nombre ?? "Sin asesor asignado" },
-                  { label: "No. de factura *",    val: op.numeroFactura },
-                  { label: "Moneda",              val: op.moneda },
-                  { label: "Equipo",              val: [op.equipoMarca, op.equipoModelo, op.equipoSerie].filter(Boolean).join(" ") || undefined },
-                  { label: "Descripción",         val: op.descripcion },
-                  { label: "Conceptos",           val: op.itemsCount ? `${op.itemsCount} concepto${op.itemsCount !== 1 ? "s" : ""}` : undefined },
-                  { label: "Fecha facturación",   val: op.fechaFacturada ? fmtFecha(op.fechaFacturada) : undefined },
-                  { label: "Ref. comisión",       val: !op.fechaFacturada ? `Usando fecha cotización (${fmtFecha(op.fecha)}) — captura la fecha de facturación para mayor precisión` : undefined },
-                  { label: "Fecha pago comisión", val: op.comision ? undefined : op.fechaPagoComision?.etiqueta },
-                  { label: "Comisión calculada",  val: op.comision ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días de cobro)` : undefined },
-                  { label: "Sin fecha de pago",   val: (!op.comision && !op.fechaPago) ? "Registra la fecha de pago en Cotizaciones para calcular la comisión" : undefined },
-                ].map(item => item.val ? (
-                  <div key={item.label}>
-                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
-                    <p style={{ fontSize: "0.9rem", color: "var(--text)", margin: "2px 0 0", fontWeight: 500 }}>{item.val}</p>
-                  </div>
-                ) : null)}
-              </div>
-              <div style={{
-                marginTop: 16, background: "var(--surface2)", border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)", padding: "12px 16px",
-                display: "flex", flexDirection: "column", gap: 6,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>Subtotal</span><span>${fmtMXN(op.subtotal)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>IVA (16%)</span><span>${fmtMXN(op.iva)}</span>
-                </div>
-                <div style={{
-                  display: "flex", justifyContent: "space-between",
-                  fontSize: "0.95rem", fontWeight: 700, color: "var(--green)",
-                  borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 8,
-                }}>
-                  <span>Total comercial</span><span>${fmtMXN(op.total)}</span>
-                </div>
-              </div>
-              <div style={{
-                marginTop: 12, padding: "8px 12px",
-                background: "rgba(122,128,153,0.08)", border: "1px solid rgba(122,128,153,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.75rem",
-                color: "var(--text-muted)", lineHeight: 1.5,
-              }}>
-                La cotización está vinculada a una factura solo por folio de texto. No hay conciliación automática con el módulo de Facturación.
-              </div>
-              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 8 }}>
-                * No. factura es texto libre. No representa FK a Factura en la BD.
-              </p>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {detalle && (detalle as any)._tipoDetalle === "refaccion" && (() => {
-        const op = detalle as any as OperacionServicio & { _tipoDetalle: string };
-        return (
-          <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
-            <div className="modal" style={{ maxWidth: 500 }}>
-              <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-              <h2 className="modal-title">
-                {op.folio}
-                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> — Refacción facturada</span>
-              </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 12 }}>
-                {[
-                  { label: "Fecha de cotización", val: fmtFecha(op.fecha) },
-                  { label: "Cliente",             val: op.cliente?.nombre },
-                  { label: "Asesor",              val: op.asesor?.nombre ?? "Sin asesor asignado" },
-                  { label: "No. de factura *",    val: op.numeroFactura },
-                  { label: "Moneda",              val: op.moneda },
-                  { label: "Equipo",              val: [op.equipoMarca, op.equipoModelo, op.equipoSerie].filter(Boolean).join(" ") || undefined },
-                  { label: "Descripción",         val: op.descripcion },
-                  { label: "Conceptos",           val: op.itemsCount ? `${op.itemsCount} concepto${op.itemsCount !== 1 ? "s" : ""}` : undefined },
-                  { label: "Fecha facturación",   val: op.fechaFacturada ? fmtFecha(op.fechaFacturada) : undefined },
-                  { label: "Ref. comisión",       val: !op.fechaFacturada ? `Usando fecha cotización (${fmtFecha(op.fecha)}) — captura la fecha de facturación para mayor precisión` : undefined },
-                  { label: "Fecha pago comisión", val: op.comision ? undefined : op.fechaPagoComision?.etiqueta },
-                  { label: "Comisión calculada",  val: op.comision ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días de cobro)` : undefined },
-                  { label: "Sin fecha de pago",   val: (!op.comision && !op.fechaPago) ? "Registra la fecha de pago en Cotizaciones para calcular la comisión" : undefined },
-                ].map(item => item.val ? (
-                  <div key={item.label}>
-                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
-                    <p style={{ fontSize: "0.9rem", color: "var(--text)", margin: "2px 0 0", fontWeight: 500 }}>{item.val}</p>
-                  </div>
-                ) : null)}
-              </div>
-              <div style={{
-                marginTop: 16, background: "var(--surface2)", border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)", padding: "12px 16px",
-                display: "flex", flexDirection: "column", gap: 6,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>Subtotal</span><span>${fmtMXN(op.subtotal)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>IVA (16%)</span><span>${fmtMXN(op.iva)}</span>
-                </div>
-                <div style={{
-                  display: "flex", justifyContent: "space-between",
-                  fontSize: "0.95rem", fontWeight: 700, color: "var(--green)",
-                  borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 8,
-                }}>
-                  <span>Total comercial</span><span>${fmtMXN(op.total)}</span>
-                </div>
-              </div>
-              <div style={{
-                marginTop: 12, padding: "8px 12px",
-                background: "rgba(122,128,153,0.08)", border: "1px solid rgba(122,128,153,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.75rem",
-                color: "var(--text-muted)", lineHeight: 1.5,
-              }}>
-                La cotización está vinculada a una factura solo por folio de texto. No hay conciliación automática con el módulo de Facturación.
-              </div>
-              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 8 }}>
-                * No. factura es texto libre. No representa FK a Factura en la BD.
-              </p>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {detalle && (detalle as any)._tipoDetalle === "renta" && (() => {
-        const op = detalle as any as OperacionRenta & { _tipoDetalle: string };
-        return (
-          <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
-            <div className="modal" style={{ maxWidth: 500 }}>
-              <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-              <h2 className="modal-title">
-                {op.equipo?.numeroEconomico ?? "Renta"}
-                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> — Contrato de renta</span>
-              </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 12 }}>
-                {[
-                  { label: "Fecha de inicio",  val: fmtFecha(op.fechaInicio) },
-                  { label: "Fecha de fin",     val: op.fechaFin ? fmtFecha(op.fechaFin) : undefined },
-                  { label: "Cliente",          val: op.cliente?.nombre },
-                  { label: "Asesor",           val: op.asesor?.nombre ?? "Sin asesor asignado" },
-                  { label: "Equipo",           val: op.equipo ? `${op.equipo.numeroEconomico} — ${op.equipo.marca} ${op.equipo.modelo}` : undefined },
-                  { label: "Periodo",          val: op.tipoPeriodo },
-                  { label: "Estatus",          val: op.estado },
-                  { label: "Renovaciones",     val: op.renovacionesCount > 0 ? `${op.renovacionesCount} renovación${op.renovacionesCount !== 1 ? "es" : ""}` : undefined },
-                  { label: "Flete",            val: op.flete > 0 ? `$${fmtMXN(op.flete)}` : undefined },
-                  { label: "Depósito",         val: op.deposito > 0 ? `$${fmtMXN(op.deposito)}` : undefined },
-                  {
-                    label: "Comisión calculada",
-                    val: op.comision
-                      ? `${op.comision.porcentaje}% · $${fmtMXN(op.comision.monto)} (${op.comision.diasCobro} días hasta pago${op.comision.folioFactura ? ` · factura ${op.comision.folioFactura}` : ""})`
-                      : (op.estadoComision === "pendiente_pago" ? "Pendiente de pago — aún no se registra cobro de la factura vinculada en CxC" : undefined),
-                  },
-                ].map(item => item.val ? (
-                  <div key={item.label}>
-                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{item.label}</p>
-                    <p style={{ fontSize: "0.9rem", color: "var(--text)", margin: "2px 0 0", fontWeight: 500 }}>{item.val}</p>
-                  </div>
-                ) : null)}
-              </div>
-              <div style={{
-                marginTop: 16, background: "var(--surface2)", border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)", padding: "12px 16px",
-                display: "flex", flexDirection: "column", gap: 6,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>Subtotal mensual</span><span>${fmtMXN(op.subtotal)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>IVA (16%)</span><span>${fmtMXN(op.iva)}</span>
-                </div>
-                <div style={{
-                  display: "flex", justifyContent: "space-between",
-                  fontSize: "0.95rem", fontWeight: 700, color: "var(--green)",
-                  borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 8,
-                }}>
-                  <span>Total mensual</span><span>${fmtMXN(op.total)}</span>
-                </div>
-              </div>
-              <div style={{
-                marginTop: 12, padding: "8px 12px",
-                background: "rgba(122,128,153,0.08)", border: "1px solid rgba(122,128,153,0.2)",
-                borderRadius: "var(--radius-sm)", fontSize: "0.75rem",
-                color: "var(--text-muted)", lineHeight: 1.5,
-              }}>
-                La comisión se calcula desde la fecha de inicio del contrato hasta hoy, ya que este módulo no registra una fecha de pago independiente.
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Modal de detalle (Equipos) ──────────────────────────────────── */}
-      {detalle && !["servicio", "refaccion", "renta"].includes((detalle as any)._tipoDetalle) && (
-        <div
-          className="modal-overlay"
-          onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}
-        >
-          <div className="modal" style={{ maxWidth: 520 }}>
-            <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-            <h2 className="modal-title">
-              {detalle.numeroEconomico}
-              <span style={{ color: "var(--text-muted)", fontWeight: 400 }}>
-                {" "}— {detalle.marca} {detalle.modelo}
-              </span>
-            </h2>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 24px", marginTop: 12 }}>
-              {[
-                { label: "Fecha de venta",   val: fmtFecha(detalle.venta.fecha) },
-                { label: "Tipo",             val: detalle.tipoCombustible },
-                { label: "Serie",            val: detalle.serie },
-                { label: "Capacidad",        val: detalle.capacidad },
-                { label: "Cliente",          val: detalle.venta.cliente?.nombre },
-                { label: "Asesor",           val: detalle.venta.asesor?.nombre ?? "Sin asesor asignado" },
-                { label: "Ref. factura *",   val: detalle.venta.numeroFactura },
-                { label: "Notas",            val: detalle.venta.notas },
-              ].map(item => item.val ? (
-                <div key={item.label}>
-                  <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>
-                    {item.label}
-                  </p>
-                  <p style={{ fontSize: "0.9rem", color: "var(--text)", margin: "2px 0 0", fontWeight: 500 }}>
-                    {item.val}
-                  </p>
-                </div>
-              ) : null)}
+            <div className="form-grid">
+              <div className="form-group"><label className="form-label">Asesor *</label>
+                <select className="form-select" value={f.asesor} onChange={e => cambiar("asesor", e.target.value)}>
+                  <option value="">— Selecciona —</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select></div>
+              <div className="form-group"><label className="form-label">Mes de la comisión *</label>
+                <input type="month" className="form-input" value={f.periodo} onChange={e => e.target.value && cambiar("periodo", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Referencia (# económico / folio)</label>
+                <input className="form-input" value={f.referencia} onChange={e => cambiar("referencia", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Cliente</label>
+                <input className="form-input" value={f.cliente} onChange={e => cambiar("cliente", e.target.value)} /></div>
+              <div className="form-group span-2"><label className="form-label">Descripción</label>
+                <input className="form-input" value={f.descripcion} onChange={e => cambiar("descripcion", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Fecha de venta / factura</label>
+                <input type="date" className="form-input" value={f.fechaVenta} onChange={e => cambiar("fechaVenta", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Fecha de pago</label>
+                <input type="date" className="form-input" value={f.fechaPago} onChange={e => cambiar("fechaPago", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Moneda</label>
+                <select className="form-select" value={f.moneda} onChange={e => cambiar("moneda", e.target.value as any)}>
+                  <option value="MXN">MXN</option><option value="USD">USD (TC ${TIPO_CAMBIO_USD})</option></select></div>
+              <div className="form-group"><label className="form-label">Subtotal SIN IVA</label>
+                <input type="number" step="0.01" className="form-input" value={f.subtotal} onChange={e => cambiar("subtotal", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">Días de cobro</label>
+                <input type="number" className="form-input" value={f.dias} onChange={e => cambiar("dias", e.target.value)} /></div>
+              <div className="form-group"><label className="form-label">% de comisión</label>
+                <input type="number" step="0.01" className="form-input" value={f.porcentaje} onChange={e => cambiar("porcentaje", e.target.value)} /></div>
+              <div className="form-group span-2"><label className="form-label">Comisión (MXN) *</label>
+                <input type="number" step="0.01" className="form-input" value={f.comision}
+                  onChange={e => { setComisionManual(true); cambiar("comision", e.target.value); }} />
+                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: 4 }}>
+                  Sugerida: subtotal × % {f.moneda === "USD" ? `× TC ${TIPO_CAMBIO_USD}` : ""} = {sugerida(f) ? mxn(Number(sugerida(f))) : "—"}.
+                  Puedes escribir el monto que te corresponde.
+                </div></div>
+              <div className="form-group span-2"><label className="form-label">Notas</label>
+                <input className="form-input" value={f.notas} onChange={e => cambiar("notas", e.target.value)} /></div>
             </div>
 
-            <div
-              style={{
-                marginTop: 16,
-                background: "var(--surface2)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                padding: "12px 16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-              }}
-            >
-              {detalle.venta.montoFacturado > 0 && (
-                <>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                    <span>Subtotal registrado *</span>
-                    <span>${fmtMXN(detalle.venta.montoFacturado)}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                    <span>IVA registrado (16%)</span>
-                    <span>${fmtMXN(detalle.venta.ivaFacturado)}</span>
-                  </div>
-                </>
-              )}
-              {detalle.venta.montoEfectivo > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  <span>Efectivo / sin factura</span>
-                  <span>${fmtMXN(detalle.venta.montoEfectivo)}</span>
-                </div>
-              )}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.95rem",
-                  fontWeight: 700,
-                  color: "var(--green)",
-                  borderTop: "1px solid var(--border)",
-                  marginTop: 4,
-                  paddingTop: 8,
-                }}
-              >
-                <span>Total comercial</span>
-                <span>${fmtMXN(detalle.venta.importe)}</span>
-              </div>
-            </div>
-
-            {/* Alerta si el importe guardado difiere del calculado */}
-            {detalle.venta.requiereRevision && (
-              <div
-                style={{
-                  marginTop: 8,
-                  padding: "8px 12px",
-                  background: "rgba(239,68,68,0.06)",
-                  border: "1px solid rgba(239,68,68,0.2)",
-                  borderRadius: "var(--radius-sm)",
-                  fontSize: "0.75rem",
-                  color: "var(--red)",
-                  lineHeight: 1.5,
-                }}
-              >
-                ⚠ El importe guardado (${fmtMXN(detalle.venta.importe)}) difiere del calculado
-                (${fmtMXN(detalle.venta.importeCalculado ?? 0)}). Diferencia: ${fmtMXN(detalle.venta.diferenciaImporte ?? 0)}.
-                Este registro puede requerir revisión manual.
-              </div>
-            )}
-
-            {/* Aviso de facturación/cobranza no disponible */}
-            <div
-              style={{
-                marginTop: 12,
-                padding: "8px 12px",
-                background: "rgba(122,128,153,0.08)",
-                border: "1px solid rgba(122,128,153,0.2)",
-                borderRadius: "var(--radius-sm)",
-                fontSize: "0.75rem",
-                color: "var(--text-muted)",
-                lineHeight: 1.5,
-              }}
-            >
-              La venta todavía no está vinculada con el módulo de Facturación. Los datos de cobranza y saldo no están disponibles.
-            </div>
-            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 8 }}>
-              * Ref. factura y subtotal son datos capturados manualmente. No representan una conciliación con el CFDI emitido.
-            </p>
-
+            {errForm && <div style={{ color: "var(--red)", margin: "8px 0" }}>{errForm}</div>}
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDetalle(null)}>Cerrar</button>
+              <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
