@@ -79,6 +79,9 @@ export default function ReporteVentas() {
   const [guardando, setGuardando] = useState(false);
   const [errForm, setErrForm] = useState("");
   const [comisionManual, setComisionManual] = useState(false);
+  // Asesor ligado a mi usuario (solo aplica a vendedores; admin ve todo)
+  const [miAsesor, setMiAsesor] = useState<Asesor | null>(null);
+  const [miAsesorListo, setMiAsesorListo] = useState(false);
 
   async function cargar() {
     setLoading(true); setError("");
@@ -93,6 +96,13 @@ export default function ReporteVentas() {
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [periodo, filtroAsesor, filtroTipo]);
   useEffect(() => { api.get("/asesores").then(r => setAsesores(r.data ?? [])).catch(() => {}); }, []);
+  useEffect(() => {
+    if (esAdmin) { setMiAsesorListo(true); return; }
+    api.get("/comisiones/mi-asesor")
+      .then(r => setMiAsesor(r.data?.asesor ?? null))
+      .catch(() => setMiAsesor(null))
+      .finally(() => setMiAsesorListo(true));
+  }, [esAdmin]);
 
   // Cargar ventas seleccionables al abrir el modal / cambiar tipo / buscar
   useEffect(() => {
@@ -108,7 +118,10 @@ export default function ReporteVentas() {
     return () => { vivo = false; clearTimeout(t); };
   }, [modal, form.tipo, form._id, buscar]);
 
-  function abrirNueva() { setForm(formVacio(periodo)); setBuscar(""); setErrForm(""); setComisionManual(false); setModal(true); }
+  function abrirNueva() {
+    setForm({ ...formVacio(periodo), asesor: !esAdmin && miAsesor ? miAsesor._id : "" });
+    setBuscar(""); setErrForm(""); setComisionManual(false); setModal(true);
+  }
   function abrirEditar(l: Linea) {
     setForm({
       _id: l._id, tipo: l.tipo, origenRef: l.origenRef ?? null, origenId: l.origenId ?? null,
@@ -126,7 +139,7 @@ export default function ReporteVentas() {
     const pct = fv && fp ? porcentajePorDias(dias) : 0;
     const f: Form = {
       ...form, origenRef: o.origenRef, origenId: o.origenId, referencia: o.referencia, descripcion: o.descripcion,
-      cliente: o.cliente, asesor: o.asesor ?? form.asesor, fechaVenta: fv, fechaPago: fp,
+      cliente: o.cliente, asesor: !esAdmin && miAsesor ? miAsesor._id : (o.asesor ?? form.asesor), fechaVenta: fv, fechaPago: fp,
       moneda: o.moneda, subtotal: String(o.subtotal), dias: fv && fp ? String(dias) : "", porcentaje: fv && fp ? String(pct) : "",
       comision: "",
     };
@@ -154,6 +167,7 @@ export default function ReporteVentas() {
 
   async function guardar() {
     setErrForm("");
+    if (!esAdmin && !miAsesor) return setErrForm("Tu usuario no está ligado a un asesor.");
     if (!form.asesor) return setErrForm("Selecciona el asesor.");
     if (form.comision === "" || isNaN(Number(form.comision))) return setErrForm("Captura la comisión (en pesos).");
     setGuardando(true);
@@ -187,95 +201,141 @@ export default function ReporteVentas() {
 
   const totalMostrado = useMemo(() => lineas.reduce((s, l) => s + l.comision, 0), [lineas]);
   const f = form;
+  const sinAsesor = !esAdmin && miAsesorListo && !miAsesor;
+  const sug = sugerida(f);
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-        <h1 className="page-title">📈 Reporte de ventas{esAdmin ? "" : " — mis ventas"}</h1>
+    <>
+      <style>{`
+        .rv-filters { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+        .rv-filters .form-group { min-width: 190px; }
+        .rv-stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:14px; }
+        .rv-table { width:100%; border-collapse:collapse; }
+        .rv-table th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        .rv-table td { padding:14px 16px; border-bottom:1px solid var(--border); vertical-align:middle; font-size:.88rem; }
+        .rv-table tr:last-child td { border-bottom:none; }
+        .rv-r { text-align:right !important; }
+        .rv-sub { font-size:.74rem; color:var(--text-muted); margin-top:2px; }
+        .rv-warn { padding:12px 16px; border-radius:var(--radius-sm); background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.35); color:var(--accent); font-size:.85rem; }
+        .rv-modal { max-width: 860px !important; padding: 28px 32px !important; }
+        .rv-sec { display:flex; flex-direction:column; gap:12px; }
+        .rv-sec-title { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); font-weight:700; }
+        .rv-tipos { display:flex; gap:8px; flex-wrap:wrap; }
+        .rv-lista { display:flex; flex-direction:column; gap:6px; max-height:250px; overflow-y:auto; padding-right:4px; }
+        .rv-item { padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; background:var(--surface2); display:flex; justify-content:space-between; gap:12px; align-items:center; }
+        .rv-item:hover { border-color:var(--accent); }
+        .rv-item.sel { border-color:var(--accent); box-shadow:0 0 0 2px rgba(245,158,11,.18); }
+        .rv-item-main { min-width:0; }
+        .rv-item-main strong { display:block; font-size:.9rem; }
+        .rv-item-main span { font-size:.76rem; color:var(--text-muted); }
+        .rv-item-monto { font-weight:700; white-space:nowrap; font-size:.9rem; }
+        .rv-g2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+        .rv-g3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; }
+        .rv-g4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; }
+        .rv-comision { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; display:flex; flex-direction:column; gap:8px; }
+        .rv-hint { font-size:.76rem; color:var(--text-muted); }
+        @media (max-width: 760px) { .rv-g2,.rv-g3,.rv-g4 { grid-template-columns:1fr 1fr; } .rv-modal { padding:22px 18px !important; } }
+        @media (max-width: 520px) { .rv-g2,.rv-g3,.rv-g4 { grid-template-columns:1fr; } }
+      `}</style>
+
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Reporte de ventas</h1>
+          <p className="page-subtitle">{esAdmin ? "Ventas y comisiones de todos los asesores" : `Tus ventas y comisiones${miAsesor ? ` · ${miAsesor.nombre}` : ""}`}</p>
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-secondary" onClick={exportarCSV} disabled={!lineas.length}>⬇️ Exportar CSV</button>
-          <button className="btn btn-primary" onClick={abrirNueva}>+ Agregar venta</button>
+          <button className="btn btn-primary" onClick={abrirNueva} disabled={sinAsesor}>+ Agregar venta</button>
         </div>
       </div>
 
-      <div className="table-toolbar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        <div><label className="form-label">Mes</label>
-          <input type="month" className="form-input" value={periodo} onChange={e => e.target.value && setPeriodo(e.target.value)} /></div>
-        {esAdmin && (
-          <div><label className="form-label">Asesor</label>
-            <select className="form-select" value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
-              <option value="">Todos</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-            </select></div>
+      <div className="page-content">
+        {sinAsesor && (
+          <div className="rv-warn">⚠️ Tu usuario no está ligado a ningún asesor, así que no puedes ver ni capturar ventas. Pide que den de alta un asesor con tu mismo nombre.</div>
         )}
-        <div><label className="form-label">Tipo</label>
-          <select className="form-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
-            <option value="">Todos</option>{TIPOS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-          </select></div>
-      </div>
 
-      {resumen && (
-        <div className="stats-grid" style={{ marginBottom: 16 }}>
-          <div className="stat-card"><div className="stat-card-label">Comisiones del mes</div><div className="stat-card-value">{mxn(totalMostrado)}</div></div>
-          <div className="stat-card"><div className="stat-card-label">Ventas capturadas</div><div className="stat-card-value">{resumen.cantidad}</div></div>
-          {TIPOS.filter(t => resumen.porTipo[t.v]).map(t => (
-            <div className="stat-card" key={t.v}><div className="stat-card-label">{t.icon} {t.label}</div><div className="stat-card-value">{mxn(resumen.porTipo[t.v])}</div></div>
-          ))}
-        </div>
-      )}
-
-      {esAdmin && resumen && resumen.porAsesor.length > 0 && (
-        <div className="table-card" style={{ marginBottom: 16 }}>
-          <div className="table-card-header"><span className="table-card-title">Por asesor</span></div>
-          <table><thead><tr><th>Asesor</th><th style={{ textAlign: "right" }}>Comisión</th></tr></thead>
-            <tbody>{resumen.porAsesor.map(a => <tr key={a.asesor}><td>{a.asesor}</td><td style={{ textAlign: "right", fontWeight: 700 }}>{mxn(a.comision)}</td></tr>)}</tbody></table>
-        </div>
-      )}
-
-      <div className="table-card">
-        <div className="table-card-header"><span className="table-card-title">Detalle del mes</span></div>
-        {loading ? <div className="loading-state"><div className="spinner" /></div>
-          : error ? <div className="empty-state">{error}</div>
-          : lineas.length === 0 ? <div className="empty-state"><div className="empty-icon">💵</div>Aún no hay ventas capturadas en este mes.</div>
-          : (
-            <div style={{ overflowX: "auto" }}>
-              <table>
-                <thead><tr>
-                  <th>Tipo</th>{esAdmin && <th>Asesor</th>}<th>Referencia</th><th>Cliente</th>
-                  <th style={{ textAlign: "right" }}>Subtotal s/IVA</th><th style={{ textAlign: "right" }}>Días</th><th style={{ textAlign: "right" }}>%</th>
-                  <th style={{ textAlign: "right" }}>Comisión</th><th />
-                </tr></thead>
-                <tbody>
-                  {lineas.map(l => (
-                    <tr key={l._id}>
-                      <td>{tipoInfo(l.tipo).icon} {tipoInfo(l.tipo).label}</td>
-                      {esAdmin && <td>{l.asesor?.nombre ?? "—"}</td>}
-                      <td>{l.referencia || "—"}{l.descripcion && <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>{l.descripcion}</div>}</td>
-                      <td>{l.cliente || "—"}</td>
-                      <td style={{ textAlign: "right" }}>{l.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} {l.moneda}</td>
-                      <td style={{ textAlign: "right" }}>{l.dias || "—"}</td>
-                      <td style={{ textAlign: "right" }}>{l.porcentaje ? `${l.porcentaje}%` : "—"}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700 }}>{mxn(l.comision)}</td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(l)}>✏️</button>{" "}
-                        <button className="btn btn-danger btn-sm" onClick={() => borrar(l)}>🗑️</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <div className="rv-filters">
+          <div className="form-group"><label className="form-label">Mes</label>
+            <input type="month" className="form-input" value={periodo} onChange={e => e.target.value && setPeriodo(e.target.value)} /></div>
+          {esAdmin && (
+            <div className="form-group"><label className="form-label">Asesor</label>
+              <select className="form-select" value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
+                <option value="">Todos</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+              </select></div>
           )}
+          <div className="form-group"><label className="form-label">Tipo</label>
+            <select className="form-select" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
+              <option value="">Todos</option>{TIPOS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+            </select></div>
+        </div>
+
+        {resumen && (
+          <div className="rv-stats">
+            <div className="stat-card"><div className="stat-card-label">Comisiones del mes</div><div className="stat-card-value">{mxn(totalMostrado)}</div></div>
+            <div className="stat-card"><div className="stat-card-label">Ventas capturadas</div><div className="stat-card-value">{resumen.cantidad}</div></div>
+            {TIPOS.filter(t => resumen.porTipo[t.v]).map(t => (
+              <div className="stat-card" key={t.v}><div className="stat-card-label">{t.icon} {t.label}</div><div className="stat-card-value" style={{ fontSize: "1.5rem" }}>{mxn(resumen.porTipo[t.v])}</div></div>
+            ))}
+          </div>
+        )}
+
+        {esAdmin && resumen && resumen.porAsesor.length > 0 && (
+          <div className="table-card">
+            <div className="table-card-header"><span className="table-card-title">Por asesor</span></div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="rv-table"><thead><tr><th>Asesor</th><th className="rv-r">Comisión</th></tr></thead>
+                <tbody>{resumen.porAsesor.map(a => <tr key={a.asesor}><td>{a.asesor}</td><td className="rv-r" style={{ fontWeight: 700 }}>{mxn(a.comision)}</td></tr>)}</tbody></table>
+            </div>
+          </div>
+        )}
+
+        <div className="table-card">
+          <div className="table-card-header"><span className="table-card-title">Detalle del mes</span></div>
+          {loading ? <div className="loading-state"><div className="spinner" /></div>
+            : error ? <div className="empty-state">{error}</div>
+            : lineas.length === 0 ? <div className="empty-state"><div className="empty-icon">📈</div>Aún no hay ventas capturadas en este mes.</div>
+            : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="rv-table">
+                  <thead><tr>
+                    <th>Tipo</th>{esAdmin && <th>Asesor</th>}<th>Venta</th><th>Cliente</th>
+                    <th className="rv-r">Subtotal s/IVA</th><th className="rv-r">Días</th><th className="rv-r">%</th>
+                    <th className="rv-r">Comisión</th><th />
+                  </tr></thead>
+                  <tbody>
+                    {lineas.map(l => (
+                      <tr key={l._id}>
+                        <td style={{ whiteSpace: "nowrap" }}>{tipoInfo(l.tipo).icon} {tipoInfo(l.tipo).label}</td>
+                        {esAdmin && <td>{l.asesor?.nombre ?? "—"}</td>}
+                        <td><strong>{l.referencia || "—"}</strong>{l.descripcion && <div className="rv-sub">{l.descripcion}</div>}</td>
+                        <td>{l.cliente || "—"}</td>
+                        <td className="rv-r" style={{ whiteSpace: "nowrap" }}>{l.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} {l.moneda}</td>
+                        <td className="rv-r">{l.dias || "—"}</td>
+                        <td className="rv-r">{l.porcentaje ? `${l.porcentaje}%` : "—"}</td>
+                        <td className="rv-r" style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{mxn(l.comision)}</td>
+                        <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => abrirEditar(l)}>✏️</button>{" "}
+                          <button className="btn btn-danger btn-sm" onClick={() => borrar(l)}>🗑️</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+        </div>
       </div>
 
       {modal && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModal(false); }}>
-          <div className="modal" style={{ maxWidth: 720, maxHeight: "90vh", overflowY: "auto" }}>
+          <div className="modal rv-modal">
             <button className="modal-close" onClick={() => setModal(false)}>✕</button>
-            <h2 className="modal-title">{f._id ? "Editar comisión" : "Agregar venta al reporte"}</h2>
+            <h2 className="modal-title">{f._id ? "Editar venta" : "Agregar venta al reporte"}</h2>
 
             {!f._id && (
-              <>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <div className="rv-sec">
+                <div className="rv-sec-title">1 · ¿Qué vendiste?</div>
+                <div className="rv-tipos">
                   {TIPOS.map(t => (
                     <button key={t.v} type="button" className={`btn btn-sm ${f.tipo === t.v ? "btn-primary" : "btn-secondary"}`}
                       onClick={() => { setForm({ ...formVacio(f.periodo, t.v), asesor: f.asesor }); setBuscar(""); setComisionManual(false); }}>
@@ -284,64 +344,85 @@ export default function ReporteVentas() {
                   ))}
                 </div>
                 {f.tipo !== "otro" && (
-                  <div style={{ marginBottom: 12 }}>
-                    <label className="form-label">Selecciona la venta (se llenan los datos y los puedes corregir)</label>
-                    <input className="form-input" placeholder="Buscar por # económico, folio, cliente o asesor…" value={buscar} onChange={e => setBuscar(e.target.value)} />
-                    <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8, marginTop: 6 }}>
-                      {cargandoOrig ? <div style={{ padding: 12 }}>Cargando…</div>
-                        : origenes.length === 0 ? <div style={{ padding: 12, opacity: 0.7 }}>No hay ventas que coincidan.</div>
+                  <>
+                    <input className="form-input" placeholder="Buscar por # económico, folio o cliente…" value={buscar} onChange={e => setBuscar(e.target.value)} />
+                    <div className="rv-lista">
+                      {cargandoOrig ? <div className="rv-hint" style={{ padding: 12 }}>Cargando…</div>
+                        : origenes.length === 0 ? <div className="rv-hint" style={{ padding: 12 }}>No hay ventas tuyas que coincidan.</div>
                         : origenes.map(o => (
-                          <div key={o.origenId} onClick={() => elegirOrigen(o)}
-                            style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)",
-                              background: f.origenId === o.origenId ? "var(--surface2)" : "transparent" }}>
-                            <strong>{o.referencia || "—"}</strong> · {o.cliente || "Sin cliente"}
-                            <span style={{ opacity: 0.7 }}> · {o.asesorNombre || "Sin asesor"} · {fmtFecha(o.fechaVenta)} · {o.subtotal.toLocaleString("es-MX")} {o.moneda}</span>
+                          <div key={o.origenId} className={`rv-item ${f.origenId === o.origenId ? "sel" : ""}`} onClick={() => elegirOrigen(o)}>
+                            <div className="rv-item-main">
+                              <strong>{o.referencia || "—"} · {o.cliente || "Sin cliente"}</strong>
+                              <span>{esAdmin ? `${o.asesorNombre || "Sin asesor"} · ` : ""}{fmtFecha(o.fechaVenta)}</span>
+                            </div>
+                            <div className="rv-item-monto">{o.subtotal.toLocaleString("es-MX")} {o.moneda}</div>
                           </div>
                         ))}
                     </div>
-                  </div>
+                    <div className="rv-hint">Al elegir una venta se llenan los datos de abajo y los puedes corregir.</div>
+                  </>
                 )}
-              </>
+              </div>
             )}
 
-            <div className="form-grid">
-              <div className="form-group"><label className="form-label">Asesor *</label>
-                <select className="form-select" value={f.asesor} onChange={e => cambiar("asesor", e.target.value)}>
-                  <option value="">— Selecciona —</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select></div>
-              <div className="form-group"><label className="form-label">Mes de la comisión *</label>
-                <input type="month" className="form-input" value={f.periodo} onChange={e => e.target.value && cambiar("periodo", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Referencia (# económico / folio)</label>
-                <input className="form-input" value={f.referencia} onChange={e => cambiar("referencia", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Cliente</label>
-                <input className="form-input" value={f.cliente} onChange={e => cambiar("cliente", e.target.value)} /></div>
-              <div className="form-group span-2"><label className="form-label">Descripción</label>
+            <div className="rv-sec">
+              <div className="rv-sec-title">{f._id ? "Datos de la venta" : "2 · Datos de la venta"}</div>
+              <div className="rv-g3">
+                <div className="form-group"><label className="form-label">Asesor *</label>
+                  {esAdmin ? (
+                    <select className="form-select" value={f.asesor} onChange={e => cambiar("asesor", e.target.value)}>
+                      <option value="">— Selecciona —</option>{asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                    </select>
+                  ) : (
+                    <input className="form-input" value={miAsesor?.nombre ?? ""} disabled readOnly />
+                  )}</div>
+                <div className="form-group"><label className="form-label">Referencia</label>
+                  <input className="form-input" placeholder="# económico / folio" value={f.referencia} onChange={e => cambiar("referencia", e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Cliente</label>
+                  <input className="form-input" value={f.cliente} onChange={e => cambiar("cliente", e.target.value)} /></div>
+              </div>
+              <div className="form-group"><label className="form-label">Descripción</label>
                 <input className="form-input" value={f.descripcion} onChange={e => cambiar("descripcion", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Fecha de venta / factura</label>
-                <input type="date" className="form-input" value={f.fechaVenta} onChange={e => cambiar("fechaVenta", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Fecha de pago</label>
-                <input type="date" className="form-input" value={f.fechaPago} onChange={e => cambiar("fechaPago", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Moneda</label>
-                <select className="form-select" value={f.moneda} onChange={e => cambiar("moneda", e.target.value as any)}>
-                  <option value="MXN">MXN</option><option value="USD">USD (TC ${TIPO_CAMBIO_USD})</option></select></div>
-              <div className="form-group"><label className="form-label">Subtotal SIN IVA</label>
-                <input type="number" step="0.01" className="form-input" value={f.subtotal} onChange={e => cambiar("subtotal", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">Días de cobro</label>
-                <input type="number" className="form-input" value={f.dias} onChange={e => cambiar("dias", e.target.value)} /></div>
-              <div className="form-group"><label className="form-label">% de comisión</label>
-                <input type="number" step="0.01" className="form-input" value={f.porcentaje} onChange={e => cambiar("porcentaje", e.target.value)} /></div>
-              <div className="form-group span-2"><label className="form-label">Comisión (MXN) *</label>
-                <input type="number" step="0.01" className="form-input" value={f.comision}
-                  onChange={e => { setComisionManual(true); cambiar("comision", e.target.value); }} />
-                <div style={{ fontSize: "0.75rem", opacity: 0.7, marginTop: 4 }}>
-                  Sugerida: subtotal × % {f.moneda === "USD" ? `× TC ${TIPO_CAMBIO_USD}` : ""} = {sugerida(f) ? mxn(Number(sugerida(f))) : "—"}.
-                  Puedes escribir el monto que te corresponde.
-                </div></div>
-              <div className="form-group span-2"><label className="form-label">Notas</label>
+            </div>
+
+            <div className="rv-sec">
+              <div className="rv-sec-title">{f._id ? "Cobro" : "3 · Cobro"}</div>
+              <div className="rv-g4">
+                <div className="form-group"><label className="form-label">Fecha de venta</label>
+                  <input type="date" className="form-input" value={f.fechaVenta} onChange={e => cambiar("fechaVenta", e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Fecha de pago</label>
+                  <input type="date" className="form-input" value={f.fechaPago} onChange={e => cambiar("fechaPago", e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">Moneda</label>
+                  <select className="form-select" value={f.moneda} onChange={e => cambiar("moneda", e.target.value as any)}>
+                    <option value="MXN">MXN</option><option value="USD">USD (TC {TIPO_CAMBIO_USD})</option></select></div>
+                <div className="form-group"><label className="form-label">Subtotal sin IVA</label>
+                  <input type="number" step="0.01" className="form-input" value={f.subtotal} onChange={e => cambiar("subtotal", e.target.value)} /></div>
+              </div>
+            </div>
+
+            <div className="rv-sec">
+              <div className="rv-sec-title">{f._id ? "Comisión" : "4 · Comisión"}</div>
+              <div className="rv-comision">
+                <div className="rv-g4">
+                  <div className="form-group"><label className="form-label">Días de cobro</label>
+                    <input type="number" className="form-input" value={f.dias} onChange={e => cambiar("dias", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">% comisión</label>
+                    <input type="number" step="0.01" className="form-input" value={f.porcentaje} onChange={e => cambiar("porcentaje", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Mes a comisionar *</label>
+                    <input type="month" className="form-input" value={f.periodo} onChange={e => e.target.value && cambiar("periodo", e.target.value)} /></div>
+                  <div className="form-group"><label className="form-label">Comisión (MXN) *</label>
+                    <input type="number" step="0.01" className="form-input" value={f.comision}
+                      onChange={e => { setComisionManual(true); cambiar("comision", e.target.value); }} /></div>
+                </div>
+                <div className="rv-hint">
+                  Sugerida: subtotal × % {f.moneda === "USD" ? `× TC ${TIPO_CAMBIO_USD}` : ""} = <strong>{sug ? mxn(Number(sug)) : "—"}</strong>. Puedes escribir el monto que te corresponde.
+                </div>
+              </div>
+              <div className="form-group"><label className="form-label">Notas</label>
                 <input className="form-input" value={f.notas} onChange={e => cambiar("notas", e.target.value)} /></div>
             </div>
 
-            {errForm && <div style={{ color: "var(--red)", margin: "8px 0" }}>{errForm}</div>}
+            {errForm && <div style={{ color: "var(--red)" }}>{errForm}</div>}
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={guardar} disabled={guardando}>{guardando ? "Guardando…" : "Guardar"}</button>
@@ -349,6 +430,6 @@ export default function ReporteVentas() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
