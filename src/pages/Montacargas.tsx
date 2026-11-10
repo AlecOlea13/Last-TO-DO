@@ -139,6 +139,8 @@ export default function Montacargas() {
   const canVerHistorial = ["developer", "gerencia", "supervisor_almacen"].includes(rol);
   const canVerReporte   = ["developer", "gerencia"].includes(rol);
   const canEditarVenta  = ["developer", "gerencia"].includes(rol);
+  // Oficina (vendedores) puede registrar la permuta de un equipo ya vendido
+  const canPermuta      = ["developer", "gerencia", "oficina"].includes(rol);
 
   const [montas, setMontas]         = useState<Monta[]>([]);
   const [clientes, setClientes]     = useState<Cliente[]>([]);
@@ -341,6 +343,18 @@ export default function Montacargas() {
       permutaDiferencia:  m.venta?.permuta?.activa ? String((m.venta?.montoFacturado || 0) + (m.venta?.montoEfectivo || 0)) : "",
       permutaForma:       m.venta?.permuta?.diferenciaForma ?? "",
     });
+  }
+
+  // Abre la edición de una venta ya hecha con la permuta activada (conserva los montos como diferencia)
+  function abrirPermuta(m: Monta) {
+    abrirEditarVenta(m);
+    const fact = m.venta?.montoFacturado || 0, efvo = m.venta?.montoEfectivo || 0;
+    setFormVenta(p => ({
+      ...p,
+      permutaActiva: true,
+      permutaDiferencia: p.permutaDiferencia || String(fact + efvo),
+      permutaForma: p.permutaForma || (fact > 0 && efvo === 0 ? "facturado" : efvo > 0 && fact === 0 ? "efectivo" : ""),
+    }));
   }
 
   // Vista previa del IVA/total — el backend vuelve a calcular esto como fuente de verdad
@@ -609,6 +623,7 @@ export default function Montacargas() {
                         <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                           <button className="btn btn-secondary btn-sm" onClick={() => setDetalleModal(m)} title="Ver detalle">👁️ Ver</button>
                           <MenuAcciones acciones={[
+                            { icon: "🔄", label: m.venta?.permuta?.activa ? "Editar permuta" : "Registrar permuta", onClick: () => abrirPermuta(m), hidden: !canPermuta },
                             { icon: "✏️", label: "Editar venta",  onClick: () => abrirEditarVenta(m), hidden: !canEditarVenta },
                             { icon: "↩️", label: "Deshacer venta", onClick: () => deshacerVenta(m),   hidden: !canEdit },
                           ]} />
@@ -820,7 +835,7 @@ export default function Montacargas() {
       )}
 
       {/* ── Modal marcar como vendido ── */}
-      {ventaModal && (canEdit || canEditarVenta) && (
+      {ventaModal && (canEdit || canEditarVenta || canPermuta) && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setVentaModal(null); }}>
           <div className="modal" style={{ maxWidth: 460 }}>
             <button className="modal-close" onClick={() => setVentaModal(null)}>✕</button>
