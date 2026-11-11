@@ -11,14 +11,14 @@ type Tipo = "equipo" | "renta" | "refacciones" | "servicio" | "otro";
 type Asesor = { _id: string; nombre: string };
 type Linea = {
   _id: string; tipo: Tipo; origenRef?: string | null; origenId?: string | null;
-  referencia: string; descripcion: string; cliente: string;
+  referencia: string; descripcion: string; factura?: string; cliente: string;
   asesor: Asesor | null; creadoPor?: { _id: string; nombre: string } | null;
   fechaVenta: string | null; fechaPago: string | null; periodo: string;
   moneda: "MXN" | "USD"; subtotal: number; tipoCambio: number;
   dias: number; porcentaje: number; comision: number; notas: string;
 };
 type Origen = {
-  origenRef: string; origenId: string; referencia: string; descripcion: string; cliente: string;
+  origenRef: string; origenId: string; referencia: string; descripcion: string; factura?: string; cliente: string;
   asesor: string | null; asesorNombre: string; fechaVenta: string | null; fechaPago: string | null;
   moneda: "MXN" | "USD"; subtotal: number;
 };
@@ -49,12 +49,12 @@ function diasEntre(a?: string, b?: string) {
 
 type Form = {
   _id?: string; tipo: Tipo; origenRef: string | null; origenId: string | null;
-  referencia: string; descripcion: string; cliente: string; asesor: string;
+  referencia: string; descripcion: string; factura: string; cliente: string; asesor: string;
   fechaVenta: string; fechaPago: string; periodo: string;
   moneda: "MXN" | "USD"; subtotal: string; dias: string; porcentaje: string; comision: string; notas: string;
 };
 const formVacio = (periodo: string, tipo: Tipo = "equipo"): Form => ({
-  tipo, origenRef: null, origenId: null, referencia: "", descripcion: "", cliente: "", asesor: "",
+  tipo, origenRef: null, origenId: null, referencia: "", descripcion: "", factura: "", cliente: "", asesor: "",
   fechaVenta: "", fechaPago: "", periodo, moneda: "MXN", subtotal: "", dias: "", porcentaje: "", comision: "", notas: "",
 });
 
@@ -125,7 +125,7 @@ export default function ReporteVentas() {
   function abrirEditar(l: Linea) {
     setForm({
       _id: l._id, tipo: l.tipo, origenRef: l.origenRef ?? null, origenId: l.origenId ?? null,
-      referencia: l.referencia, descripcion: l.descripcion, cliente: l.cliente, asesor: l.asesor?._id ?? "",
+      referencia: l.referencia, descripcion: l.descripcion, factura: l.factura ?? "", cliente: l.cliente, asesor: l.asesor?._id ?? "",
       fechaVenta: aInputFecha(l.fechaVenta), fechaPago: aInputFecha(l.fechaPago), periodo: l.periodo,
       moneda: l.moneda, subtotal: String(l.subtotal), dias: String(l.dias), porcentaje: String(l.porcentaje),
       comision: String(l.comision), notas: l.notas,
@@ -138,7 +138,7 @@ export default function ReporteVentas() {
     const dias = fv && fp ? diasEntre(fv, fp) : 0;
     const pct = fv && fp ? porcentajePorDias(dias) : 0;
     const f: Form = {
-      ...form, origenRef: o.origenRef, origenId: o.origenId, referencia: o.referencia, descripcion: o.descripcion,
+      ...form, origenRef: o.origenRef, origenId: o.origenId, referencia: o.referencia, descripcion: o.descripcion, factura: o.factura ?? "",
       cliente: o.cliente, asesor: !esAdmin && miAsesor ? miAsesor._id : (o.asesor ?? form.asesor), fechaVenta: fv, fechaPago: fp,
       moneda: o.moneda, subtotal: String(o.subtotal), dias: fv && fp ? String(dias) : "", porcentaje: fv && fp ? String(pct) : "",
       comision: "",
@@ -189,8 +189,8 @@ export default function ReporteVentas() {
   }
 
   function exportarCSV() {
-    const enc = ["Periodo", "Asesor", "Tipo", "Referencia", "Cliente", "Descripción", "Fecha venta", "Fecha pago", "Moneda", "Subtotal sin IVA", "Días", "%", "Comisión MXN", "Notas"];
-    const filas = lineas.map(l => [l.periodo, l.asesor?.nombre ?? "", tipoInfo(l.tipo).label, l.referencia, l.cliente, l.descripcion,
+    const enc = ["Periodo", "Asesor", "Tipo", "Referencia", "Factura", "Cliente", "Descripción", "Fecha venta", "Fecha pago", "Moneda", "Subtotal sin IVA", "Días", "%", "Comisión MXN", "Notas"];
+    const filas = lineas.map(l => [l.periodo, l.asesor?.nombre ?? "", tipoInfo(l.tipo).label, l.referencia, l.factura ?? "", l.cliente, l.descripcion,
       aInputFecha(l.fechaVenta), aInputFecha(l.fechaPago), l.moneda, l.subtotal, l.dias, l.porcentaje, l.comision, l.notas]);
     const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csv = "﻿" + [enc, ...filas].map(r => r.map(esc).join(",")).join("\n");
@@ -298,7 +298,7 @@ export default function ReporteVentas() {
               <div style={{ overflowX: "auto" }}>
                 <table className="rv-table">
                   <thead><tr>
-                    <th>Tipo</th>{esAdmin && <th>Asesor</th>}<th>Venta</th><th>Cliente</th>
+                    <th>Tipo</th>{esAdmin && <th>Asesor</th>}<th>Venta</th><th>Factura</th><th>Cliente</th>
                     <th className="rv-r">Subtotal s/IVA</th><th className="rv-r">Días</th><th className="rv-r">%</th>
                     <th className="rv-r">Comisión</th><th />
                   </tr></thead>
@@ -308,6 +308,7 @@ export default function ReporteVentas() {
                         <td style={{ whiteSpace: "nowrap" }}>{tipoInfo(l.tipo).icon} {tipoInfo(l.tipo).label}</td>
                         {esAdmin && <td>{l.asesor?.nombre ?? "—"}</td>}
                         <td><strong>{l.referencia || "—"}</strong>{l.descripcion && <div className="rv-sub">{l.descripcion}</div>}</td>
+                        <td style={{ whiteSpace: "nowrap" }}>{l.factura || <span style={{ color: "var(--text-muted)" }}>—</span>}</td>
                         <td>{l.cliente || "—"}</td>
                         <td className="rv-r" style={{ whiteSpace: "nowrap" }}>{l.subtotal.toLocaleString("es-MX", { minimumFractionDigits: 2 })} {l.moneda}</td>
                         <td className="rv-r">{l.dias || "—"}</td>
@@ -353,7 +354,7 @@ export default function ReporteVentas() {
                           <div key={o.origenId} className={`rv-item ${f.origenId === o.origenId ? "sel" : ""}`} onClick={() => elegirOrigen(o)}>
                             <div className="rv-item-main">
                               <strong>{o.referencia || "—"} · {o.cliente || "Sin cliente"}</strong>
-                              <span>{esAdmin ? `${o.asesorNombre || "Sin asesor"} · ` : ""}{fmtFecha(o.fechaVenta)}</span>
+                              <span>{esAdmin ? `${o.asesorNombre || "Sin asesor"} · ` : ""}{fmtFecha(o.fechaVenta)}{o.factura ? ` · Factura ${o.factura}` : ""}</span>
                             </div>
                             <div className="rv-item-monto">{o.subtotal.toLocaleString("es-MX")} {o.moneda}</div>
                           </div>
@@ -381,8 +382,12 @@ export default function ReporteVentas() {
                 <div className="form-group"><label className="form-label">Cliente</label>
                   <input className="form-input" value={f.cliente} onChange={e => cambiar("cliente", e.target.value)} /></div>
               </div>
-              <div className="form-group"><label className="form-label">Descripción</label>
-                <input className="form-input" value={f.descripcion} onChange={e => cambiar("descripcion", e.target.value)} /></div>
+              <div className="rv-g2">
+                <div className="form-group"><label className="form-label">Descripción</label>
+                  <input className="form-input" value={f.descripcion} onChange={e => cambiar("descripcion", e.target.value)} /></div>
+                <div className="form-group"><label className="form-label">No. de factura</label>
+                  <input className="form-input" placeholder="Ej. A-1234" value={f.factura} onChange={e => cambiar("factura", e.target.value)} /></div>
+              </div>
             </div>
 
             <div className="rv-sec">
@@ -408,14 +413,14 @@ export default function ReporteVentas() {
                     <input type="number" className="form-input" value={f.dias} onChange={e => cambiar("dias", e.target.value)} /></div>
                   <div className="form-group"><label className="form-label">% comisión</label>
                     <input type="number" step="0.01" className="form-input" value={f.porcentaje} onChange={e => cambiar("porcentaje", e.target.value)} /></div>
-                  <div className="form-group"><label className="form-label">Mes a comisionar *</label>
+                  <div className="form-group"><label className="form-label">Mes del reporte *</label>
                     <input type="month" className="form-input" value={f.periodo} onChange={e => e.target.value && cambiar("periodo", e.target.value)} /></div>
                   <div className="form-group"><label className="form-label">Comisión (MXN) *</label>
                     <input type="number" step="0.01" className="form-input" value={f.comision}
                       onChange={e => { setComisionManual(true); cambiar("comision", e.target.value); }} /></div>
                 </div>
                 <div className="rv-hint">
-                  Sugerida: subtotal × % {f.moneda === "USD" ? `× TC ${TIPO_CAMBIO_USD}` : ""} = <strong>{sug ? mxn(Number(sug)) : "—"}</strong>. Puedes escribir el monto que te corresponde.
+                  Sugerida: subtotal × % {f.moneda === "USD" ? `× TC ${TIPO_CAMBIO_USD}` : ""} = <strong>{sug ? mxn(Number(sug)) : "—"}</strong>. Puedes escribir el monto que te corresponde. El "Mes del reporte" es el mes en que esta venta entra al reporte, no cuándo se paga la comisión.
                 </div>
               </div>
               <div className="form-group"><label className="form-label">Notas</label>
