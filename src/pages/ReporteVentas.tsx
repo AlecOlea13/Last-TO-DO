@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
-type Tipo = "equipo" | "renta" | "refacciones" | "servicio" | "otro";
+type Tipo = "equipo" | "renta" | "refacciones" | "servicio" | "venta" | "otro";
 type Asesor = { _id: string; nombre: string };
 type Linea = {
   _id: string; tipo: Tipo; origenRef?: string | null; origenId?: string | null;
@@ -30,6 +30,7 @@ const TIPOS: { v: Tipo; label: string; icon: string }[] = [
   { v: "renta", label: "Rentas", icon: "📋" },
   { v: "refacciones", label: "Refacciones", icon: "🔩" },
   { v: "servicio", label: "Servicios", icon: "🔧" },
+  { v: "venta", label: "Otras ventas", icon: "🛒" },
   { v: "otro", label: "Otro", icon: "➕" },
 ];
 const tipoInfo = (t: Tipo) => TIPOS.find(x => x.v === t)!;
@@ -58,6 +59,123 @@ const formVacio = (periodo: string, tipo: Tipo = "equipo"): Form => ({
   fechaVenta: "", fechaPago: "", periodo, moneda: "MXN", subtotal: "", dias: "", porcentaje: "", comision: "", notas: "",
 });
 
+
+// ═════════════════════════ GRÁFICAS ═════════════════════════
+type MesResumen = { periodo: string; total: number; cantidad: number; porTipo: Partial<Record<Tipo, number>> };
+type ResumenG = { periodos: string[]; meses: MesResumen[]; porAsesor: { asesor: string; comision: number }[]; porTipo: Partial<Record<Tipo, number>>; total: number };
+
+const SERIE: Record<Tipo, string> = { equipo: "var(--s1)", renta: "var(--s2)", refacciones: "var(--s3)", servicio: "var(--s4)", venta: "var(--s5)", otro: "var(--s6)" };
+const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const etiquetaMes = (p: string) => { const [y, m] = p.split("-").map(Number); return `${MESES_CORTO[m - 1]} ${String(y).slice(2)}`; };
+const etiquetaMesLarga = (p: string) => { const [y, m] = p.split("-").map(Number); return `${MESES_CORTO[m - 1]} ${y}`; };
+const compacto = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : `$${Math.round(n)}`;
+
+function escalaY(max: number) {
+  const objetivo = Math.max(max, 1) / 4;
+  const pot = Math.pow(10, Math.floor(Math.log10(objetivo)));
+  const paso = [1, 2, 2.5, 5, 10].map(f => f * pot).find(s => s >= objetivo) ?? pot * 10;
+  const tope = Math.max(paso, Math.ceil(max / paso) * paso);
+  const ticks: number[] = []; for (let v = 0; v <= tope + 1e-9; v += paso) ticks.push(v);
+  return { tope, ticks };
+}
+
+/** Barra con esquinas redondeadas (4px) solo arriba; el anclaje con la base queda recto. */
+function pathBarra(x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h);
+  return `M${x},${y + h} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + w - rr} Q${x + w},${y} ${x + w},${y + rr} V${y + h} Z`;
+}
+
+function GraficaMensual({ data, periodoSel }: { data: ResumenG; periodoSel: string }) {
+  const W = 760, H = 300, ML = 52, MR = 12, MT = 14, MB = 34;
+  const iw = W - ML - MR, ih = H - MT - MB;
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(...data.meses.map(m => m.total), 0);
+  const { tope, ticks } = escalaY(max);
+  const n = data.meses.length;
+  const paso = iw / n, bw = Math.min(46, paso * 0.62);
+  const y = (v: number) => MT + ih - (v / tope) * ih;
+  const tiposPresentes = TIPOS.filter(tp => data.meses.some(m => (m.porTipo[tp.v] ?? 0) > 0));
+
+  return (
+    <div style={{ position: "relative" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
+           aria-label="Comisión por mes, apilada por tipo de venta" onMouseLeave={() => setHover(null)}>
+        {ticks.map(v => (
+          <g key={v}>
+            <line x1={ML} x2={W - MR} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth={1} opacity={v === 0 ? 1 : 0.6} />
+            <text x={ML - 8} y={y(v) + 4} textAnchor="end" fontSize={11} fill="var(--text-muted)">{compacto(v)}</text>
+          </g>
+        ))}
+        {data.meses.map((m, i) => {
+          const cx = ML + paso * i + paso / 2, x0 = cx - bw / 2;
+          let acum = 0;
+          const segs = TIPOS.filter(tp => (m.porTipo[tp.v] ?? 0) > 0);
+          return (
+            <g key={m.periodo}>
+              {segs.map((tp, k) => {
+                const v = m.porTipo[tp.v] ?? 0;
+                const yTop = y(acum + v), alto = y(acum) - yTop;
+                const esUltimo = k === segs.length - 1;
+                acum += v;
+                const h = Math.max(alto, 0);
+                return esUltimo
+                  ? <path key={tp.v} d={pathBarra(x0, yTop, bw, h, 4)} fill={SERIE[tp.v]} stroke="var(--surface)" strokeWidth={2} opacity={hover === null || hover === i ? 1 : 0.45} />
+                  : <rect key={tp.v} x={x0} y={yTop} width={bw} height={h} fill={SERIE[tp.v]} stroke="var(--surface)" strokeWidth={2} opacity={hover === null || hover === i ? 1 : 0.45} />;
+              })}
+              {m.total > 0 && (hover === i || (hover === null && n <= 8)) && (
+                <text x={cx} y={y(m.total) - 6} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--text)">{compacto(m.total)}</text>
+              )}
+              <text x={cx} y={H - 12} textAnchor="middle" fontSize={11} fontWeight={m.periodo === periodoSel ? 700 : 400}
+                    fill={m.periodo === periodoSel ? "var(--text)" : "var(--text-muted)"}>{etiquetaMes(m.periodo)}</text>
+              <rect x={ML + paso * i} y={MT} width={paso} height={ih + MB} fill="transparent" onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} />
+            </g>
+          );
+        })}
+      </svg>
+      {hover !== null && (() => {
+        const m = data.meses[hover];
+        // El cuadro va a un costado de la barra (no encima), del lado donde hay más espacio
+        const cx = ML + paso * hover + paso / 2;
+        const aLaDerecha = hover < n / 2;
+        const lado = aLaDerecha ? { left: `${((cx + bw / 2 + 8) / W) * 100}%` } : { left: `${((cx - bw / 2 - 8) / W) * 100}%`, transform: "translateX(-100%)" };
+        return (
+          <div className="rv-tip" style={lado}>
+            <strong>{etiquetaMesLarga(m.periodo)}</strong>
+            {TIPOS.filter(tp => (m.porTipo[tp.v] ?? 0) > 0).map(tp => (
+              <div key={tp.v} className="rv-tip-row"><span><i style={{ background: SERIE[tp.v] }} />{tp.label}</span><span>{mxn(m.porTipo[tp.v] ?? 0)}</span></div>
+            ))}
+            <div className="rv-tip-row rv-tip-total"><span>Total · {m.cantidad} {m.cantidad === 1 ? "venta" : "ventas"}</span><span>{mxn(m.total)}</span></div>
+          </div>
+        );
+      })()}
+      <div className="rv-legend">
+        {tiposPresentes.map(tp => <span key={tp.v}><i style={{ background: SERIE[tp.v] }} />{tp.label}</span>)}
+      </div>
+    </div>
+  );
+}
+
+/** Barras horizontales: una sola serie (por asesor) o una barra por tipo con su color. */
+function GraficaBarrasH({ filas }: { filas: { etiqueta: string; valor: number; color: string }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(...filas.map(f => f.valor), 1);
+  const total = filas.reduce((s, f) => s + f.valor, 0);
+  if (!filas.length) return <div className="rv-hint" style={{ padding: 16 }}>Sin datos en este rango.</div>;
+  return (
+    <div className="rv-hbars" onMouseLeave={() => setHover(null)}>
+      {filas.map((f, i) => (
+        <div key={f.etiqueta} className="rv-hbar-row" onMouseEnter={() => setHover(i)} style={{ opacity: hover === null || hover === i ? 1 : 0.5 }}>
+          <div className="rv-hbar-lbl" title={f.etiqueta}>{f.etiqueta}</div>
+          <div className="rv-hbar-track">
+            <div className="rv-hbar-fill" style={{ width: `${Math.max((f.valor / max) * 100, 1.5)}%`, background: f.color }} />
+          </div>
+          <div className="rv-hbar-val">{mxn(f.valor)}{total > 0 && <span> · {Math.round((f.valor / total) * 100)}%</span>}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ReporteVentas() {
   const rol = localStorage.getItem("rol") ?? "";
   const esAdmin = rol === "developer" || rol === "gerencia";
@@ -66,6 +184,9 @@ export default function ReporteVentas() {
   const [filtroAsesor, setFiltroAsesor] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"" | Tipo>("");
   const [lineas, setLineas] = useState<Linea[]>([]);
+  const [grafica, setGrafica] = useState<ResumenG | null>(null);
+  const [meses, setMeses] = useState(12);
+  const [verTabla, setVerTabla] = useState(false);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [asesores, setAsesores] = useState<Asesor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +216,14 @@ export default function ReporteVentas() {
     } finally { setLoading(false); }
   }
   useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [periodo, filtroAsesor, filtroTipo]);
+  // Gráficas: terminan en el mes seleccionado; se recargan al cambiar filtros o las líneas
+  useEffect(() => {
+    let vivo = true;
+    api.get("/comisiones/resumen", { params: { hasta: periodo, meses, asesorId: filtroAsesor || undefined, tipo: filtroTipo || undefined } })
+      .then(r => { if (vivo) setGrafica(r.data); })
+      .catch(() => { if (vivo) setGrafica(null); });
+    return () => { vivo = false; };
+  }, [periodo, meses, filtroAsesor, filtroTipo, lineas]);
   useEffect(() => { api.get("/asesores").then(r => setAsesores(r.data ?? [])).catch(() => {}); }, []);
   useEffect(() => {
     if (esAdmin) { setMiAsesorListo(true); return; }
@@ -234,6 +363,22 @@ export default function ReporteVentas() {
         .rv-g4 { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; }
         .rv-comision { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; display:flex; flex-direction:column; gap:8px; }
         .rv-hint { font-size:.76rem; color:var(--text-muted); }
+        .rv-charts { --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --solo:#3987e5; }
+        [data-theme="light"] .rv-charts { --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --solo:#2a78d6; }
+        .rv-charts-grid { display:grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap:14px; }
+        @media (max-width: 1000px) { .rv-charts-grid { grid-template-columns: 1fr; } }
+        .rv-chart-body { padding: 8px 20px 18px; }
+        .rv-legend { display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; font-size:.78rem; color:var(--text-muted); }
+        .rv-legend i, .rv-tip i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; }
+        .rv-tip { position:absolute; top:0; z-index:5; pointer-events:none; background:var(--surface2); border:1px solid var(--border2, var(--border)); border-radius:var(--radius-sm); padding:10px 12px; min-width:200px; box-shadow:0 8px 24px rgba(0,0,0,.35); font-size:.78rem; display:flex; flex-direction:column; gap:4px; }
+        .rv-tip-row { display:flex; justify-content:space-between; gap:14px; color:var(--text-muted); }
+        .rv-tip-total { border-top:1px solid var(--border); padding-top:5px; margin-top:2px; color:var(--text); font-weight:700; }
+        .rv-hbars { display:flex; flex-direction:column; gap:12px; padding-top:6px; }
+        .rv-hbar-row { display:grid; grid-template-columns: 110px 1fr auto; gap:10px; align-items:center; font-size:.8rem; transition:opacity .15s; }
+        .rv-hbar-lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+        .rv-hbar-track { height:14px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+        .rv-hbar-fill { height:100%; border-radius:0 4px 4px 0; }
+        .rv-hbar-val { font-weight:600; white-space:nowrap; } .rv-hbar-val span { color:var(--text-muted); font-weight:400; }
         @media (max-width: 760px) { .rv-g2,.rv-g3,.rv-g4 { grid-template-columns:1fr 1fr; } .rv-modal { padding:22px 18px !important; } }
         @media (max-width: 520px) { .rv-g2,.rv-g3,.rv-g4 { grid-template-columns:1fr; } }
       `}</style>
@@ -276,6 +421,56 @@ export default function ReporteVentas() {
             {TIPOS.filter(t => resumen.porTipo[t.v]).map(t => (
               <div className="stat-card" key={t.v}><div className="stat-card-label">{t.icon} {t.label}</div><div className="stat-card-value" style={{ fontSize: "1.5rem" }}>{mxn(resumen.porTipo[t.v])}</div></div>
             ))}
+          </div>
+        )}
+
+        {grafica && (
+          <div className="rv-charts">
+            <div className="rv-charts-grid">
+              <div className="table-card">
+                <div className="table-card-header" style={{ gap: 10, flexWrap: "wrap" }}>
+                  <span className="table-card-title">Comisión por mes</span>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <select className="form-select" style={{ width: "auto", padding: "6px 10px" }} value={meses} onChange={e => setMeses(Number(e.target.value))}>
+                      <option value={6}>Últimos 6 meses</option><option value={12}>Últimos 12 meses</option><option value={24}>Últimos 24 meses</option>
+                    </select>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setVerTabla(v => !v)}>{verTabla ? "📊 Gráfica" : "📋 Ver tabla"}</button>
+                  </div>
+                </div>
+                <div className="rv-chart-body">
+                  {verTabla ? (
+                    <div style={{ overflowX: "auto" }}>
+                      <table className="rv-table">
+                        <thead><tr><th>Mes</th>{TIPOS.map(tp => <th key={tp.v} className="rv-r">{tp.label}</th>)}<th className="rv-r">Ventas</th><th className="rv-r">Total</th></tr></thead>
+                        <tbody>
+                          {grafica.meses.map(m => (
+                            <tr key={m.periodo}>
+                              <td>{etiquetaMesLarga(m.periodo)}</td>
+                              {TIPOS.map(tp => <td key={tp.v} className="rv-r">{m.porTipo[tp.v] ? mxn(m.porTipo[tp.v]!) : "—"}</td>)}
+                              <td className="rv-r">{m.cantidad || "—"}</td>
+                              <td className="rv-r" style={{ fontWeight: 700 }}>{m.total ? mxn(m.total) : "—"}</td>
+                            </tr>
+                          ))}
+                          <tr><td style={{ fontWeight: 700 }}>Total</td>{TIPOS.map(tp => <td key={tp.v} className="rv-r" style={{ fontWeight: 700 }}>{grafica.porTipo[tp.v] ? mxn(grafica.porTipo[tp.v]!) : "—"}</td>)}<td className="rv-r" style={{ fontWeight: 700 }}>{grafica.meses.reduce((s, m) => s + m.cantidad, 0)}</td><td className="rv-r" style={{ fontWeight: 700 }}>{mxn(grafica.total)}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : grafica.total > 0 ? (
+                    <GraficaMensual data={grafica} periodoSel={periodo} />
+                  ) : (
+                    <div className="rv-hint" style={{ padding: 24, textAlign: "center" }}>Aún no hay comisiones capturadas en este rango.</div>
+                  )}
+                </div>
+              </div>
+              <div className="table-card">
+                <div className="table-card-header"><span className="table-card-title">{esAdmin ? "Por asesor" : "Por tipo de venta"} · {meses} meses</span></div>
+                <div className="rv-chart-body">
+                  <GraficaBarrasH filas={esAdmin
+                    ? grafica.porAsesor.map(a => ({ etiqueta: a.asesor, valor: a.comision, color: "var(--solo)" }))
+                    : TIPOS.filter(tp => (grafica.porTipo[tp.v] ?? 0) > 0).map(tp => ({ etiqueta: tp.label, valor: grafica.porTipo[tp.v] ?? 0, color: SERIE[tp.v] }))} />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
