@@ -63,6 +63,13 @@ const formVacio = (periodo: string, tipo: Tipo = "equipo"): Form => ({
 // ═════════════════════════ GRÁFICAS ═════════════════════════
 type MesResumen = { periodo: string; total: number; cantidad: number; porTipo: Partial<Record<Tipo, number>> };
 type ResumenG = { periodos: string[]; meses: MesResumen[]; porAsesor: { asesor: string; comision: number }[]; porTipo: Partial<Record<Tipo, number>>; total: number };
+type Bloque = { total: number; porTipo: Partial<Record<Tipo, number>> };
+type ResumenRaw = {
+  periodos: string[];
+  meses: { periodo: string; cantidad: number; ventas: Bloque; comisiones: Bloque }[];
+  porAsesor: { asesor: string; ventas: number; comision: number }[];
+  ventas: Bloque; comisiones: Bloque;
+};
 
 const SERIE: Record<Tipo, string> = { equipo: "var(--s1)", renta: "var(--s2)", refacciones: "var(--s3)", servicio: "var(--s4)", venta: "var(--s5)", otro: "var(--s6)" };
 const MESES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -99,7 +106,7 @@ function GraficaMensual({ data, periodoSel }: { data: ResumenG; periodoSel: stri
   return (
     <div style={{ position: "relative" }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} role="img"
-           aria-label="Comisión por mes, apilada por tipo de venta" onMouseLeave={() => setHover(null)}>
+           aria-label="Total por mes, apilado por tipo de venta" onMouseLeave={() => setHover(null)}>
         {ticks.map(v => (
           <g key={v}>
             <line x1={ML} x2={W - MR} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeWidth={1} opacity={v === 0 ? 1 : 0.6} />
@@ -184,7 +191,8 @@ export default function ReporteVentas() {
   const [filtroAsesor, setFiltroAsesor] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<"" | Tipo>("");
   const [lineas, setLineas] = useState<Linea[]>([]);
-  const [grafica, setGrafica] = useState<ResumenG | null>(null);
+  const [graficaRaw, setGraficaRaw] = useState<ResumenRaw | null>(null);
+  const [metrica, setMetrica] = useState<"ventas" | "comisiones">("ventas");
   const [meses, setMeses] = useState(12);
   const [verTabla, setVerTabla] = useState(false);
   const [resumen, setResumen] = useState<Resumen | null>(null);
@@ -220,8 +228,8 @@ export default function ReporteVentas() {
   useEffect(() => {
     let vivo = true;
     api.get("/comisiones/resumen", { params: { hasta: periodo, meses, asesorId: filtroAsesor || undefined, tipo: filtroTipo || undefined } })
-      .then(r => { if (vivo) setGrafica(r.data); })
-      .catch(() => { if (vivo) setGrafica(null); });
+      .then(r => { if (vivo) setGraficaRaw(r.data); })
+      .catch(() => { if (vivo) setGraficaRaw(null); });
     return () => { vivo = false; };
   }, [periodo, meses, filtroAsesor, filtroTipo, lineas]);
   useEffect(() => { api.get("/asesores").then(r => setAsesores(r.data ?? [])).catch(() => {}); }, []);
@@ -328,6 +336,21 @@ export default function ReporteVentas() {
     a.download = `reporte_ventas_${periodo}.csv`; a.click(); URL.revokeObjectURL(a.href);
   }
 
+  // Misma forma de datos para ambas métricas: ventas (subtotal sin IVA, en MXN) o comisiones
+  const grafica: ResumenG | null = useMemo(() => {
+    if (!graficaRaw) return null;
+    const k = metrica === "ventas" ? "ventas" : "comisiones";
+    return {
+      periodos: graficaRaw.periodos,
+      meses: graficaRaw.meses.map(m => ({ periodo: m.periodo, cantidad: m.cantidad, total: m[k].total, porTipo: m[k].porTipo })),
+      porAsesor: graficaRaw.porAsesor
+        .map(a => ({ asesor: a.asesor, comision: metrica === "ventas" ? a.ventas : a.comision }))
+        .sort((x, y) => y.comision - x.comision),
+      porTipo: graficaRaw[k].porTipo,
+      total: graficaRaw[k].total,
+    };
+  }, [graficaRaw, metrica]);
+  const nombreMetrica = metrica === "ventas" ? "Ventas antes de IVA" : "Comisiones";
   const totalMostrado = useMemo(() => lineas.reduce((s, l) => s + l.comision, 0), [lineas]);
   const f = form;
   const sinAsesor = !esAdmin && miAsesorListo && !miAsesor;
@@ -429,8 +452,11 @@ export default function ReporteVentas() {
             <div className="rv-charts-grid">
               <div className="table-card">
                 <div className="table-card-header" style={{ gap: 10, flexWrap: "wrap" }}>
-                  <span className="table-card-title">Comisión por mes</span>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span className="table-card-title">{nombreMetrica} por mes</span>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <select className="form-select" style={{ width: "auto", padding: "6px 10px" }} value={metrica} onChange={e => setMetrica(e.target.value as any)}>
+                      <option value="ventas">Ventas (antes de IVA)</option><option value="comisiones">Comisiones</option>
+                    </select>
                     <select className="form-select" style={{ width: "auto", padding: "6px 10px" }} value={meses} onChange={e => setMeses(Number(e.target.value))}>
                       <option value={6}>Últimos 6 meses</option><option value={12}>Últimos 12 meses</option><option value={24}>Últimos 24 meses</option>
                     </select>
@@ -458,12 +484,12 @@ export default function ReporteVentas() {
                   ) : grafica.total > 0 ? (
                     <GraficaMensual data={grafica} periodoSel={periodo} />
                   ) : (
-                    <div className="rv-hint" style={{ padding: 24, textAlign: "center" }}>Aún no hay comisiones capturadas en este rango.</div>
+                    <div className="rv-hint" style={{ padding: 24, textAlign: "center" }}>Aún no hay ventas capturadas en este rango.</div>
                   )}
                 </div>
               </div>
               <div className="table-card">
-                <div className="table-card-header"><span className="table-card-title">{esAdmin ? "Por asesor" : "Por tipo de venta"} · {meses} meses</span></div>
+                <div className="table-card-header"><span className="table-card-title">{nombreMetrica} · {esAdmin ? "por asesor" : "por tipo"} · {meses} meses</span></div>
                 <div className="rv-chart-body">
                   <GraficaBarrasH filas={esAdmin
                     ? grafica.porAsesor.map(a => ({ etiqueta: a.asesor, valor: a.comision, color: "var(--solo)" }))
