@@ -350,6 +350,13 @@ export default function ReporteVentas() {
       total: graficaRaw[k].total,
     };
   }, [graficaRaw, metrica]);
+  // Ventas del mes = subtotal SIN IVA convertido a MXN (USD con su tipo de cambio)
+  const ventaDe = (l: Linea) => (l.subtotal || 0) * (l.tipoCambio > 0 ? l.tipoCambio : 1);
+  const desglose = useMemo(() => TIPOS.map(tp => {
+    const ls = lineas.filter(l => l.tipo === tp.v);
+    return { tp, n: ls.length, ventas: round2(ls.reduce((s, l) => s + ventaDe(l), 0)), comision: round2(ls.reduce((s, l) => s + l.comision, 0)) };
+  }).filter(d => d.n > 0), [lineas]);
+  const ventasMes = useMemo(() => round2(lineas.reduce((s, l) => s + ventaDe(l), 0)), [lineas]);
   const nombreMetrica = metrica === "ventas" ? "Ventas antes de IVA" : "Comisiones";
   const totalMostrado = useMemo(() => lineas.reduce((s, l) => s + l.comision, 0), [lineas]);
   const f = form;
@@ -361,7 +368,22 @@ export default function ReporteVentas() {
       <style>{`
         .rv-filters { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
         .rv-filters .form-group { min-width: 190px; }
-        .rv-stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:14px; }
+        .rv-kpis { display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:14px; }
+        .rv-kpi { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 22px; display:flex; flex-direction:column; gap:6px; min-width:0; }
+        .rv-kpi-acento { border-color:rgba(245,158,11,.45); box-shadow:inset 0 0 0 1px rgba(245,158,11,.10); }
+        .rv-kpi-lbl { font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:var(--text-muted); font-weight:600; }
+        .rv-kpi-val { font-family:var(--font-body, inherit); font-size:1.75rem; font-weight:800; letter-spacing:-.02em; line-height:1.15; white-space:nowrap; font-variant-numeric:tabular-nums; }
+        .rv-kpi-sub { font-size:.78rem; color:var(--text-muted); }
+        .rv-share { display:flex; gap:2px; height:12px; border-radius:6px; overflow:hidden; margin:4px 0 16px; }
+        .rv-brk { display:flex; flex-direction:column; }
+        .rv-brk-row { display:grid; grid-template-columns: minmax(150px, 1.6fr) 1.2fr 1.2fr 80px; gap:12px; align-items:center; padding:11px 4px; border-bottom:1px solid var(--border); font-size:.88rem; font-variant-numeric:tabular-nums; }
+        .rv-brk-row:last-child { border-bottom:none; }
+        .rv-brk-head { font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; color:var(--text-muted); font-weight:600; padding-top:2px; }
+        .rv-brk-tipo { display:flex; align-items:center; gap:8px; font-weight:600; }
+        .rv-brk-tipo i { width:10px; height:10px; border-radius:3px; display:inline-block; flex:none; }
+        .rv-brk-tipo em { font-style:normal; font-weight:500; font-size:.72rem; color:var(--text-muted); background:var(--surface2); border-radius:10px; padding:1px 8px; }
+        .rv-muted { color:var(--text-muted); }
+        @media (max-width: 640px) { .rv-brk-row { grid-template-columns: 1.4fr 1fr 1fr; } .rv-brk-row > :nth-child(4) { display:none; } }
         .rv-table { width:100%; border-collapse:collapse; }
         .rv-table th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--border); white-space:nowrap; }
         .rv-table td { padding:14px 16px; border-bottom:1px solid var(--border); vertical-align:middle; font-size:.88rem; }
@@ -438,13 +460,49 @@ export default function ReporteVentas() {
         </div>
 
         {resumen && (
-          <div className="rv-stats">
-            <div className="stat-card"><div className="stat-card-label">Comisiones del mes</div><div className="stat-card-value">{mxn(totalMostrado)}</div></div>
-            <div className="stat-card"><div className="stat-card-label">Ventas capturadas</div><div className="stat-card-value">{resumen.cantidad}</div></div>
-            {TIPOS.filter(t => resumen.porTipo[t.v]).map(t => (
-              <div className="stat-card" key={t.v}><div className="stat-card-label">{t.icon} {t.label}</div><div className="stat-card-value" style={{ fontSize: "1.5rem" }}>{mxn(resumen.porTipo[t.v])}</div></div>
-            ))}
-          </div>
+          <>
+            <div className="rv-kpis">
+              <div className="rv-kpi">
+                <div className="rv-kpi-lbl">Ventas del mes · antes de IVA</div>
+                <div className="rv-kpi-val">{mxn(ventasMes)}</div>
+                <div className="rv-kpi-sub">{lineas.length} {lineas.length === 1 ? "venta capturada" : "ventas capturadas"}</div>
+              </div>
+              <div className="rv-kpi rv-kpi-acento">
+                <div className="rv-kpi-lbl">Comisiones del mes</div>
+                <div className="rv-kpi-val">{mxn(totalMostrado)}</div>
+                <div className="rv-kpi-sub">{ventasMes > 0 ? `${((totalMostrado / ventasMes) * 100).toFixed(1)}% de las ventas` : "—"}</div>
+              </div>
+              <div className="rv-kpi">
+                <div className="rv-kpi-lbl">Promedio por venta</div>
+                <div className="rv-kpi-val">{lineas.length ? mxn(ventasMes / lineas.length) : "—"}</div>
+                <div className="rv-kpi-sub">antes de IVA</div>
+              </div>
+            </div>
+
+            {desglose.length > 0 && (
+              <div className="table-card rv-charts">
+                <div className="table-card-header"><span className="table-card-title">Desglose del mes por tipo</span></div>
+                <div className="rv-chart-body">
+                  <div className="rv-share" role="img" aria-label="Participación de cada tipo en las ventas del mes">
+                    {desglose.map(d => (
+                      <div key={d.tp.v} title={`${d.tp.label}: ${mxn(d.ventas)}`} style={{ flex: Math.max(d.ventas, 0.0001), background: SERIE[d.tp.v] }} />
+                    ))}
+                  </div>
+                  <div className="rv-brk">
+                    <div className="rv-brk-row rv-brk-head"><span>Tipo</span><span className="rv-r">Ventas</span><span className="rv-r">Comisión</span><span className="rv-r">% ventas</span></div>
+                    {desglose.map(d => (
+                      <div key={d.tp.v} className="rv-brk-row">
+                        <span className="rv-brk-tipo"><i style={{ background: SERIE[d.tp.v] }} />{d.tp.label}<em>{d.n}</em></span>
+                        <span className="rv-r">{mxn(d.ventas)}</span>
+                        <span className="rv-r">{mxn(d.comision)}</span>
+                        <span className="rv-r rv-muted">{ventasMes > 0 ? `${Math.round((d.ventas / ventasMes) * 100)}%` : "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {grafica && (
