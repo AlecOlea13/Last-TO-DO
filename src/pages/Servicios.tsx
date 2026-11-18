@@ -29,7 +29,8 @@ type Pausa = {
 type Servicio = {
   _id: string;
   folio: string;
-  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string; esDeCliente?: boolean };
+  montacargas?: { _id: string; numeroEconomico: string; marca: string; modelo?: string; serie?: string; esDeCliente?: boolean; porAsignar?: boolean };
+  equipoPorAsignar?: boolean;
   cliente?: { _id: string; nombre: string; direccion?: string; telefono?: string; email?: string };
   tipoServicio?: { _id: string; nombre: string };
   tecnicoAsignado?: { _id: string; nombre: string };
@@ -55,6 +56,7 @@ type Servicio = {
 
 type Monta        = { _id: string; numeroEconomico: string; marca: string; clienteActual?: { _id: string; nombre: string } | null };
 type Cliente      = { _id: string; nombre: string };
+const POR_ASIGNAR = "__por_asignar__"; // opción "Equipo a asignar" (servicio sin equipo definido aún)
 type TipoServicio = { _id: string; nombre: string; intervaloHrs?: number };
 type Usuario      = { _id: string; nombre: string; rol: string };
 
@@ -616,6 +618,9 @@ export default function Servicios() {
   const [regEqAbierto, setRegEqAbierto]     = useState(false);
   const [regEqForm, setRegEqForm]           = useState({ numeroEconomico: "", marca: "", modelo: "", serie: "", tipo: "", capacidad: "" });
   const [regEqSaving, setRegEqSaving]       = useState(false);
+  // Levantamiento: equipo del cliente que captura el técnico al cerrar un servicio "por asignar"
+  const EQ_LEV_VACIO = { numeroEconomico: "", marca: "", modelo: "", serie: "", tipo: "", capacidad: "" };
+  const [levForm, setLevForm]               = useState(EQ_LEV_VACIO);
   const [usuarios, setUsuarios]         = useState<Usuario[]>([]);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState("");
@@ -732,12 +737,15 @@ export default function Servicios() {
   async function save() {
     const equipoElegido = tipoEquipo === "cliente" ? form.equipoCliente : form.montacargas;
     if (!equipoElegido || !form.problema.trim()) return;
+    const porAsignar = tipoEquipo === "pipsa" && form.montacargas === POR_ASIGNAR;
+    if (porAsignar && !form.cliente) { alert("Selecciona el cliente: el equipo que levante el técnico se registrará en su cuenta"); return; }
     setSaving(true);
     try {
       const payload: any = { ...form };
       // Uno u otro, nunca ambos
       if (tipoEquipo === "cliente") payload.montacargas = "";
       else payload.equipoCliente = "";
+      if (porAsignar) { payload.montacargas = ""; payload.equipoCliente = ""; payload.equipoPorAsignar = true; }
       const { data } = await api.post("/servicios", payload);
       setServicios(prev => [data, ...prev]);
       setModal(false);
@@ -937,6 +945,15 @@ export default function Servicios() {
     try {
       const ubicacion = await obtenerUbicacion();
       const payload: any = { ...cerrarForm, ...(ubicacion ? { ubicacion } : {}) };
+      if (cerrarModal.montacargas?.porAsignar) {
+        const f = levForm;
+        if (!f.marca.trim() && !f.modelo.trim() && !f.serie.trim() && !f.numeroEconomico.trim()) {
+          alert("Captura el equipo del cliente (al menos marca, modelo, serie o número) antes de cerrar el levantamiento");
+          setSaving(false);
+          return;
+        }
+        payload.equipoLevantamiento = f;
+      }
       // Estatus del equipo y próximo servicio ya no se capturan en la UI:
       // el backend calcula estatusRegreso automáticamente al cerrar, y el
       // próximo servicio se programa solo (cada mes), sin input manual.
@@ -1009,7 +1026,7 @@ export default function Servicios() {
   }
 
   function onMontaChange(montaId: string) {
-    const monta = montas.find(m => m._id === montaId);
+    const monta = montas.find(m => m._id === montaId);   // con "Equipo a asignar" no hay monta: conserva el cliente
     setForm((p: any) => ({ ...p, montacargas: montaId, cliente: monta?.clienteActual?._id ?? p.cliente }));
   }
 
@@ -1316,6 +1333,30 @@ export default function Servicios() {
   }
 
   // ── Vista técnico ──
+  // Captura del equipo del cliente al cerrar un servicio con "Equipo a asignar" (levantamiento)
+  const bloqueLevantamiento = cerrarModal?.montacargas?.porAsignar ? (
+    <div style={{ padding: 12, border: "1px solid var(--accent)", borderRadius: "var(--radius-sm)", background: "rgba(255,180,0,0.06)", marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: "0.88rem", marginBottom: 2 }}>🏢 Equipo del cliente (levantamiento)</div>
+      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Captura el equipo que tiene el cliente: queda registrado en su cuenta.</div>
+      <div className="form-grid">
+        <div className="form-group"><label className="form-label">Tipo</label>
+          <select className="form-select" value={levForm.tipo} onChange={e => setLevForm(p => ({ ...p, tipo: e.target.value }))}>
+            <option value="">Sin especificar</option><option value="electrico">Eléctrico</option><option value="gas">Gas</option><option value="diesel">Diésel</option>
+          </select></div>
+        <div className="form-group"><label className="form-label">Marca</label>
+          <input className="form-input" value={levForm.marca} onChange={e => setLevForm(p => ({ ...p, marca: e.target.value }))} /></div>
+        <div className="form-group"><label className="form-label">Modelo</label>
+          <input className="form-input" value={levForm.modelo} onChange={e => setLevForm(p => ({ ...p, modelo: e.target.value }))} /></div>
+        <div className="form-group"><label className="form-label">Serie</label>
+          <input className="form-input" value={levForm.serie} onChange={e => setLevForm(p => ({ ...p, serie: e.target.value }))} /></div>
+        <div className="form-group"><label className="form-label">No. / identificador</label>
+          <input className="form-input" value={levForm.numeroEconomico} onChange={e => setLevForm(p => ({ ...p, numeroEconomico: e.target.value }))} placeholder="Como lo llama el cliente" /></div>
+        <div className="form-group"><label className="form-label">Capacidad</label>
+          <input className="form-input" value={levForm.capacidad} onChange={e => setLevForm(p => ({ ...p, capacidad: e.target.value }))} placeholder="5000 lbs..." /></div>
+      </div>
+    </div>
+  ) : null;
+
   if (esTecnico) {
     return (
       <>
@@ -1359,7 +1400,7 @@ export default function Servicios() {
             onIniciarConfirm={s => setConfirmarIniciarModal(s)}
             onPausar={s => { setPausarModal(s); setRazonPausa(""); }}
             onReanudar={reanudar}
-            onCerrar={s => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setPendientesTexto([""]); }}
+            onCerrar={s => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setLevForm(EQ_LEV_VACIO); setPendientesTexto([""]); }}
           />
         )}
 
@@ -1442,6 +1483,7 @@ export default function Servicios() {
                 </div>
               )}
               <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 12 }}>📍 Se registrará tu ubicación al confirmar el cierre</div>
+              {bloqueLevantamiento}
               <div className="form-grid">
                 <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                   <label className="form-label">Horómetro al cierre</label>
@@ -1600,7 +1642,7 @@ export default function Servicios() {
                           )}
                           {!soloVer && s.estatus !== "cerrado" && puedeOperar && (
                             <button className="btn btn-amber btn-sm" style={{ whiteSpace: "nowrap" }}
-                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setPendientesTexto([""]); }}>
+                              onClick={() => { setCerrarModal(s); setCerrarForm({ ...emptyCerrarForm, horometro: s.horometro ?? 0 }); setLevForm(EQ_LEV_VACIO); setPendientesTexto([""]); }}>
                               Cerrar
                             </button>
                           )}
@@ -1795,10 +1837,16 @@ export default function Servicios() {
                     {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente</p>}
                     <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
                       <option value="">Selecciona equipo...</option>
+                      <option value={POR_ASIGNAR}>🕓 Equipo a asignar (levantamiento)</option>
                       {(montasSinCliente ? montas : montasFiltradas).map(m => (
                         <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
                       ))}
                     </select>
+                    {form.montacargas === POR_ASIGNAR && (
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 6 }}>
+                        El técnico capturará el equipo del cliente (tipo, marca, modelo, serie…) al cerrar el servicio.{!form.cliente && " Selecciona el cliente arriba."}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -1892,7 +1940,7 @@ export default function Servicios() {
                 <textarea className="form-textarea" value={form.problema} onChange={e => setForm((p: any) => ({ ...p, problema: e.target.value }))} placeholder="Describe el problema o trabajo a realizar..." rows={3} />
               </div>
             </div>
-            {form.tipoServicio && tipoEquipo === "pipsa" && (
+            {form.tipoServicio && tipoEquipo === "pipsa" && form.montacargas !== POR_ASIGNAR && (
               <div style={{ padding: "10px 14px", background: "rgba(255,180,0,0.08)", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", fontSize: "0.82rem", color: "var(--accent)", marginTop: 8 }}>
                 ⚡ Se generará automáticamente una orden de refacciones al guardar.
               </div>
@@ -1955,6 +2003,7 @@ export default function Servicios() {
                 ⚠️ La orden <strong>{cerrarModal.ordenRefaccion.folio}</strong> aún no está surtida completamente.
               </div>
             )}
+            {bloqueLevantamiento}
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: "1 / -1" }}>
                 <label className="form-label">Horómetro al cierre</label>
