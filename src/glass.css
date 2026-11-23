@@ -366,3 +366,16 @@
   background:linear-gradient(90deg,transparent,rgba(14,18,28,.78) 22%); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
 [data-theme="light"] .glass-ui td.g-sticky-act { background:linear-gradient(90deg,transparent,rgba(255,255,255,.88) 22%); }
 .glass-ui .g-combo { width:100%; }
+
+/* Botón de comentarios con contador visible */
+.glass-ui .btn.g-comment { overflow:visible; position:relative; }
+.g-count {
+  position:absolute; top:-9px; right:-9px; min-width:19px; height:19px; padding:0 5px; box-sizing:border-box;
+  display:flex; align-items:center; justify-content:center; border-radius:999px;
+  font-size:.68rem; font-weight:800; line-height:1; color:#2a1700;
+  background:linear-gradient(145deg,#fcd34d,#f59e0b); border:1.5px solid rgba(14,18,28,.9);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 3px 10px -2px rgba(245,158,11,.7);
+  animation:gCountIn .45s cubic-bezier(.34,1.56,.64,1) both; z-index:2;
+}
+[data-theme="light"] .g-count { border-color:#fff; }
+@keyframes gCountIn { from { transform:scale(0); } to { transform:scale(1); } }

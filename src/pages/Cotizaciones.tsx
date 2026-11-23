@@ -1206,10 +1206,10 @@ export default function Cotizaciones() {
                       </td>
                       <td>
                         {canComment && (
-                          <button className="btn btn-secondary btn-sm" onClick={() => { setComentarioModal(c); setNuevoComentario(""); }} style={{ position: "relative" }}>
+                          <button className="btn btn-secondary btn-sm g-comment" onClick={() => { setComentarioModal(c); setNuevoComentario(""); }}>
                             <Ico name="chat" size={14} />
                             {c.comentarios?.length > 0 && (
-                              <span style={{ position: "absolute", top: -6, right: -6, background: "var(--accent)", color: "#000", borderRadius: "50%", width: 16, height: 16, fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{c.comentarios.length}</span>
+                              <span className="g-count">{c.comentarios.length > 99 ? "99+" : c.comentarios.length}</span>
                             )}
                           </button>
                         )}
