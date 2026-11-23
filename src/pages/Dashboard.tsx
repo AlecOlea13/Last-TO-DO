@@ -1,3 +1,5 @@
+import { Ico, IcoEmoji } from "../components/GlassUI";
+import "../glass.css";
 import { useEffect, useState, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, setAuth } from "../api";
@@ -170,7 +172,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className={`dash-root${sidebarCollapsed ? " sidebar-is-collapsed" : ""}${HALLOWEEN_ENABLED ? " hw-theme" : ""}`}>
+    <div className={`dash-root glass-ui${sidebarCollapsed ? " sidebar-is-collapsed" : ""}${HALLOWEEN_ENABLED ? " hw-theme" : ""}`}>
 
       {/* ══ HALLOWEEN: capa global fija (fondo + luna + niebla) ══
            position:fixed → visible en TODOS los módulos          */}
@@ -221,7 +223,7 @@ export default function Dashboard() {
             onClick={() => setSidebarCollapsed(p => !p)}
             aria-label={sidebarCollapsed ? "Expandir menú" : "Colapsar menú"}
             title={sidebarCollapsed ? "Expandir" : "Colapsar"}>
-            {sidebarCollapsed ? "›" : "‹"}
+            <Ico name={sidebarCollapsed ? "right" : "left"} size={14} />
           </button>
         </div>
 
@@ -242,7 +244,7 @@ export default function Dashboard() {
             className={`nav-item ${location.pathname === item.to ? "active" : ""}`}
             onClick={() => setSidebarOpen(false)}
             title={sidebarCollapsed ? item.label : undefined}>
-            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-icon"><IcoEmoji emoji={item.icon} size={16} /></span>
             {!sidebarCollapsed && item.label}
           </Link>
         ))}
@@ -250,7 +252,7 @@ export default function Dashboard() {
         {!sidebarCollapsed && (
           <button className="theme-toggle" onClick={toggleTheme}>
             <span style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span className="theme-toggle-icon">{theme === "dark" ? "🌙" : "☀️"}</span>
+              <span className="theme-toggle-icon"><Ico name={theme === "dark" ? "moon" : "sun"} size={15} /></span>
               {theme === "dark" ? "Modo oscuro" : "Modo claro"}
             </span>
             <span style={{ fontSize:"0.7rem", opacity:0.6 }}>Cambiar</span>
@@ -259,7 +261,7 @@ export default function Dashboard() {
 
         <div className="sidebar-spacer" />
         <button className="sidebar-logout" onClick={logout} title={sidebarCollapsed ? "Cerrar sesión" : undefined}>
-          <span>↩</span>
+          <Ico name="logout" size={16} />
           {!sidebarCollapsed && "Cerrar sesión"}
         </button>
       </aside>

@@ -23,10 +23,31 @@ const PATHS: Record<string, ReactNode> = {
   pin:      <><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></>,
   flag:     <><path d="M4 22V4" /><path d="M4 4h13l-2 4 2 4H4" /></>,
   trash:    <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /></>,
+  dash:     <><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>,
+  truck:    <><path d="M2 17V6h11v11" /><path d="M13 9h4l4 4v4h-8" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
+  wrench:   <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4Z" />,
+  factory:  <><path d="M2 21V9l6 4V9l6 4V5h4v16Z" /><path d="M2 21h20" /></>,
+  note:     <><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>,
+  box:      <><path d="M21 8 12 3 3 8v8l9 5 9-5Z" /><path d="m3 8 9 5 9-5M12 13v8" /></>,
+  building: <><rect x="4" y="3" width="16" height="18" rx="1.5" /><path d="M9 8h2M13 8h2M9 12h2M13 12h2M10 21v-4h4v4" /></>,
+  receipt:  <><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2Z" /><path d="M9 8h6M9 12h6" /></>,
+  user:     <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+  users:    <><circle cx="9" cy="8" r="3.5" /><path d="M2 20a7 7 0 0 1 14 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M22 20a7 7 0 0 0-4-6.3" /></>,
+  coins:    <><circle cx="9" cy="9" r="6" /><path d="M15 9.5a6 6 0 1 1-4.5 8.5" /><path d="M9 6.5v5" /></>,
+  folder:   <path d="M3 6a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />,
+  key:      <><circle cx="8" cy="15" r="4" /><path d="m11 12 9-9M16 7l3 3" /></>,
+  car:      <><path d="M5 17H3v-5l2-5h14l2 5v5h-2" /><circle cx="7.5" cy="17" r="1.8" /><circle cx="16.5" cy="17" r="1.8" /><path d="M3 12h18" /></>,
+  trend:    <><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
+  logout:   <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5M21 12H9" /></>,
+  moon:     <path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10Z" />,
+  sun:      <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+  left:     <path d="m15 18-6-6 6-6" />,
+  right:    <path d="m9 18 6-6-6-6" />,
   dots:     <><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></>,
 };
 const EMOJI_A_ICONO: Record<string, string> = {
   "👁️": "eye", "🖨️": "printer", "✏️": "pencil", "📋": "clipboard", "📍": "pin", "🏁": "flag", "🗑️": "trash",
+  "📊": "dash", "🏗️": "truck", "🔧": "wrench", "🏭": "factory", "📝": "note", "📦": "box", "🏢": "building", "📄": "clipboard", "🧾": "receipt", "👤": "user", "👥": "users", "💰": "coins", "📁": "folder", "🔑": "key", "🚗": "car", "📈": "trend",
 };
 
 export function Ico({ name, size = 15 }: { name: string; size?: number }) {
@@ -293,4 +314,18 @@ export function Combobox({ value, onChange, options, placeholder = "Selecciona..
       )}
     </div>
   );
+}
+
+// ── Icono a partir de un emoji (para el menú lateral) ──
+export function IcoEmoji({ emoji, size = 16 }: { emoji: string; size?: number }) {
+  return EMOJI_A_ICONO[emoji] ? <Ico name={EMOJI_A_ICONO[emoji]} size={size} /> : <span>{emoji}</span>;
+}
+
+// ── Reemplazo rápido de <select>: mismas opciones, diseño cristal y búsqueda ──
+// Uso: <Select value={x} onChange={setX} options={[{value:"a",label:"A"}]} placeholder="Todos" />
+export function Select({ value, onChange, options, placeholder = "Selecciona...", disabled }: {
+  value: string; onChange: (v: string) => void;
+  options: { value: string; label: string }[]; placeholder?: string; disabled?: boolean;
+}) {
+  return <Combobox value={value} onChange={onChange} options={options} placeholder={placeholder} disabled={disabled} clearable />;
 }
