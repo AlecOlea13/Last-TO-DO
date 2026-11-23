@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from "react";
-import MenuAcciones from "../components/MenuAcciones";
+import { useEffect, useState } from "react";
+import { Ico, MenuAcciones, Buscador, Combobox } from "../components/GlassUI";
+import "../glass.css";
 import CotizacionesAnalisis from "../components/CotizacionesAnalisis";
 import { api } from "../api";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
@@ -173,53 +174,14 @@ function SearchableSelect({
   placeholder: string;
   renderLabel?: (opt: { _id: string; label: string }) => string;
 }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen]   = useState(false);
-  const ref               = useRef<HTMLDivElement>(null);
-  const selected = options.find(o => o._id === value);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filtered = options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()));
-  function select(id: string) { onChange(id); setQuery(""); setOpen(false); }
-
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <div style={{ position: "relative" }}>
-        <input
-          className="form-input"
-          value={open ? query : (selected ? (renderLabel ? renderLabel(selected) : selected.label) : "")}
-          onChange={e => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => { setOpen(true); setQuery(""); }}
-          placeholder={placeholder}
-          style={{ paddingRight: 32 }}
-        />
-        {value && (
-          <button onClick={() => { onChange(""); setQuery(""); setOpen(false); }}
-            style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "1rem", lineHeight: 1 }}>✕</button>
-        )}
-      </div>
-      {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 999, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-          {filtered.length === 0 ? (
-            <div style={{ padding: "10px 14px", color: "var(--text-muted)", fontSize: "0.85rem" }}>Sin resultados</div>
-          ) : filtered.map(o => (
-            <div key={o._id} onClick={() => select(o._id)}
-              style={{ padding: "10px 14px", cursor: "pointer", fontSize: "0.88rem", background: o._id === value ? "rgba(245,158,11,0.1)" : "transparent", color: o._id === value ? "var(--accent)" : "var(--text)", borderBottom: "1px solid var(--border)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = o._id === value ? "rgba(245,158,11,0.1)" : "transparent")}>
-              {renderLabel ? renderLabel(o) : o.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Combobox
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      clearable
+      options={options.map(o => ({ value: o._id, label: renderLabel ? renderLabel(o) : o.label }))}
+    />
   );
 }
 
@@ -769,13 +731,10 @@ export default function Cotizaciones() {
         )}
         <div className="form-group">
           <label className="form-label">Tipo *</label>
-          <select className="form-select" value={form.tipo} onChange={e => setForm((p: any) => ({ ...p, tipo: e.target.value }))}>
-            <option value="servicio">Servicio / Mantenimiento</option>
-            <option value="renta">Renta</option>
-            <option value="venta">Venta</option>
-            <option value="refacciones">Refacciones</option>
-            <option value="curso">🎓 Curso DC-3</option>
-          </select>
+          <Combobox value={form.tipo} onChange={v => setForm((p: any) => ({ ...p, tipo: v }))} options={[
+            { value: "servicio", label: "Servicio / Mantenimiento" }, { value: "renta", label: "Renta" }, { value: "venta", label: "Venta" },
+            { value: "refacciones", label: "Refacciones" }, { value: "curso", label: "Curso DC-3" },
+          ]} />
         </div>
 
         <div className="form-group span-2" style={{ margin: 0 }}>
@@ -876,10 +835,9 @@ export default function Cotizaciones() {
         <div className="form-group"><label className="form-label">Lugar</label><input className="form-input" value={form.lugar} onChange={e => setForm((p: any) => ({ ...p, lugar: e.target.value }))} /></div>
         <div className="form-group">
           <label className="form-label">Estatus</label>
-          <select className="form-select" value={form.estatus} onChange={e => setForm((p: any) => ({ ...p, estatus: e.target.value }))}>
-            <option value="activa">Activa</option>
-            <option value="cancelada">Cancelada</option>
-          </select>
+          <Combobox value={form.estatus} onChange={v => setForm((p: any) => ({ ...p, estatus: v }))} options={[
+            { value: "activa", label: "Activa" }, { value: "cancelada", label: "Cancelada" },
+          ]} />
         </div>
 
         {!esCurso && (
@@ -895,10 +853,10 @@ export default function Cotizaciones() {
           <div className="form-group span-2" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", padding: 12 }}>
             <p style={{ fontSize: "0.72rem", color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>⚙️ Autocompletar desde tipo de servicio</p>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <select className="form-select" defaultValue="" onChange={e => { if (e.target.value) aplicarTipoServicio(e.target.value); }}>
-                <option value="">Selecciona un tipo de servicio...</option>
-                {tiposServicio.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}{t.precioTotal ? ` — $${t.precioTotal.toLocaleString()}` : ""}</option>)}
-              </select>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Combobox value="" onChange={v => { if (v) aplicarTipoServicio(v); }} placeholder="Selecciona un tipo de servicio..."
+                  options={tiposServicio.map((t: any) => ({ value: t._id, label: t.nombre, sub: [t.intervaloHrs ? `${t.intervaloHrs} hrs` : "", t.precioTotal ? `$${t.precioTotal.toLocaleString()}` : ""].filter(Boolean).join(" · ") }))} />
+              </div>
               <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>Llena el primer concepto</p>
             </div>
           </div>
@@ -917,9 +875,9 @@ export default function Cotizaciones() {
             {form.tipo === "renta" && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
                 <label className="form-label" style={{ margin: 0, whiteSpace: "nowrap" }}>Periodo:</label>
-                <select className="form-select" value={form.tipoPeriodo} onChange={e => setForm((p: any) => ({ ...p, tipoPeriodo: e.target.value }))} style={{ width: "auto" }}>
-                  <option value="semanal">Semanal</option><option value="mensual">Mensual</option><option value="anual">Anual</option>
-                </select>
+                <div style={{ width: 160 }}><Combobox value={form.tipoPeriodo} onChange={v => setForm((p: any) => ({ ...p, tipoPeriodo: v }))} options={[
+                  { value: "semanal", label: "Semanal" }, { value: "mensual", label: "Mensual" }, { value: "anual", label: "Anual" },
+                ]} /></div>
               </div>
             )}
             <button className="btn btn-secondary btn-sm" style={{ color: "var(--accent)", borderColor: "rgba(245,158,11,0.3)" }}
@@ -937,12 +895,9 @@ export default function Cotizaciones() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Modalidad</label>
-                <select className="form-select" value={form.cursoDC3?.modalidad ?? "teorico-practico"}
-                  onChange={e => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, modalidad: e.target.value } }))}>
-                  <option value="teorico">Teórico</option>
-                  <option value="practico">Práctico</option>
-                  <option value="teorico-practico">Teórico-Práctico</option>
-                </select>
+                <Combobox value={form.cursoDC3?.modalidad ?? "teorico-practico"} onChange={v => setForm((p: any) => ({ ...p, cursoDC3: { ...p.cursoDC3, modalidad: v } }))} options={[
+                  { value: "teorico", label: "Teórico" }, { value: "practico", label: "Práctico" }, { value: "teorico-practico", label: "Teórico-Práctico" },
+                ]} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Duración (horas)</label>
@@ -1055,11 +1010,8 @@ export default function Cotizaciones() {
                 <div key={i} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", overflow: "hidden" }}>
                   {esRefacciones && refaccionesCatalogo.length > 0 && (
                     <div style={{ padding: "8px 8px 0" }}>
-                      <select className="form-select" style={{ fontSize: "0.8rem", padding: "6px 10px" }} defaultValue=""
-                        onChange={e => { aplicarRefaccionCatalogo(i, e.target.value); e.target.value = ""; }}>
-                        <option value="">🔍 Buscar en catálogo de Almacén (opcional)...</option>
-                        {refaccionesCatalogo.map(r => <option key={r._id} value={r._id}>{r.nombre}{r.numeroParte ? ` (${r.numeroParte})` : ""}{r.precio ? ` — $${r.precio.toLocaleString()}` : " — sin precio"}</option>)}
-                      </select>
+                      <Combobox value="" onChange={v => { if (v) aplicarRefaccionCatalogo(i, v); }} placeholder="Buscar en catálogo de Almacén (opcional)..."
+                        options={refaccionesCatalogo.map((r: any) => ({ value: r._id, label: r.nombre, sub: [r.numeroParte ? `Parte ${r.numeroParte}` : "", r.precio ? `$${r.precio.toLocaleString()}` : "sin precio"].filter(Boolean).join(" · ") }))} />
                     </div>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: "56px 50px 1fr 110px 110px 32px", gap: 6, alignItems: "center", padding: 8 }}>
@@ -1165,27 +1117,17 @@ export default function Cotizaciones() {
           <div className="table-card-header">
             <p className="table-card-title">Todas las cotizaciones</p>
             <div className="table-toolbar">
-              <input className="search-input" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtro} onChange={e => setFiltro(e.target.value)}>
-                <option value="todos">Todas</option>
-                <optgroup label="Por estatus">
-                  <option value="activa">✅ Activas</option>
-                  <option value="facturada">🧾 Facturadas</option>
-                  <option value="cancelada">❌ Canceladas</option>
-                </optgroup>
-                <optgroup label="Por tipo (solo activas)">
-                  <option value="servicio">🔧 Servicio</option>
-                  <option value="renta">📦 Renta</option>
-                  <option value="venta">💰 Venta</option>
-                  <option value="refacciones">🔩 Refacciones</option>
-                  <option value="curso">🎓 Curso DC-3</option>
-                </optgroup>
-              </select>
+              <Buscador value={search} onChange={setSearch} placeholder="Buscar..." />
+              <div style={{ width: 190 }}><Combobox value={filtro} onChange={v => setFiltro(v || "todos")} options={[
+                { value: "todos", label: "Todas" },
+                { value: "activa", label: "Activas" }, { value: "facturada", label: "Facturadas" }, { value: "cancelada", label: "Canceladas" },
+                { value: "servicio", label: "Tipo: Servicio" }, { value: "renta", label: "Tipo: Renta" }, { value: "venta", label: "Tipo: Venta" },
+                { value: "refacciones", label: "Tipo: Refacciones" }, { value: "curso", label: "Tipo: Curso DC-3" },
+              ]} /></div>
               {esAdmin && (
-                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
-                  <option value="todos">Todos los asesores</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
+                <div style={{ width: 210 }}><Combobox value={filtroAsesor} onChange={v => setFiltroAsesor(v || "todos")} options={[
+                  { value: "todos", label: "Todos los asesores" }, ...asesores.map((a: any) => ({ value: a._id, label: a.nombre })),
+                ]} /></div>
               )}
             </div>
           </div>
@@ -1265,22 +1207,22 @@ export default function Cotizaciones() {
                       <td>
                         {canComment && (
                           <button className="btn btn-secondary btn-sm" onClick={() => { setComentarioModal(c); setNuevoComentario(""); }} style={{ position: "relative" }}>
-                            💬
+                            <Ico name="chat" size={14} />
                             {c.comentarios?.length > 0 && (
                               <span style={{ position: "absolute", top: -6, right: -6, background: "var(--accent)", color: "#000", borderRadius: "50%", width: 16, height: 16, fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{c.comentarios.length}</span>
                             )}
                           </button>
                         )}
                       </td>
-                      <td style={{ position: "sticky", right: 0, zIndex: 1, background: "var(--surface)", boxShadow: "-8px 0 12px -8px rgba(0,0,0,0.5)", whiteSpace: "nowrap" }}>
+                      <td className="g-sticky-act">
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           {/* Botón PDF siempre visible */}
                           <button className="btn btn-primary btn-sm"
                             onClick={() => descargarPDF({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda })}
-                            title="Descargar PDF">📥 PDF</button>
+                            title="Descargar PDF"><Ico name="download" size={14} /> PDF</button>
 
                           {/* Menú ⋯ */}
-                          <MenuAcciones acciones={[
+                          <MenuAcciones items={[
                             { label: "Ver cotización",  icon: "👁️", onClick: () => generarReporte({ ...c, cliente: c.cliente ?? c.clienteOcasional, cursoDC3: c.cursoDC3, moneda: c.moneda }) },
                             { label: "Editar",         icon: "✏️", onClick: () => openEdit(c) },
                             { label: "Clonar",         icon: "📋", onClick: () => clonar(c), disabled: saving },
@@ -1301,7 +1243,7 @@ export default function Cotizaciones() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) { setModal(false); setEditing(null); } }}>
+        <div className="modal-overlay">
           {modalForm}
         </div>
       )}
@@ -1479,21 +1421,16 @@ export default function Cotizaciones() {
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Asesor</label>
-                <select className="form-select" value={repAsesorFiltroAsesor} onChange={e => setRepAsesorFiltroAsesor(e.target.value)}>
-                  <option value="todos">Todos</option>
-                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-                </select>
+                <Combobox value={repAsesorFiltroAsesor} onChange={v => setRepAsesorFiltroAsesor(v || "todos")} options={[
+                  { value: "todos", label: "Todos" }, ...asesores.map((a: any) => ({ value: a._id, label: a.nombre })),
+                ]} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">Tipo</label>
-                <select className="form-select" value={repAsesorFiltroTipo} onChange={e => setRepAsesorFiltroTipo(e.target.value)}>
-                  <option value="todos">Todos los tipos</option>
-                  <option value="servicio">Servicio</option>
-                  <option value="renta">Renta</option>
-                  <option value="venta">Venta</option>
-                  <option value="refacciones">Refacciones</option>
-                  <option value="curso">Curso</option>
-                </select>
+                <Combobox value={repAsesorFiltroTipo} onChange={v => setRepAsesorFiltroTipo(v || "todos")} options={[
+                  { value: "todos", label: "Todos los tipos" }, { value: "servicio", label: "Servicio" }, { value: "renta", label: "Renta" },
+                  { value: "venta", label: "Venta" }, { value: "refacciones", label: "Refacciones" }, { value: "curso", label: "Curso" },
+                ]} />
               </div>
               <button className="btn btn-primary" onClick={cargarReporteAsesor} disabled={loadingRepAsesor}>
                 {loadingRepAsesor ? "Buscando..." : "🔍 Buscar"}

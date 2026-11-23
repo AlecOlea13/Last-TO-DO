@@ -43,11 +43,13 @@ const PATHS: Record<string, ReactNode> = {
   sun:      <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
   left:     <path d="m15 18-6-6 6-6" />,
   right:    <path d="m9 18 6-6-6-6" />,
+  download: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 21h16" /></>,
+  chat:     <path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12Z" />,
   dots:     <><circle cx="5" cy="12" r="1.6" fill="currentColor" /><circle cx="12" cy="12" r="1.6" fill="currentColor" /><circle cx="19" cy="12" r="1.6" fill="currentColor" /></>,
 };
 const EMOJI_A_ICONO: Record<string, string> = {
   "👁️": "eye", "🖨️": "printer", "✏️": "pencil", "📋": "clipboard", "📍": "pin", "🏁": "flag", "🗑️": "trash",
-  "📊": "dash", "🏗️": "truck", "🔧": "wrench", "🏭": "factory", "📝": "note", "📦": "box", "🏢": "building", "📄": "clipboard", "🧾": "receipt", "👤": "user", "👥": "users", "💰": "coins", "📁": "folder", "🔑": "key", "🚗": "car", "📈": "trend",
+  "📊": "dash", "🏗️": "truck", "🔧": "wrench", "🏭": "factory", "📝": "note", "📦": "box", "🏢": "building", "📄": "clipboard", "🧾": "receipt", "👤": "user", "👥": "users", "💰": "coins", "📁": "folder", "🔑": "key", "🚗": "car", "📈": "trend", "💳": "coins", "🚫": "flag",
 };
 
 export function Ico({ name, size = 15 }: { name: string; size?: number }) {

@@ -347,3 +347,22 @@
 .glass-ui td:last-child .btn, .glass-ui td:last-child .g-more { vertical-align:middle; margin-left:4px; }
 .glass-ui td:last-child > div { display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap; }
 .glass-ui .btn-sm { white-space:nowrap; line-height:1; }
+
+/* Títulos: limpios y legibles (sin efecto metálico) */
+.glass-ui .page-title {
+  background:none; -webkit-background-clip:initial; background-clip:initial; -webkit-text-fill-color:currentColor;
+  color:var(--text); font-weight:700; letter-spacing:-.025em; font-size:1.9rem; line-height:1.15;
+  text-shadow:0 2px 18px rgba(245,158,11,.18);
+}
+[data-theme="light"] .glass-ui .page-title { text-shadow:none; }
+.glass-ui .page-subtitle { font-size:.92rem; margin-top:4px; letter-spacing:.005em; }
+.glass-ui .table-card-title, .glass-ui .modal-title { font-weight:700; letter-spacing:-.015em; }
+.glass-ui th { font-size:.7rem; font-weight:600; letter-spacing:.09em; }
+.glass-ui td { font-size:.9rem; }
+@media (max-width:640px){ .glass-ui .page-title { font-size:1.5rem; } }
+
+/* Columna de acciones fija a la derecha, en cristal (sin bloque oscuro) */
+.glass-ui td.g-sticky-act { position:sticky; right:0; z-index:1; white-space:nowrap;
+  background:linear-gradient(90deg,transparent,rgba(14,18,28,.78) 22%); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+[data-theme="light"] .glass-ui td.g-sticky-act { background:linear-gradient(90deg,transparent,rgba(255,255,255,.88) 22%); }
+.glass-ui .g-combo { width:100%; }
