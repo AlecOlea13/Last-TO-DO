@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { api } from "../api";
 import { generarOrdenTrabajo, imprimirOrdenTrabajo, type OrdenTrabajoReporte } from "../utils/generarReporte";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
@@ -7,7 +7,7 @@ import {
   guardarAccion, guardarFotoOffline, fileToBase64,
 } from "../utils/offlineDB";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import { Ico, MenuAcciones, EstatusPill, Segmentado, Buscador } from "../components/GlassUI";
+import { Ico, MenuAcciones, EstatusPill, Segmentado, Buscador, Combobox, type Opcion } from "../components/GlassUI";
 import "../glass.css";
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dijxgoytw/image/upload";
@@ -95,68 +95,10 @@ function BuscadorCliente({
   onChange: (id: string) => void;
   disabled?: boolean;
 }) {
-  const [query, setQuery]       = useState("");
-  const [abierto, setAbierto]   = useState(false);
-  const [seleccionado, setSeleccionado] = useState<Cliente | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (value) {
-      const c = clientes.find(c => c._id === value);
-      if (c) { setSeleccionado(c); setQuery(c.nombre); }
-    } else {
-      setSeleccionado(null); setQuery("");
-    }
-  }, [value, clientes]);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filtrados = clientes.filter(c =>
-    c.nombre.toLowerCase().includes(query.toLowerCase())
-  ).slice(0, 8);
-
+  const opciones = useMemo<Opcion[]>(() => clientes.map(c => ({ value: c._id, label: c.nombre })), [clientes]);
   return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <input
-        className="form-input"
-        value={query}
-        disabled={disabled}
-        placeholder="Escribe para buscar cliente..."
-        onChange={e => { setQuery(e.target.value); setAbierto(true); if (!e.target.value) { onChange(""); setSeleccionado(null); } }}
-        onFocus={() => setAbierto(true)}
-        style={{ width: "100%" }}
-      />
-      {abierto && filtrados.length > 0 && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200,
-          background: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-sm)",
-          maxHeight: 240, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-        }}>
-          {filtrados.map(c => (
-            <div
-              key={c._id}
-              onClick={() => { setSeleccionado(c); setQuery(c.nombre); onChange(c._id); setAbierto(false); }}
-              style={{
-                padding: "12px 14px", cursor: "pointer", fontSize: "0.9rem",
-                borderBottom: "1px solid var(--border)",
-                background: seleccionado?._id === c._id ? "var(--surface2)" : "transparent",
-                color: "var(--text)",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = seleccionado?._id === c._id ? "var(--surface2)" : "transparent")}
-            >
-              {c.nombre}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <Combobox value={value} onChange={onChange} options={opciones} disabled={disabled} clearable
+      placeholder="Escribe para buscar cliente..." emptyText="Ningún cliente coincide" />
   );
 }
 
@@ -1309,9 +1251,7 @@ export default function Servicios() {
       <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Captura el equipo que tiene el cliente: queda registrado en su cuenta.</div>
       <div className="form-grid">
         <div className="form-group"><label className="form-label">Tipo</label>
-          <select className="form-select" value={levForm.tipo} onChange={e => setLevForm(p => ({ ...p, tipo: e.target.value }))}>
-            <option value="">Sin especificar</option><option value="electrico">Eléctrico</option><option value="gas">Gas</option><option value="diesel">Diésel</option>
-          </select></div>
+          <Combobox value={levForm.tipo} onChange={v => setLevForm(p => ({ ...p, tipo: v }))} options={[{ value: "", label: "Sin especificar" }, { value: "electrico", label: "Eléctrico" }, { value: "gas", label: "Gas" }, { value: "diesel", label: "Diésel" }]} placeholder="Sin especificar" /></div>
         <div className="form-group"><label className="form-label">Marca</label>
           <input className="form-input" value={levForm.marca} onChange={e => setLevForm(p => ({ ...p, marca: e.target.value }))} /></div>
         <div className="form-group"><label className="form-label">Modelo</label>
@@ -1643,29 +1583,15 @@ export default function Servicios() {
               </div>
               <div className="form-group">
                 <label className="form-label">Montacargas</label>
-                <select className="form-select" value={editarForm.montacargas}
-                  onChange={e => setEditarForm((p: any) => ({ ...p, montacargas: e.target.value }))}>
-                  <option value="">Selecciona equipo...</option>
-                  {montas.map(m => (
-                    <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
-                  ))}
-                </select>
+                <Combobox value={editarForm.montacargas} onChange={v => setEditarForm((p: any) => ({ ...p, montacargas: v }))} placeholder="Escribe para buscar equipo..." options={montas.map(m => ({ value: m._id, label: `${m.numeroEconomico} — ${m.marca}` }))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Tipo de servicio</label>
-                <select className="form-select" value={editarForm.tipoServicio}
-                  onChange={e => setEditarForm((p: any) => ({ ...p, tipoServicio: e.target.value }))}>
-                  <option value="">Sin tipo</option>
-                  {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
-                </select>
+                <Combobox value={editarForm.tipoServicio} onChange={v => setEditarForm((p: any) => ({ ...p, tipoServicio: v }))} options={[{ value: "", label: "Sin tipo" }, ...tipos.map(t => ({ value: t._id, label: `${t.nombre}${t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}` }))]} />
               </div>
               <div className="form-group">
                 <label className="form-label">Técnico asignado</label>
-                <select className="form-select" value={editarForm.tecnicoAsignado}
-                  onChange={e => setEditarForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
-                  <option value="">Sin asignar</option>
-                  {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
-                </select>
+                <Combobox value={editarForm.tecnicoAsignado} onChange={v => setEditarForm((p: any) => ({ ...p, tecnicoAsignado: v }))} options={[{ value: "", label: "Sin asignar" }, ...usuarios.map(u => ({ value: u._id, label: u.nombre }))]} />
               </div>
               <div className="form-group">
                 <label className="form-label">Fecha reporte</label>
@@ -1679,13 +1605,7 @@ export default function Servicios() {
               </div>
               <div className="form-group">
                 <label className="form-label">Estatus</label>
-                <select className="form-select" value={editarForm.estatus}
-                  onChange={e => setEditarForm((p: any) => ({ ...p, estatus: e.target.value }))}>
-                  <option value="abierto">Abierto</option>
-                  <option value="en_proceso">En proceso</option>
-                  <option value="pausado">Pausado</option>
-                  <option value="cerrado">Cerrado</option>
-                </select>
+                <Combobox value={editarForm.estatus} onChange={v => setEditarForm((p: any) => ({ ...p, estatus: v }))} options={[{ value: "abierto", label: "Abierto" }, { value: "en_proceso", label: "En proceso" }, { value: "pausado", label: "Pausado" }, { value: "cerrado", label: "Cerrado" }]} />
               </div>
               <div className="form-group">
                 <label className="form-label">Costo mano de obra ($)</label>
@@ -1748,10 +1668,7 @@ export default function Servicios() {
             )}
             <div className="form-group">
               <label className="form-label">Filtrar por técnico</label>
-              <select className="form-select" value={reporteFiltroTecnico} onChange={e => setReporteFiltroTecnico(e.target.value)}>
-                <option value="todos">Todos los técnicos</option>
-                {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
-              </select>
+              <Combobox value={reporteFiltroTecnico} onChange={setReporteFiltroTecnico} options={[{ value: "todos", label: "Todos los técnicos" }, ...usuarios.map(u => ({ value: u._id, label: u.nombre }))]} />
             </div>
             <div style={{ padding: "10px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", color: "var(--text-muted)" }}>
               Solo servicios <strong style={{ color: "var(--text)" }}>cerrados</strong> en el período.
@@ -1789,13 +1706,7 @@ export default function Servicios() {
                   <>
                     {montasSinCliente && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Este cliente no tiene equipos asignados — mostrando todos</p>}
                     {form.cliente && !montasSinCliente && montasFiltradas.length > 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>Mostrando {montasFiltradas.length} equipo{montasFiltradas.length !== 1 ? "s" : ""} de este cliente</p>}
-                    <select className="form-select" value={form.montacargas} onChange={e => onMontaChange(e.target.value)}>
-                      <option value="">Selecciona equipo...</option>
-                      <option value={POR_ASIGNAR}>🕓 Equipo a asignar (levantamiento)</option>
-                      {(montasSinCliente ? montas : montasFiltradas).map(m => (
-                        <option key={m._id} value={m._id}>{m.numeroEconomico} — {m.marca}</option>
-                      ))}
-                    </select>
+                    <Combobox value={form.montacargas} onChange={onMontaChange} placeholder="Escribe para buscar equipo..." emptyText="Ningún equipo coincide" options={[{ value: POR_ASIGNAR, label: "Equipo a asignar (levantamiento)", fijo: true }, ...(montasSinCliente ? montas : montasFiltradas).map(m => ({ value: m._id, label: `${m.numeroEconomico} — ${m.marca}` }))]} />
                     {form.montacargas === POR_ASIGNAR && (
                       <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 6 }}>
                         El técnico capturará el equipo del cliente (tipo, marca, modelo, serie…) al cerrar el servicio.{!form.cliente && " Selecciona el cliente arriba."}
@@ -1808,16 +1719,7 @@ export default function Servicios() {
                       <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Selecciona primero el cliente dueño del equipo.</p>
                     ) : (
                       <>
-                        <select className="form-select" value={form.equipoCliente} onChange={e => onEquipoClienteChange(e.target.value)}>
-                          <option value="">
-                            {equiposClienteFiltrados.length === 0 ? "Este cliente no tiene equipos registrados" : "Selecciona equipo del cliente..."}
-                          </option>
-                          {equiposClienteFiltrados.map(e => (
-                            <option key={e._id} value={e._id}>
-                              {[e.numeroEconomico, e.marca, e.modelo, e.serie && `S/N ${e.serie}`].filter(Boolean).join(" — ")}
-                            </option>
-                          ))}
-                        </select>
+                        <Combobox value={form.equipoCliente} onChange={onEquipoClienteChange} placeholder={equiposClienteFiltrados.length === 0 ? "Este cliente no tiene equipos registrados" : "Escribe para buscar equipo del cliente..."} emptyText="Ningún equipo coincide" options={equiposClienteFiltrados.map(e => ({ value: e._id, label: [e.numeroEconomico, e.marca, e.modelo, e.serie && `S/N ${e.serie}`].filter(Boolean).join(" — ") }))} />
                         <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }}
                           onClick={() => setRegEqAbierto(v => !v)}>
                           {regEqAbierto ? "Cancelar registro" : "+ Registrar equipo del cliente"}
@@ -1843,12 +1745,7 @@ export default function Servicios() {
                               </div>
                               <div className="form-group">
                                 <label className="form-label">Tipo</label>
-                                <select className="form-select" value={regEqForm.tipo} onChange={e => setRegEqForm(p => ({ ...p, tipo: e.target.value }))}>
-                                  <option value="">—</option>
-                                  <option value="electrico">Eléctrico</option>
-                                  <option value="gas">Gas LP</option>
-                                  <option value="diesel">Diésel</option>
-                                </select>
+                                <Combobox value={regEqForm.tipo} onChange={v => setRegEqForm(p => ({ ...p, tipo: v }))} options={[{ value: "", label: "—" }, { value: "electrico", label: "Eléctrico" }, { value: "gas", label: "Gas LP" }, { value: "diesel", label: "Diésel" }]} placeholder="—" />
                               </div>
                               <div className="form-group">
                                 <label className="form-label">Capacidad</label>
@@ -1867,18 +1764,12 @@ export default function Servicios() {
               </div>
               <div className="form-group">
                 <label className="form-label">Tipo de servicio</label>
-                <select className="form-select" value={form.tipoServicio} onChange={e => setForm((p: any) => ({ ...p, tipoServicio: e.target.value }))}>
-                  <option value="">Sin tipo</option>
-                  {tipos.map(t => <option key={t._id} value={t._id}>{t.nombre}{t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}</option>)}
-                </select>
+                <Combobox value={form.tipoServicio} onChange={v => setForm((p: any) => ({ ...p, tipoServicio: v }))} options={[{ value: "", label: "Sin tipo" }, ...tipos.map(t => ({ value: t._id, label: `${t.nombre}${t.intervaloHrs ? ` (${t.intervaloHrs} hrs)` : ""}` }))]} />
               </div>
               {canAsignarTecnico && (
                 <div className="form-group">
                   <label className="form-label">Técnico asignado</label>
-                  <select className="form-select" value={form.tecnicoAsignado} onChange={e => setForm((p: any) => ({ ...p, tecnicoAsignado: e.target.value }))}>
-                    <option value="">Sin asignar</option>
-                    {usuarios.map(u => <option key={u._id} value={u._id}>{u.nombre}</option>)}
-                  </select>
+                  <Combobox value={form.tecnicoAsignado} onChange={v => setForm((p: any) => ({ ...p, tecnicoAsignado: v }))} options={[{ value: "", label: "Sin asignar" }, ...usuarios.map(u => ({ value: u._id, label: u.nombre }))]} />
                 </div>
               )}
               <div className="form-group">

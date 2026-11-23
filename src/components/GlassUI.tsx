@@ -4,7 +4,7 @@
  * deslizante, pastilla de estatus con menú y menú de acciones (⋯).
  * Los estilos están en src/glass.css.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 // ── Iconos de línea (estilo Lucide) ──────────────────────────
@@ -182,5 +182,115 @@ export function Buscador({ value, onChange, placeholder = "Buscar..." }: { value
       <Ico name="search" size={15} />
       <input value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} />
     </label>
+  );
+}
+
+// ── Combobox: escribe para buscar (reemplaza a los <select>) ─
+export type Opcion = { value: string; label: string; sub?: string; fijo?: boolean };
+const quita = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+export function Combobox({ value, onChange, options, placeholder = "Selecciona...", disabled, clearable, emptyText = "Sin resultados", maxItems = 120 }: {
+  value: string; onChange: (v: string) => void; options: Opcion[]; placeholder?: string;
+  disabled?: boolean; clearable?: boolean; emptyText?: string; maxItems?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(0);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxH: number } | null>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+
+  const sel = options.find(o => o.value === value);
+  const filtered = useMemo(() => {
+    const palabras = quita(q.trim()).split(/\s+/).filter(Boolean);   // "yale 12" → todas las palabras deben aparecer
+    const base = palabras.length
+      ? options.filter(o => o.fijo || (() => { const t = quita(o.label + " " + (o.sub ?? "")); return palabras.every(w => t.includes(w)); })())
+      : options;
+    return base.slice(0, maxItems);
+  }, [options, q, maxItems]);
+
+  const place = () => {
+    if (!wrap.current) return;
+    const r = wrap.current.getBoundingClientRect();
+    const abajo = window.innerHeight - r.bottom - 14, arriba = r.top - 14;
+    const subir = abajo < 190 && arriba > abajo;
+    setPos({ left: r.left, width: r.width, maxH: Math.max(140, Math.min(300, subir ? arriba : abajo)),
+      ...(subir ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
+  };
+
+  useLayoutEffect(() => { if (open) place(); }, [open, filtered.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (wrap.current?.contains(t) || menu.current?.contains(t)) return;
+      setOpen(false); setQ("");
+    };
+    const onMove = (e: Event) => { if (!menu.current?.contains(e.target as Node)) place(); };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) menu.current?.querySelector(`[data-i="${hi}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [hi, open]);
+
+  const abrir = () => {
+    if (disabled) return;
+    setQ("");
+    setHi(Math.max(0, options.findIndex(o => o.value === value)));
+    setOpen(true);
+  };
+  const elegir = (o?: Opcion) => {
+    if (!o) return;
+    onChange(o.value); setOpen(false); setQ(""); input.current?.blur();
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (!open) abrir(); else setHi(h => Math.min(h + 1, filtered.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { if (open) { e.preventDefault(); elegir(filtered[hi]); } }
+    else if (e.key === "Escape") { setOpen(false); setQ(""); input.current?.blur(); }
+    else if (e.key === "Tab") { setOpen(false); setQ(""); }
+  };
+
+  return (
+    <div ref={wrap} className={`g-combo${open ? " open" : ""}${disabled ? " disabled" : ""}`}>
+      <input ref={input} className="form-input" disabled={disabled} autoComplete="off" spellCheck={false}
+        value={open ? q : (sel?.label ?? "")}
+        placeholder={open && sel ? sel.label : placeholder}
+        onFocus={abrir} onClick={() => { if (!open) abrir(); }}
+        onChange={e => { setQ(e.target.value); setHi(0); if (!open) setOpen(true); }}
+        onKeyDown={onKey} />
+      {clearable && value && !disabled
+        ? <button type="button" className="g-combo-x" title="Quitar" tabIndex={-1}
+            onMouseDown={e => e.preventDefault()} onClick={() => { onChange(""); setQ(""); }}>✕</button>
+        : <span className="g-combo-caret"><Ico name="chevron" size={15} /></span>}
+      {open && createPortal(
+        <div ref={menu} role="listbox" className="g-menu g-combo-menu"
+          style={{ left: pos?.left ?? -9999, width: pos?.width, top: pos?.top, bottom: pos?.bottom, maxHeight: pos?.maxH,
+            visibility: pos ? "visible" : "hidden", transformOrigin: pos?.bottom !== undefined ? "bottom" : "top" }}>
+          {filtered.length === 0
+            ? <div className="g-combo-empty">{emptyText}</div>
+            : filtered.map((o, i) => (
+              <button key={o.value + i} type="button" role="option" data-i={i} aria-selected={o.value === value}
+                className={`g-menu-item${i === hi ? " hi" : ""}${o.value === value ? " active" : ""}`}
+                onMouseEnter={() => setHi(i)} onMouseDown={e => e.preventDefault()} onClick={() => elegir(o)}>
+                <span className="g-combo-label">{o.label}</span>
+                {o.sub && <span className="g-combo-sub">{o.sub}</span>}
+                {o.value === value && <span style={{ marginLeft: "auto", flexShrink: 0 }}><Ico name="check" size={14} /></span>}
+              </button>
+            ))}
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }

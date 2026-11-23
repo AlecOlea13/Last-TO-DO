@@ -211,3 +211,27 @@
   .glass-ui .table-card, .glass-ui .stat-card { border-radius:18px; }
   .glass-ui .modal { border-radius:22px; }
 }
+
+/* Combobox (escribe para buscar) */
+.g-combo { position:relative; width:100%; }
+.g-combo input { padding-right:38px; cursor:text; text-overflow:ellipsis; }
+.g-combo.open input { border-color:rgba(245,158,11,.6) !important; box-shadow:inset 0 2px 5px rgba(0,0,0,.4), 0 0 0 4px rgba(245,158,11,.13) !important; }
+.g-combo.open input::placeholder { color:var(--text); opacity:.6; }
+.g-combo-caret, .g-combo-x { position:absolute; right:10px; top:50%; transform:translateY(-50%); display:flex; align-items:center; justify-content:center;
+  color:var(--text-muted); pointer-events:none; transition:transform .25s cubic-bezier(.22,1,.36,1); }
+.g-combo.open .g-combo-caret { transform:translateY(-50%) rotate(180deg); color:var(--accent); }
+.g-combo-x { pointer-events:auto; cursor:pointer; width:22px; height:22px; border-radius:7px; border:0; background:rgba(255,255,255,.08); font-size:.68rem; transition:background .2s, color .2s; }
+.g-combo-x:hover { background:rgba(239,68,68,.2); color:var(--red); }
+.g-combo-menu { overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.22) transparent; }
+.g-combo-menu::-webkit-scrollbar { width:8px; }
+.g-combo-menu::-webkit-scrollbar-track { background:transparent; margin:8px 0; }
+.g-combo-menu::-webkit-scrollbar-thumb { background:rgba(255,255,255,.2); border-radius:99px; border:2px solid transparent; background-clip:padding-box; }
+.g-combo-menu::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.34); background-clip:padding-box; border:2px solid transparent; }
+.g-combo-menu .g-menu-item { flex-shrink:0; }
+.g-menu-item.hi { background:rgba(255,255,255,.09); }
+.g-combo-label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.g-combo-sub { margin-left:auto; padding-left:12px; color:var(--text-muted); font-size:.75rem; white-space:nowrap; }
+.g-combo-empty { padding:16px 12px; color:var(--text-muted); font-size:.84rem; text-align:center; }
+.g-combo.disabled input { opacity:.55; cursor:not-allowed; }
+[data-theme="light"] .g-menu-item.hi { background:rgba(15,17,21,.06); }
+[data-theme="light"] .g-combo-menu { scrollbar-color:rgba(15,17,21,.25) transparent; }
