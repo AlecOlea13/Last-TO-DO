@@ -325,3 +325,25 @@
 .glass-ui .sidebar-user-name { font-size:.95rem; }
 .glass-ui .sidebar-user-role { font-size:.78rem; }
 .glass-ui .theme-toggle, .glass-ui .sidebar-logout { font-size:.9rem; padding:11px 14px; }
+
+/* El menú NO se comprime: si no cabe, hace scroll como antes */
+.glass-ui .sidebar > * { flex-shrink:0; }
+.glass-ui .sidebar { overflow-y:auto; }
+.glass-ui .sidebar-spacer { flex:1 0 0; min-height:8px; }
+.glass-ui .nav-item { min-height:46px; }
+.glass-ui .nav-item .nav-icon { height:32px; min-height:32px; aspect-ratio:1; }
+.glass-ui .sidebar.collapsed .nav-item { min-height:44px; }
+
+/* Tablas anchas: más compactas, sin partir folios/fechas, scroll horizontal dentro de la tarjeta */
+.glass-ui .table-card { overflow-x:auto; overflow-y:hidden; }
+.glass-ui .table-card table { width:100%; }
+.glass-ui td { padding:12px 12px; }
+.glass-ui th { padding:12px 12px; white-space:nowrap; }
+.glass-ui td:first-child, .glass-ui th:first-child { padding-left:20px; }
+.glass-ui td:last-child, .glass-ui th:last-child { padding-right:20px; }
+.glass-ui td:first-child { white-space:nowrap; }
+.glass-ui td .badge, .glass-ui td .g-pill { white-space:nowrap; }
+.glass-ui td:last-child { white-space:nowrap; }
+.glass-ui td:last-child .btn, .glass-ui td:last-child .g-more { vertical-align:middle; margin-left:4px; }
+.glass-ui td:last-child > div { display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+.glass-ui .btn-sm { white-space:nowrap; line-height:1; }
