@@ -973,7 +973,7 @@ export default function Cotizaciones() {
                   borderRight: i === 0 ? "1px solid var(--border)" : "none",
                 }}
               >
-                {val === "MXN" ? "🇲🇽 Pesos (MXN)" : "🇺🇸 Dólares (USD)"}
+                {val === "MXN" ? "Pesos (MXN)" : "Dólares (USD)"}
               </button>
             ))}
           </div>
@@ -1164,7 +1164,7 @@ export default function Cotizaciones() {
                       <td>{fmt(c.fecha)}</td>
                       <td>
                         <span style={{ fontSize: "0.72rem", fontWeight: 700, color: mon === "USD" ? "#1d4ed8" : "var(--text-muted)", background: mon === "USD" ? "rgba(29,78,216,0.1)" : "var(--surface2)", padding: "2px 7px", borderRadius: 6 }}>
-                          {mon === "USD" ? "💵 USD" : "🇲🇽 MXN"}
+                          {mon === "USD" ? "USD" : "MXN"}
                         </span>
                       </td>
                       <td>
