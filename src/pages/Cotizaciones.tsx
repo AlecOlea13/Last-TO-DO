@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import MenuAcciones from "../components/MenuAcciones";
+import CotizacionesAnalisis from "../components/CotizacionesAnalisis";
 import { api } from "../api";
 import { generarReporte, descargarPDF } from "../utils/generarReporte";
 
@@ -276,6 +277,9 @@ export default function Cotizaciones() {
   const rol        = localStorage.getItem("rol") ?? "";
   const canComment = ["developer", "gerencia", "oficina"].includes(rol);
   const canDelete  = ["developer", "gerencia"].includes(rol);
+  // Vendedores (oficina): solo ven y crean cotizaciones a su nombre; developer/gerencia ven todo
+  const esAdmin    = ["developer", "gerencia"].includes(rol);
+  const [miAsesor, setMiAsesor] = useState<{ _id: string; nombre: string } | null>(null);
 
   const [cotizaciones, setCotizaciones]               = useState<Cotizacion[]>([]);
   const [clientes, setClientes]                       = useState<Cliente[]>([]);
@@ -308,6 +312,7 @@ export default function Cotizaciones() {
   const [moneda, setMoneda]                           = useState<"MXN" | "USD">("MXN");
 
   const [modalReporte, setModalReporte] = useState(false);
+  const [modalAnalisis, setModalAnalisis] = useState(false);
   const [semanaInicio, setSemanaInicio] = useState<Date>(getMartes(new Date()));
 
   // ── Reporte general por asesor ──
@@ -324,6 +329,10 @@ export default function Cotizaciones() {
   const [repAsesorError, setRepAsesorError] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (esAdmin) return;
+    api.get("/comisiones/mi-asesor").then(r => setMiAsesor(r.data?.asesor ?? null)).catch(() => setMiAsesor(null));
+  }, []);
 
   async function load() {
     try {
@@ -400,7 +409,7 @@ export default function Cotizaciones() {
     setVerTodosMontas(false);
     setGuardarEquipoCliente(false);
     setMoneda("MXN");
-    setForm({ ...emptyForm, folio: "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }], cursoDC3: { ...emptyCursoDC3 } });
+    setForm({ ...emptyForm, folio: "", asesor: !esAdmin ? (miAsesor?._id ?? "") : "", clienteOcasional: { ...emptyClienteOcasional }, items: [{ ...emptyItem, subconceptos: [] }], cursoDC3: { ...emptyCursoDC3 } });
     setModal(true);
   }
 
@@ -811,7 +820,14 @@ export default function Cotizaciones() {
 
         <div className="form-group">
           <label className="form-label">Asesor</label>
-          <SearchableSelect value={form.asesor} onChange={id => setForm((p: any) => ({ ...p, asesor: id }))} options={asesorOpts} placeholder="Escribe para buscar asesor..." />
+          {esAdmin ? (
+            <SearchableSelect value={form.asesor} onChange={id => setForm((p: any) => ({ ...p, asesor: id }))} options={asesorOpts} placeholder="Escribe para buscar asesor..." />
+          ) : (
+            <>
+              <input className="form-input" value={miAsesor?.nombre ?? ""} disabled placeholder="Sin asesor ligado a tu usuario" />
+              {!miAsesor && <p style={{ fontSize: "0.72rem", color: "var(--accent)", marginTop: 4 }}>Tu usuario no está ligado a un asesor: pide a gerencia que lo vincule para poder cotizar.</p>}
+            </>
+          )}
         </div>
 
         {!esRefacciones && !esCurso && (
@@ -1120,6 +1136,11 @@ export default function Cotizaciones() {
               👤 Reporte por asesor
             </button>
           )}
+          {["developer", "gerencia"].includes(rol) && (
+            <button className="btn btn-secondary" onClick={() => setModalAnalisis(true)}>
+              📈 Análisis
+            </button>
+          )}
           <button className="btn btn-primary" onClick={openNew}>+ Nueva cotización</button>
         </div>
       </div>
@@ -1160,10 +1181,12 @@ export default function Cotizaciones() {
                   <option value="curso">🎓 Curso DC-3</option>
                 </optgroup>
               </select>
-              <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
-                <option value="todos">Todos los asesores</option>
-                {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
-              </select>
+              {esAdmin && (
+                <select className="form-select" style={{ width: "auto", padding: "8px 14px" }} value={filtroAsesor} onChange={e => setFiltroAsesor(e.target.value)}>
+                  <option value="todos">Todos los asesores</option>
+                  {asesores.map(a => <option key={a._id} value={a._id}>{a.nombre}</option>)}
+                </select>
+              )}
             </div>
           </div>
 
@@ -1282,6 +1305,8 @@ export default function Cotizaciones() {
           {modalForm}
         </div>
       )}
+
+      {modalAnalisis && <CotizacionesAnalisis onClose={() => setModalAnalisis(false)} />}
 
       {modalReporte && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalReporte(false); }}>
