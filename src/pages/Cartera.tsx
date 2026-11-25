@@ -101,7 +101,7 @@ const AG_COLS: { k: keyof Aging; label: string; color: string }[] = [
   { k: "d61_90",  label: "61 – 90",     color: "#ef4444" },
   { k: "d91",     label: "91 +",        color: "#b91c1c" },
 ];
-const venc = (a?: Aging) => a ? a.d1_30 + a.d31_60 + a.d61_90 + a.d91 : 0;
+const venc = (a?: Aging) => a ? a.total : 0;
 const dashMxn = (n: number) => (n > 0.004 ? mxn(n) : "—");
 
 function PanelAging({ aging }: { aging: Aging }) {
@@ -109,8 +109,8 @@ function PanelAging({ aging }: { aging: Aging }) {
   return (
     <div className="table-card" style={{ padding: "18px 22px", marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>Cartera vencida · días desde el vencimiento</p>
-        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total vencido <b style={{ color: "var(--text)", fontSize: "1.05rem", marginLeft: 6 }}>{mxn(venc(aging))}</b></p>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>Antigüedad de saldos · días desde la emisión de la factura</p>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total cartera <b style={{ color: "var(--text)", fontSize: "1.05rem", marginLeft: 6 }}>{mxn(venc(aging))}</b></p>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
         {AG_COLS.map(c => (
@@ -211,7 +211,7 @@ export default function Cartera() {
   async function descargarCliente() {
     if (!detalle) return;
     setGenerando("cliente");
-    try { await descargarEstadoCuenta({ ...detalle, facturas: detalle.facturas.filter(f => !f.sinFechaVencimiento && f.diasVencidos > 0) }, filtros.fechaCorte); }
+    try { await descargarEstadoCuenta({ ...detalle, facturas: detalle.facturas }, filtros.fechaCorte); }
     catch { alert("No se pudo generar el estado de cuenta. Intenta de nuevo."); }
     finally { setGenerando(""); }
   }
@@ -315,7 +315,7 @@ export default function Cartera() {
   }
 
   // ─────────────────────────────────────────────────────────
-  const facVenc = detalle ? detalle.facturas.filter(f => !f.sinFechaVencimiento && f.diasVencidos > 0) : [];
+  const facVenc = detalle ? detalle.facturas : [];
   const r = data?.resumen;
 
   return (
@@ -510,7 +510,7 @@ export default function Cartera() {
                   {data.aging && (
                     <tfoot>
                       <tr className="g-tfoot">
-                        <td>TOTAL VENCIDO · {data.paginacion.total} clientes</td>
+                        <td>TOTAL · {data.paginacion.total} clientes</td>
                         <td style={{ textAlign: "center" }}>{data.resumen.facturasPend}</td>
                         {AG_COLS.map(col => <td key={col.k} style={{ textAlign: "right", color: col.color }}>{dashMxn(data.aging[col.k])}</td>)}
                         <td style={{ textAlign: "right" }}>{mxn(venc(data.aging))}</td>
@@ -566,13 +566,13 @@ export default function Cartera() {
                 </div>
               ))}
               <div className="g-ag-cell g-ag-total">
-                <span className="g-ag-lbl">Total vencido</span>
+                <span className="g-ag-lbl">Total adeudado</span>
                 <span className="g-ag-val">{mxn(venc(detalle.aging))}</span>
               </div>
             </div>
 
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8, letterSpacing: ".08em" }}>
-              Facturas vencidas ({facVenc.length}) · último pago {fmtFecha(detalle.resumen.ultimoPago)}
+              Facturas pendientes ({facVenc.length}) · último pago {fmtFecha(detalle.resumen.ultimoPago)}
             </p>
             <div style={{ overflowX: "auto" }}>
               <table style={{ fontSize: "0.8rem", minWidth: 860 }}>

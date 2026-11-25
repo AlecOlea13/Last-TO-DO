@@ -44,7 +44,7 @@ const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/
 const COLORES = { vigente: "#16a34a", d1_30: "#ca8a04", d31_60: "#ea580c", d61_90: "#dc2626", d91: "#7f1d1d", sinDef: "#94a3b8" };
 const ETIQ = { vigente: "Por vencer", d1_30: "1 – 30 días", d31_60: "31 – 60 días", d61_90: "61 – 90 días", d91: "91+ días", sinDef: "Sin fecha" };
 const ORDEN: (keyof typeof COLORES)[] = ["d1_30", "d31_60", "d61_90", "d91"];
-const venc = (a: Aging) => a.d1_30 + a.d31_60 + a.d61_90 + a.d91;
+const venc = (a: Aging) => a.total;
 
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -83,7 +83,7 @@ tbody tr:nth-child(even) td{background:#f8fafc}
 
 function celdas(a: Aging, mostrarTotal = true) {
   const cel = ORDEN.map(k => `<div class="cell" style="--c:${COLORES[k]}"><p class="l">${ETIQ[k]}</p><p class="v">${money(a[k])}</p></div>`);
-  if (mostrarTotal) cel.push(`<div class="cell tot"><p class="l">Total vencido</p><p class="v">${money(venc(a))}</p></div>`);
+  if (mostrarTotal) cel.push(`<div class="cell tot"><p class="l">Total adeudado</p><p class="v">${money(venc(a))}</p></div>`);
   return { html: cel.join(""), n: cel.length };
 }
 
@@ -125,7 +125,7 @@ function htmlEstadoCuenta(d: DetalleReporte, fechaCorte: string) {
     </div>
     <div class="cli">
       <p class="n">${esc(d.cliente.nombre)}</p>
-      <p class="m">${d.cliente.rfc ? `RFC: ${esc(d.cliente.rfc)} · ` : ""}${d.facturas.length} factura${d.facturas.length === 1 ? "" : "s"} vencida${d.facturas.length === 1 ? "" : "s"}${d.cliente.diasCreditoCli ? ` · Crédito: ${d.cliente.diasCreditoCli} días` : ""}</p>
+      <p class="m">${d.cliente.rfc ? `RFC: ${esc(d.cliente.rfc)} · ` : ""}${d.facturas.length} factura${d.facturas.length === 1 ? "" : "s"} pendiente${d.facturas.length === 1 ? "" : "s"}${d.cliente.diasCreditoCli ? ` · Crédito: ${d.cliente.diasCreditoCli} días` : ""}</p>
     </div>
     <div class="aging" style="grid-template-columns:repeat(${n},1fr)">${celdasHtml}</div>
     <table>
@@ -134,7 +134,7 @@ function htmlEstadoCuenta(d: DetalleReporte, fechaCorte: string) {
         <tr class="tfoot"><td colspan="4">TOTAL</td><td class="r">${mixta ? "" : money(totFact)}</td><td class="r">${mixta ? "" : (totPag > 0 ? money(totPag) : "—")}</td><td class="r">${money(venc(d.aging))}</td><td></td></tr>
       </tbody>
     </table>
-    <div class="note">Los días de atraso se cuentan a partir de la fecha de vencimiento de cada factura. Si ya realizó algún pago que no aparezca en este estado de cuenta, le agradeceremos enviarnos su comprobante para aplicarlo a la brevedad.</div>
+    <div class="note">Los rangos (1–30, 31–60, 61–90 y 91+ días) corresponden a los días transcurridos desde la emisión de cada factura; el atraso se cuenta a partir de su fecha de vencimiento. Si ya realizó algún pago que no aparezca en este estado de cuenta, le agradeceremos enviarnos su comprobante para aplicarlo a la brevedad.</div>
     <div class="foot"><span>PIPSA Montacargas</span><span>Generado el ${ahora()}</span></div>
   </div></body></html>`;
 }
@@ -160,7 +160,7 @@ function htmlGeneral(d: GeneralReporte, fechaCorte: string) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}.page{padding:30px 34px}</style></head><body><div class="page">
     <div class="top">
       <img class="logo" src="${LOGO_URL}" crossorigin="anonymous" />
-      <div class="ttl"><h1>REPORTE DE CARTERA</h1><p>Antigüedad de saldos · Corte al ${fecha(fechaCorte)}</p></div>
+      <div class="ttl"><h1>REPORTE DE CARTERA</h1><p>Antigüedad de saldos (días desde emisión) · Corte al ${fecha(fechaCorte)}</p></div>
     </div>
     <div class="aging" style="grid-template-columns:repeat(${n},1fr);margin-top:18px">${celdasHtml}</div>
     <div class="bar">${barra}</div>
