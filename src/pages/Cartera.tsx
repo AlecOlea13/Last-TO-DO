@@ -96,21 +96,21 @@ const RIESGO_LABEL: Record<Riesgo, string> = {
 
 // ─── Antigüedad en columnas (días desde el vencimiento) ──────
 const AG_COLS: { k: keyof Aging; label: string; color: string }[] = [
-  { k: "vigente", label: "Por vencer",  color: "#22c55e" },
   { k: "d1_30",   label: "1 – 30",      color: "#eab308" },
   { k: "d31_60",  label: "31 – 60",     color: "#f97316" },
   { k: "d61_90",  label: "61 – 90",     color: "#ef4444" },
   { k: "d91",     label: "91 +",        color: "#b91c1c" },
 ];
+const venc = (a?: Aging) => a ? a.d1_30 + a.d31_60 + a.d61_90 + a.d91 : 0;
 const dashMxn = (n: number) => (n > 0.004 ? mxn(n) : "—");
 
 function PanelAging({ aging }: { aging: Aging }) {
-  const tot = aging.total || 1;
+  const tot = venc(aging) || 1;
   return (
     <div className="table-card" style={{ padding: "18px 22px", marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>Antigüedad de saldos · días desde el vencimiento</p>
-        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total cartera <b style={{ color: "var(--text)", fontSize: "1.05rem", marginLeft: 6 }}>{mxn(aging.total)}</b></p>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>Cartera vencida · días desde el vencimiento</p>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total vencido <b style={{ color: "var(--text)", fontSize: "1.05rem", marginLeft: 6 }}>{mxn(venc(aging))}</b></p>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
         {AG_COLS.map(c => (
@@ -120,13 +120,6 @@ function PanelAging({ aging }: { aging: Aging }) {
             <span className="g-ag-pct">{((aging[c.k] / tot) * 100).toFixed(1)}%</span>
           </div>
         ))}
-        {aging.sinDef > 0.004 && (
-          <div className="g-ag-cell" style={{ ["--c" as any]: "#94a3b8" }}>
-            <span className="g-ag-lbl">Sin fecha</span>
-            <span className="g-ag-val">{mxn(aging.sinDef)}</span>
-            <span className="g-ag-pct">{((aging.sinDef / tot) * 100).toFixed(1)}%</span>
-          </div>
-        )}
       </div>
       <div className="g-ag-bar">
         {AG_COLS.map(c => { const pct = (aging[c.k] / tot) * 100; return pct < 0.4 ? null : <div key={c.k} style={{ width: pct + "%", background: c.color }} title={`${c.label} días: ${mxn(aging[c.k])}`} />; })}
@@ -218,7 +211,7 @@ export default function Cartera() {
   async function descargarCliente() {
     if (!detalle) return;
     setGenerando("cliente");
-    try { await descargarEstadoCuenta(detalle, filtros.fechaCorte); }
+    try { await descargarEstadoCuenta({ ...detalle, facturas: detalle.facturas.filter(f => !f.sinFechaVencimiento && f.diasVencidos > 0) }, filtros.fechaCorte); }
     catch { alert("No se pudo generar el estado de cuenta. Intenta de nuevo."); }
     finally { setGenerando(""); }
   }
@@ -322,6 +315,7 @@ export default function Cartera() {
   }
 
   // ─────────────────────────────────────────────────────────
+  const facVenc = detalle ? detalle.facturas.filter(f => !f.sinFechaVencimiento && f.diasVencidos > 0) : [];
   const r = data?.resumen;
 
   return (
@@ -478,7 +472,7 @@ export default function Cartera() {
                       <th style={{ minWidth: 190 }}>Cliente</th>
                       <th style={{ textAlign: "center" }}>Fact.</th>
                       {AG_COLS.map(c => (
-                        <th key={c.k} style={{ textAlign: "right", boxShadow: `inset 0 -2px 0 ${c.color}` }}>{c.k === "vigente" ? "Por vencer" : c.label + " días"}</th>
+                        <th key={c.k} style={{ textAlign: "right", boxShadow: `inset 0 -2px 0 ${c.color}` }}>{c.label + " días"}</th>
                       ))}
                       <th style={{ textAlign: "right" }}>Total</th>
                       <th>Riesgo</th>
@@ -502,8 +496,7 @@ export default function Cartera() {
                           );
                         })}
                         <td style={{ textAlign: "right" }}>
-                          <span style={{ fontWeight: 800 }}>{mxn(c.saldoTotal)}</span>
-                          {(c.aging?.sinDef ?? 0) > 0.004 && <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 400 }}>{mxn(c.aging.sinDef)} sin fecha</div>}
+                          <span style={{ fontWeight: 800 }}>{mxn(venc(c.aging))}</span>
                         </td>
                         <td><Badge color={RIESGO_COLOR[c.riesgo]} label={RIESGO_LABEL[c.riesgo]} /></td>
                         <td>
@@ -517,10 +510,10 @@ export default function Cartera() {
                   {data.aging && (
                     <tfoot>
                       <tr className="g-tfoot">
-                        <td>TOTAL · {data.paginacion.total} clientes</td>
+                        <td>TOTAL VENCIDO · {data.paginacion.total} clientes</td>
                         <td style={{ textAlign: "center" }}>{data.resumen.facturasPend}</td>
                         {AG_COLS.map(col => <td key={col.k} style={{ textAlign: "right", color: col.color }}>{dashMxn(data.aging[col.k])}</td>)}
-                        <td style={{ textAlign: "right" }}>{mxn(data.aging.total)}</td>
+                        <td style={{ textAlign: "right" }}>{mxn(venc(data.aging))}</td>
                         <td colSpan={2}></td>
                       </tr>
                     </tfoot>
@@ -568,23 +561,18 @@ export default function Cartera() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, margin: "18px 0 20px" }}>
               {AG_COLS.map(c => (
                 <div key={c.k} className="g-ag-cell" style={{ ["--c" as any]: c.color }}>
-                  <span className="g-ag-lbl">{c.k === "vigente" ? "Por vencer" : c.label} {c.k !== "vigente" && <small>días</small>}</span>
+                  <span className="g-ag-lbl">{c.label} <small>días</small></span>
                   <span className="g-ag-val">{mxn(detalle.aging?.[c.k] ?? 0)}</span>
                 </div>
               ))}
-              {(detalle.aging?.sinDef ?? 0) > 0.004 && (
-                <div className="g-ag-cell" style={{ ["--c" as any]: "#94a3b8" }}>
-                  <span className="g-ag-lbl">Sin fecha</span><span className="g-ag-val">{mxn(detalle.aging.sinDef)}</span>
-                </div>
-              )}
               <div className="g-ag-cell g-ag-total">
-                <span className="g-ag-lbl">Total adeudado</span>
-                <span className="g-ag-val">{mxn(detalle.aging?.total ?? detalle.resumen.saldoTotal)}</span>
+                <span className="g-ag-lbl">Total vencido</span>
+                <span className="g-ag-val">{mxn(venc(detalle.aging))}</span>
               </div>
             </div>
 
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8, letterSpacing: ".08em" }}>
-              Facturas pendientes ({detalle.facturas.length}) · último pago {fmtFecha(detalle.resumen.ultimoPago)}
+              Facturas vencidas ({facVenc.length}) · último pago {fmtFecha(detalle.resumen.ultimoPago)}
             </p>
             <div style={{ overflowX: "auto" }}>
               <table style={{ fontSize: "0.8rem", minWidth: 860 }}>
@@ -601,7 +589,7 @@ export default function Cartera() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detalle.facturas.map(f => {
+                  {facVenc.map(f => {
                     const cs = (f.conceptos ?? []).filter(c => c.descripcion);
                     const col = f.sinFechaVencimiento ? "var(--text-muted)" : f.diasVencidos <= 0 ? "var(--green)"
                       : f.diasVencidos <= 30 ? "#eab308" : f.diasVencidos <= 60 ? "#f97316" : f.diasVencidos <= 90 ? "#ef4444" : "#b91c1c";
@@ -632,9 +620,9 @@ export default function Cartera() {
                 <tfoot>
                   <tr className="g-tfoot">
                     <td colSpan={4}>TOTAL</td>
-                    <td style={{ textAlign: "right" }}>{mxn(detalle.facturas.reduce((a, f) => a + f.total, 0))}</td>
-                    <td style={{ textAlign: "right" }}>{mxn(detalle.facturas.reduce((a, f) => a + f.montoPagado, 0))}</td>
-                    <td style={{ textAlign: "right" }}>{mxn(detalle.aging?.total ?? detalle.resumen.saldoTotal)}</td>
+                    <td style={{ textAlign: "right" }}>{mxn(facVenc.reduce((a, f) => a + f.total, 0))}</td>
+                    <td style={{ textAlign: "right" }}>{mxn(facVenc.reduce((a, f) => a + f.montoPagado, 0))}</td>
+                    <td style={{ textAlign: "right" }}>{mxn(venc(detalle.aging))}</td>
                     <td></td>
                   </tr>
                 </tfoot>

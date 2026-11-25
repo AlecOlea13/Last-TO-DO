@@ -43,7 +43,8 @@ const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/
 
 const COLORES = { vigente: "#16a34a", d1_30: "#ca8a04", d31_60: "#ea580c", d61_90: "#dc2626", d91: "#7f1d1d", sinDef: "#94a3b8" };
 const ETIQ = { vigente: "Por vencer", d1_30: "1 – 30 días", d31_60: "31 – 60 días", d61_90: "61 – 90 días", d91: "91+ días", sinDef: "Sin fecha" };
-const ORDEN: (keyof typeof COLORES)[] = ["vigente", "d1_30", "d31_60", "d61_90", "d91"];
+const ORDEN: (keyof typeof COLORES)[] = ["d1_30", "d31_60", "d61_90", "d91"];
+const venc = (a: Aging) => a.d1_30 + a.d31_60 + a.d61_90 + a.d91;
 
 const CSS = `
 *{box-sizing:border-box;margin:0;padding:0}
@@ -82,8 +83,7 @@ tbody tr:nth-child(even) td{background:#f8fafc}
 
 function celdas(a: Aging, mostrarTotal = true) {
   const cel = ORDEN.map(k => `<div class="cell" style="--c:${COLORES[k]}"><p class="l">${ETIQ[k]}</p><p class="v">${money(a[k])}</p></div>`);
-  if (a.sinDef > 0.004) cel.push(`<div class="cell" style="--c:${COLORES.sinDef}"><p class="l">${ETIQ.sinDef}</p><p class="v">${money(a.sinDef)}</p></div>`);
-  if (mostrarTotal) cel.push(`<div class="cell tot"><p class="l">Total adeudado</p><p class="v">${money(a.total)}</p></div>`);
+  if (mostrarTotal) cel.push(`<div class="cell tot"><p class="l">Total vencido</p><p class="v">${money(venc(a))}</p></div>`);
   return { html: cel.join(""), n: cel.length };
 }
 
@@ -125,13 +125,13 @@ function htmlEstadoCuenta(d: DetalleReporte, fechaCorte: string) {
     </div>
     <div class="cli">
       <p class="n">${esc(d.cliente.nombre)}</p>
-      <p class="m">${d.cliente.rfc ? `RFC: ${esc(d.cliente.rfc)} · ` : ""}${d.facturas.length} factura${d.facturas.length === 1 ? "" : "s"} pendiente${d.facturas.length === 1 ? "" : "s"}${d.cliente.diasCreditoCli ? ` · Crédito: ${d.cliente.diasCreditoCli} días` : ""}</p>
+      <p class="m">${d.cliente.rfc ? `RFC: ${esc(d.cliente.rfc)} · ` : ""}${d.facturas.length} factura${d.facturas.length === 1 ? "" : "s"} vencida${d.facturas.length === 1 ? "" : "s"}${d.cliente.diasCreditoCli ? ` · Crédito: ${d.cliente.diasCreditoCli} días` : ""}</p>
     </div>
     <div class="aging" style="grid-template-columns:repeat(${n},1fr)">${celdasHtml}</div>
     <table>
       <thead><tr><th>Folio</th><th>Emisión</th><th>Vence</th><th style="width:26%">Concepto</th><th class="r">Total</th><th class="r">Pagado</th><th class="r">Saldo</th><th>Atraso</th></tr></thead>
       <tbody>${filas}
-        <tr class="tfoot"><td colspan="4">TOTAL</td><td class="r">${mixta ? "" : money(totFact)}</td><td class="r">${mixta ? "" : (totPag > 0 ? money(totPag) : "—")}</td><td class="r">${money(d.aging.total)}</td><td></td></tr>
+        <tr class="tfoot"><td colspan="4">TOTAL</td><td class="r">${mixta ? "" : money(totFact)}</td><td class="r">${mixta ? "" : (totPag > 0 ? money(totPag) : "—")}</td><td class="r">${money(venc(d.aging))}</td><td></td></tr>
       </tbody>
     </table>
     <div class="note">Los días de atraso se cuentan a partir de la fecha de vencimiento de cada factura. Si ya realizó algún pago que no aparezca en este estado de cuenta, le agradeceremos enviarnos su comprobante para aplicarlo a la brevedad.</div>
@@ -142,8 +142,8 @@ function htmlEstadoCuenta(d: DetalleReporte, fechaCorte: string) {
 // ── HTML: reporte general (interno) ────────────────────────
 function htmlGeneral(d: GeneralReporte, fechaCorte: string) {
   const { html: celdasHtml, n } = celdas(d.aging);
-  const tot = d.aging.total || 1;
-  const barra = ORDEN.concat(d.aging.sinDef > 0.004 ? ["sinDef"] : []).map(k => {
+  const tot = venc(d.aging) || 1;
+  const barra = ORDEN.map(k => {
     const pct = (d.aging[k] / tot) * 100;
     return pct < 0.4 ? "" : `<div style="width:${pct}%;background:${COLORES[k]}"></div>`;
   }).join("");
@@ -151,12 +151,11 @@ function htmlGeneral(d: GeneralReporte, fechaCorte: string) {
   const filas = d.clientes.map(c => `<tr>
     <td class="fol">${esc(c.nombre)}${c.rfc ? `<div style="font-weight:400;font-size:9.5px;color:#94a3b8">${esc(c.rfc)}</div>` : ""}</td>
     <td class="r">${c.facturasPend}</td>
-    <td class="r" style="color:${COLORES.vigente}">${dash(c.aging.vigente)}</td>
     <td class="r" style="color:${COLORES.d1_30}">${dash(c.aging.d1_30)}</td>
     <td class="r" style="color:${COLORES.d31_60}">${dash(c.aging.d31_60)}</td>
     <td class="r" style="color:${COLORES.d61_90}">${dash(c.aging.d61_90)}</td>
     <td class="r" style="color:${COLORES.d91};font-weight:700">${dash(c.aging.d91)}</td>
-    <td class="r" style="font-weight:800">${money(c.aging.total)}</td>
+    <td class="r" style="font-weight:800">${money(venc(c.aging))}</td>
   </tr>`).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}.page{padding:30px 34px}</style></head><body><div class="page">
     <div class="top">
@@ -167,10 +166,10 @@ function htmlGeneral(d: GeneralReporte, fechaCorte: string) {
     <div class="bar">${barra}</div>
     <div class="leg">${leyenda}</div>
     <table>
-      <thead><tr><th>Cliente</th><th class="r">Fact.</th><th class="r">Por vencer</th><th class="r">1–30</th><th class="r">31–60</th><th class="r">61–90</th><th class="r">91+</th><th class="r">Total</th></tr></thead>
+      <thead><tr><th>Cliente</th><th class="r">Fact.</th><th class="r">1–30</th><th class="r">31–60</th><th class="r">61–90</th><th class="r">91+</th><th class="r">Total</th></tr></thead>
       <tbody>${filas}
         <tr class="tfoot"><td>TOTAL (${d.resumen.clientesPend} clientes)</td><td class="r">${d.resumen.facturasPend}</td>
-          <td class="r">${dash(d.aging.vigente)}</td><td class="r">${dash(d.aging.d1_30)}</td><td class="r">${dash(d.aging.d31_60)}</td><td class="r">${dash(d.aging.d61_90)}</td><td class="r">${dash(d.aging.d91)}</td><td class="r">${money(d.aging.total)}</td></tr>
+          <td class="r">${dash(d.aging.d1_30)}</td><td class="r">${dash(d.aging.d31_60)}</td><td class="r">${dash(d.aging.d61_90)}</td><td class="r">${dash(d.aging.d91)}</td><td class="r">${money(venc(d.aging))}</td></tr>
       </tbody>
     </table>
     <div class="foot"><span>PIPSA Montacargas · Documento interno</span><span>Generado el ${ahora()}</span></div>
