@@ -1,12 +1,18 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { api } from "../api";
+import { Ico, Combobox } from "../components/GlassUI";
+import { descargarEstadoCuenta, descargarReporteGeneral } from "../utils/estadoCuenta";
+import "../glass.css";
 
 // ─── Tipos ────────────────────────────────────────────────────
 type Rango = "vigente" | "por_vencer" | "vencida_30" | "vencida_60" | "mas_60" | "sin_definir";
 type Estado = "VIGENTE" | "POR_VENCER" | "VENCIDA" | "PARCIAL_VIGENTE" | "PARCIAL_POR_VENCER" | "PARCIAL_VENCIDA" | "VENCIMIENTO_POR_DEFINIR" | "PAGADA";
 type Riesgo = "bajo" | "medio" | "alto" | "critico" | "por_definir";
 
+type Aging = { vigente: number; d1_30: number; d31_60: number; d61_90: number; d91: number; sinDef: number; total: number };
+
 type ClienteResumen = {
+  aging: Aging;
   nombre: string; rfc: string | null;
   diasCreditoCli: number | null;
   facturasPend: number;
@@ -25,6 +31,7 @@ type Factura = {
   diasTranscurridos: number; diasVencidos: number; diasParaVencer: number | null;
   sinFechaVencimiento: boolean; rango: Rango; estado: Estado;
   ultimoPago: string | null; nombreReceptor: string | null;
+  moneda?: string; conceptos?: { descripcion: string; cantidad: number; importe: number }[];
 };
 
 type Resumen = {
@@ -40,11 +47,12 @@ type Rangos = Record<Rango, number>;
 type Paginacion = { page: number; limit: number; total: number; pages: number };
 
 type ApiCartera = {
-  fechaCorte: string; resumen: Resumen; rangos: Rangos;
+  fechaCorte: string; resumen: Resumen; rangos: Rangos; aging: Aging;
   clientes: ClienteResumen[]; paginacion: Paginacion;
 };
 
 type DetalleCliente = {
+  aging: Aging;
   cliente: { nombre: string; rfc: string | null; diasCreditoCli: number | null; condicionesPago: string | null; contacto: string | null; email: string | null };
   resumen: { saldoTotal: number; saldoVencido: number; saldoVigente: number; facturasPend: number; maxDiasVencidos: number; ultimoPago: string | null };
   facturas: Factura[];
@@ -71,43 +79,6 @@ function fmtFecha(d: string | null) {
 }
 function fmtPct(n: number) { return n.toFixed(1) + "%"; }
 
-// ─── Paleta de rangos ─────────────────────────────────────────
-const RANGO_COLOR: Record<Rango, string> = {
-  vigente:     "var(--green)",
-  por_vencer:  "#f0b429",
-  vencida_30:  "#f97316",
-  vencida_60:  "var(--red)",
-  mas_60:      "#7f1d1d",
-  sin_definir: "var(--text-muted)",
-};
-const RANGO_LABEL: Record<Rango, string> = {
-  vigente:     "Vigente",
-  por_vencer:  "Por vencer",
-  vencida_30:  "Vencida 1–30d",
-  vencida_60:  "Vencida 31–60d",
-  mas_60:      "Vencida +60d",
-  sin_definir: "Sin definir",
-};
-const ESTADO_COLOR: Record<Estado, string> = {
-  VIGENTE:                  "var(--green)",
-  POR_VENCER:               "#f0b429",
-  VENCIDA:                  "var(--red)",
-  PARCIAL_VIGENTE:          "var(--green)",
-  PARCIAL_POR_VENCER:       "#f0b429",
-  PARCIAL_VENCIDA:          "#f97316",
-  VENCIMIENTO_POR_DEFINIR:  "var(--text-muted)",
-  PAGADA:                   "var(--green)",
-};
-const ESTADO_LABEL: Record<Estado, string> = {
-  VIGENTE:                  "Vigente",
-  POR_VENCER:               "Por vencer",
-  VENCIDA:                  "Vencida",
-  PARCIAL_VIGENTE:          "Parcial vigente",
-  PARCIAL_POR_VENCER:       "Parcial por vencer",
-  PARCIAL_VENCIDA:          "Parcial vencida",
-  VENCIMIENTO_POR_DEFINIR:  "Sin fecha",
-  PAGADA:                   "Pagada",
-};
 const RIESGO_COLOR: Record<Riesgo, string> = {
   bajo:       "var(--green)",
   medio:      "#f0b429",
@@ -123,12 +94,45 @@ const RIESGO_LABEL: Record<Riesgo, string> = {
   por_definir:"Por definir",
 };
 
-// ─── Descripción de vencimiento ───────────────────────────────
-function descVenc(f: Factura) {
-  if (f.sinFechaVencimiento) return "Vencimiento por definir";
-  if (f.diasVencidos === 0 && f.diasParaVencer === 0) return "Vence hoy";
-  if (f.diasVencidos > 0) return `Vencida por ${f.diasVencidos} día${f.diasVencidos !== 1 ? "s" : ""}`;
-  return `Vence en ${f.diasParaVencer} día${f.diasParaVencer !== 1 ? "s" : ""}`;
+// ─── Antigüedad en columnas (días desde el vencimiento) ──────
+const AG_COLS: { k: keyof Aging; label: string; color: string }[] = [
+  { k: "vigente", label: "Por vencer",  color: "#22c55e" },
+  { k: "d1_30",   label: "1 – 30",      color: "#eab308" },
+  { k: "d31_60",  label: "31 – 60",     color: "#f97316" },
+  { k: "d61_90",  label: "61 – 90",     color: "#ef4444" },
+  { k: "d91",     label: "91 +",        color: "#b91c1c" },
+];
+const dashMxn = (n: number) => (n > 0.004 ? mxn(n) : "—");
+
+function PanelAging({ aging }: { aging: Aging }) {
+  const tot = aging.total || 1;
+  return (
+    <div className="table-card" style={{ padding: "18px 22px", marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>Antigüedad de saldos · días desde el vencimiento</p>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total cartera <b style={{ color: "var(--text)", fontSize: "1.05rem", marginLeft: 6 }}>{mxn(aging.total)}</b></p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+        {AG_COLS.map(c => (
+          <div key={c.k} className="g-ag-cell" style={{ ["--c" as any]: c.color }}>
+            <span className="g-ag-lbl">{c.label} <small>días</small></span>
+            <span className="g-ag-val">{mxn(aging[c.k])}</span>
+            <span className="g-ag-pct">{((aging[c.k] / tot) * 100).toFixed(1)}%</span>
+          </div>
+        ))}
+        {aging.sinDef > 0.004 && (
+          <div className="g-ag-cell" style={{ ["--c" as any]: "#94a3b8" }}>
+            <span className="g-ag-lbl">Sin fecha</span>
+            <span className="g-ag-val">{mxn(aging.sinDef)}</span>
+            <span className="g-ag-pct">{((aging.sinDef / tot) * 100).toFixed(1)}%</span>
+          </div>
+        )}
+      </div>
+      <div className="g-ag-bar">
+        {AG_COLS.map(c => { const pct = (aging[c.k] / tot) * 100; return pct < 0.4 ? null : <div key={c.k} style={{ width: pct + "%", background: c.color }} title={`${c.label} días: ${mxn(aging[c.k])}`} />; })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Badge ─────────────────────────────────────────────────────
@@ -139,35 +143,6 @@ function Badge({ color, label }: { color: string; label: string }) {
       background: color + "22", padding: "2px 8px", borderRadius: 10,
       whiteSpace: "nowrap",
     }}>{label}</span>
-  );
-}
-
-// ─── Barra de distribución por rangos ────────────────────────
-function BarraRangos({ rangos, total }: { rangos: Rangos; total: number }) {
-  if (total <= 0) return null;
-  const orden: Rango[] = ["vigente", "por_vencer", "vencida_30", "vencida_60", "mas_60", "sin_definir"];
-  return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", gap: 1 }}>
-        {orden.map(r => {
-          const pct = total > 0 ? (rangos[r] / total) * 100 : 0;
-          if (pct < 0.5) return null;
-          return <div key={r} style={{ width: pct + "%", background: RANGO_COLOR[r], transition: "width .3s" }} title={`${RANGO_LABEL[r]}: ${mxn(rangos[r])}`} />;
-        })}
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 8 }}>
-        {orden.map(r => {
-          const pct = total > 0 ? (rangos[r] / total) * 100 : 0;
-          if (rangos[r] === 0) return null;
-          return (
-            <span key={r} style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: RANGO_COLOR[r], display: "inline-block" }} />
-              {RANGO_LABEL[r]} · {mxn(rangos[r])} ({pct.toFixed(1)}%)
-            </span>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -207,6 +182,46 @@ export default function Cartera() {
 
   // Ref para abortar requests anteriores
   const abortRef = useRef<AbortController | null>(null);
+
+  const [generando, setGenerando] = useState<"" | "general" | "cliente">("");
+
+  function armarQuery(f: Filtros, extra?: Record<string, string>) {
+    const q = new URLSearchParams();
+    if (f.fechaCorte)          q.set("fechaCorte", f.fechaCorte);
+    if (f.cliente)             q.set("cliente", f.cliente);
+    if (f.busqueda)            q.set("busqueda", f.busqueda);
+    if (f.estado)              q.set("estado", f.estado);
+    if (f.rango)               q.set("rango", f.rango);
+    if (f.emisionDesde)        q.set("emisionDesde", f.emisionDesde);
+    if (f.emisionHasta)        q.set("emisionHasta", f.emisionHasta);
+    if (f.vencimientoDesde)    q.set("vencimientoDesde", f.vencimientoDesde);
+    if (f.vencimientoHasta)    q.set("vencimientoHasta", f.vencimientoHasta);
+    if (f.saldoMin)            q.set("saldoMin", f.saldoMin);
+    if (f.saldoMax)            q.set("saldoMax", f.saldoMax);
+    if (f.soloVencidas)        q.set("soloVencidas", "true");
+    if (f.sinFechaVencimiento) q.set("sinFechaVencimiento", "true");
+    if (f.soloParcial)         q.set("soloParcial", "true");
+    q.set("sort", f.sort); q.set("page", String(f.page)); q.set("limit", String(f.limit));
+    if (extra) Object.entries(extra).forEach(([k, v]) => q.set(k, v));
+    return q;
+  }
+
+  async function descargarGeneral() {
+    setGenerando("general");
+    try {
+      const res = await api.get(`/cartera?${armarQuery(filtros, { page: "1", limit: "200", sort: "saldo" })}`);
+      await descargarReporteGeneral(res.data, filtros.fechaCorte);
+    } catch { alert("No se pudo generar el reporte. Intenta de nuevo."); }
+    finally { setGenerando(""); }
+  }
+
+  async function descargarCliente() {
+    if (!detalle) return;
+    setGenerando("cliente");
+    try { await descargarEstadoCuenta(detalle, filtros.fechaCorte); }
+    catch { alert("No se pudo generar el estado de cuenta. Intenta de nuevo."); }
+    finally { setGenerando(""); }
+  }
 
   // ── Carga principal ─────────────────────────────────────────
   const cargar = useCallback(async (f: Filtros) => {
@@ -308,7 +323,6 @@ export default function Cartera() {
 
   // ─────────────────────────────────────────────────────────
   const r = data?.resumen;
-  const rangos = data?.rangos;
 
   return (
     <>
@@ -325,7 +339,10 @@ export default function Cartera() {
           <button className="btn btn-secondary btn-sm" onClick={() => { setFiltrosOpen(o => !o); setDraft(filtros); }}>
             🔽 Filtros {filtrosActivos > 0 && <span style={{ marginLeft: 4, background: "var(--accent)", color: "#000", borderRadius: 99, fontSize: "0.65rem", fontWeight: 700, padding: "1px 6px" }}>{filtrosActivos}</span>}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={exportarCSV}>⬇️ CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportarCSV}><Ico name="download" size={14} /> CSV</button>
+          <button className="btn btn-primary btn-sm" onClick={descargarGeneral} disabled={generando !== "" || loading}>
+            <Ico name="printer" size={14} /> {generando === "general" ? "Generando…" : "Reporte PDF"}
+          </button>
         </div>
       </div>
 
@@ -356,28 +373,19 @@ export default function Cartera() {
               </div>
               <div className="form-group">
                 <label className="form-label">Estado</label>
-                <select className="form-select" value={draft.estado} onChange={e => setDraft(p => ({ ...p, estado: e.target.value }))}>
-                  <option value="">Todos</option>
-                  <option value="VIGENTE">Vigente</option>
-                  <option value="VENCIDA">Vencida</option>
-                  <option value="POR_VENCER">Por vencer</option>
-                  <option value="PARCIAL_VIGENTE">Parcial vigente</option>
-                  <option value="PARCIAL_POR_VENCER">Parcial por vencer</option>
-                  <option value="PARCIAL_VENCIDA">Parcial vencida</option>
-                  <option value="VENCIMIENTO_POR_DEFINIR">Sin fecha de vencimiento</option>
-                </select>
+                <Combobox value={draft.estado} onChange={v => setDraft(p => ({ ...p, estado: v }))} placeholder="Todos" clearable options={[
+                  { value: "VIGENTE", label: "Vigente" }, { value: "VENCIDA", label: "Vencida" }, { value: "POR_VENCER", label: "Por vencer" },
+                  { value: "PARCIAL_VIGENTE", label: "Parcial vigente" }, { value: "PARCIAL_POR_VENCER", label: "Parcial por vencer" },
+                  { value: "PARCIAL_VENCIDA", label: "Parcial vencida" }, { value: "VENCIMIENTO_POR_DEFINIR", label: "Sin fecha de vencimiento" },
+                ]} />
               </div>
               <div className="form-group">
                 <label className="form-label">Rango de antigüedad</label>
-                <select className="form-select" value={draft.rango} onChange={e => setDraft(p => ({ ...p, rango: e.target.value }))}>
-                  <option value="">Todos</option>
-                  <option value="vigente">Vigente</option>
-                  <option value="por_vencer">Por vencer (1–60 días)</option>
-                  <option value="vencida_30">Vencida 1–30 días</option>
-                  <option value="vencida_60">Vencida 31–60 días</option>
-                  <option value="mas_60">Vencida más de 60 días</option>
-                  <option value="sin_definir">Sin definir</option>
-                </select>
+                <Combobox value={draft.rango} onChange={v => setDraft(p => ({ ...p, rango: v }))} placeholder="Todos" clearable options={[
+                  { value: "vigente", label: "Vigente" }, { value: "por_vencer", label: "Por vencer (1–60 días)" },
+                  { value: "vencida_30", label: "Vencida 1–30 días" }, { value: "vencida_60", label: "Vencida 31–60 días" },
+                  { value: "mas_60", label: "Vencida más de 60 días" }, { value: "sin_definir", label: "Sin definir" },
+                ]} />
               </div>
               <div className="form-group">
                 <label className="form-label">Emisión desde</label>
@@ -440,13 +448,7 @@ export default function Cartera() {
               <StatCard icon="❓" val={String(r.facturasSinFecha)} label="Sin fecha vencimiento" color="var(--text-muted)" />
             </div>
 
-            {/* Barra de rangos */}
-            {rangos && (
-              <div className="table-card" style={{ padding: "14px 20px", marginBottom: 16 }}>
-                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Distribución por antigüedad</p>
-                <BarraRangos rangos={rangos} total={r.carteraTotal} />
-              </div>
-            )}
+            {data?.aging && <PanelAging aging={data.aging} />}
           </>
         )}
 
@@ -455,14 +457,11 @@ export default function Cartera() {
           <div className="table-card-header">
             <p className="table-card-title">Saldo por cliente</p>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <select className="form-select" style={{ fontSize: "0.78rem", padding: "6px 10px" }} value={filtros.sort} onChange={e => cambiarSort(e.target.value)}>
-                <option value="saldo">Mayor saldo</option>
-                <option value="saldoVencido">Mayor saldo vencido</option>
-                <option value="diasVencidos">Más días vencidos</option>
-                <option value="antigüedad">Factura más antigua</option>
-                <option value="nombre">Nombre A–Z</option>
-                <option value="riesgo">Mayor riesgo</option>
-              </select>
+              <div style={{ width: 210 }}><Combobox value={filtros.sort} onChange={v => v && cambiarSort(v)} options={[
+                { value: "saldo", label: "Mayor saldo" }, { value: "saldoVencido", label: "Mayor saldo vencido" },
+                { value: "diasVencidos", label: "Más días vencidos" }, { value: "antigüedad", label: "Factura más antigua" },
+                { value: "nombre", label: "Nombre A–Z" }, { value: "riesgo", label: "Mayor riesgo" },
+              ]} /></div>
             </div>
           </div>
 
@@ -473,17 +472,15 @@ export default function Cartera() {
           ) : (
             <>
               <div style={{ overflowX: "auto" }}>
-                <table style={{ fontSize: "0.82rem", minWidth: 900 }}>
+                <table style={{ fontSize: "0.82rem", minWidth: 1100 }}>
                   <thead>
                     <tr>
-                      <th style={{ minWidth: 180 }}>Cliente</th>
-                      <th style={{ textAlign: "center" }}>Facturas</th>
-                      <th style={{ textAlign: "right" }}>C. vigente</th>
-                      <th style={{ textAlign: "right" }}>C. vencida</th>
-                      <th style={{ textAlign: "right" }}>Saldo total</th>
-                      <th>Fact. más antigua</th>
-                      <th style={{ textAlign: "center" }}>Días venc.</th>
-                      <th>Último pago</th>
+                      <th style={{ minWidth: 190 }}>Cliente</th>
+                      <th style={{ textAlign: "center" }}>Fact.</th>
+                      {AG_COLS.map(c => (
+                        <th key={c.k} style={{ textAlign: "right", boxShadow: `inset 0 -2px 0 ${c.color}` }}>{c.k === "vigente" ? "Por vencer" : c.label + " días"}</th>
+                      ))}
+                      <th style={{ textAlign: "right" }}>Total</th>
                       <th>Riesgo</th>
                       <th></th>
                     </tr>
@@ -493,32 +490,41 @@ export default function Cartera() {
                       <tr key={c.nombre}>
                         <td style={{ fontWeight: 600 }}>
                           {c.nombre}
-                          {c.rfc && <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{c.rfc}</div>}
+                          {c.rfc && <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>{c.rfc}</div>}
                         </td>
                         <td style={{ textAlign: "center" }}>{c.facturasPend}</td>
-                        <td style={{ textAlign: "right", color: "var(--green)" }}>{c.saldoVigente > 0 ? mxn(c.saldoVigente) : "—"}</td>
-                        <td style={{ textAlign: "right", color: c.saldoVencido > 0 ? "var(--red)" : "var(--text-muted)" }}>
-                          {c.saldoVencido > 0 ? mxn(c.saldoVencido) : "—"}
-                        </td>
+                        {AG_COLS.map(col => {
+                          const v = c.aging?.[col.k] ?? 0;
+                          return (
+                            <td key={col.k} style={{ textAlign: "right", color: v > 0.004 ? col.color : "var(--text-muted)", fontWeight: col.k === "d91" && v > 0 ? 700 : 500 }}>
+                              {dashMxn(v)}
+                            </td>
+                          );
+                        })}
                         <td style={{ textAlign: "right" }}>
-                          <span style={{ fontWeight: 700, color: c.saldoVencido > 0 ? "var(--red)" : "var(--text)" }}>{mxn(c.saldoTotal)}</span>
+                          <span style={{ fontWeight: 800 }}>{mxn(c.saldoTotal)}</span>
+                          {(c.aging?.sinDef ?? 0) > 0.004 && <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 400 }}>{mxn(c.aging.sinDef)} sin fecha</div>}
                         </td>
-                        <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{fmtFecha(c.fechaMasAntigua)}</td>
-                        <td style={{ textAlign: "center" }}>
-                          {c.maxDiasVencidos > 0
-                            ? <span style={{ fontWeight: 700, color: c.maxDiasVencidos > 90 ? "#7f1d1d" : c.maxDiasVencidos > 30 ? "var(--red)" : "#f97316" }}>{c.maxDiasVencidos}</span>
-                            : <span style={{ color: "var(--text-muted)" }}>—</span>}
-                        </td>
-                        <td style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{fmtFecha(c.ultimoPago)}</td>
                         <td><Badge color={RIESGO_COLOR[c.riesgo]} label={RIESGO_LABEL[c.riesgo]} /></td>
                         <td>
-                          <button className="btn btn-secondary btn-sm" onClick={() => abrirDetalle(c.nombre)} disabled={loadDet}>
-                            {loadDet ? "…" : "👁️"}
+                          <button className="btn btn-secondary btn-sm" onClick={() => abrirDetalle(c.nombre)} disabled={loadDet} title="Ver estado de cuenta">
+                            {loadDet ? "…" : <Ico name="eye" size={15} />}
                           </button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
+                  {data.aging && (
+                    <tfoot>
+                      <tr className="g-tfoot">
+                        <td>TOTAL · {data.paginacion.total} clientes</td>
+                        <td style={{ textAlign: "center" }}>{data.resumen.facturasPend}</td>
+                        {AG_COLS.map(col => <td key={col.k} style={{ textAlign: "right", color: col.color }}>{dashMxn(data.aging[col.k])}</td>)}
+                        <td style={{ textAlign: "right" }}>{mxn(data.aging.total)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
 
@@ -540,72 +546,98 @@ export default function Cartera() {
       {/* ── Modal detalle cliente ─────────────────────────── */}
       {detalle && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setDetalle(null); }}>
-          <div className="modal" style={{ maxWidth: 780, maxHeight: "92vh", overflowY: "auto" }}>
+          <div className="modal" style={{ maxWidth: 1020, maxHeight: "92vh", overflowY: "auto" }}>
             <button className="modal-close" onClick={() => setDetalle(null)}>✕</button>
-            <h2 className="modal-title">{detalle.cliente.nombre}</h2>
-            {detalle.cliente.rfc && <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginBottom: 4 }}>RFC: {detalle.cliente.rfc}</p>}
-            {detalle.cliente.condicionesPago && <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: 4 }}>Condiciones: {detalle.cliente.condicionesPago}</p>}
-            {detalle.cliente.diasCreditoCli && <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginBottom: 8 }}>Plazo de crédito: {detalle.cliente.diasCreditoCli} días</p>}
-
-            {/* Resumen cliente */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10, marginBottom: 20 }}>
-              {[
-                { label: "Saldo total",   val: mxn(detalle.resumen.saldoTotal),   color: "var(--red)" },
-                { label: "Saldo vigente", val: mxn(detalle.resumen.saldoVigente), color: "var(--green)" },
-                { label: "Saldo vencido", val: mxn(detalle.resumen.saldoVencido), color: "var(--red)" },
-                { label: "Facturas pend.",val: String(detalle.resumen.facturasPend), color: "var(--accent)" },
-                { label: "Mayor atraso",  val: detalle.resumen.maxDiasVencidos > 0 ? detalle.resumen.maxDiasVencidos + " días" : "—", color: "#f97316" },
-                { label: "Último pago",   val: fmtFecha(detalle.resumen.ultimoPago), color: "var(--text)" },
-              ].map(item => (
-                <div key={item.label} style={{ background: "var(--surface2)", borderRadius: "var(--radius-sm)", padding: "10px 12px", border: "1px solid var(--border)" }}>
-                  <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: 3 }}>{item.label}</p>
-                  <p style={{ fontWeight: 700, color: item.color, fontSize: "0.9rem" }}>{item.val}</p>
-                </div>
-              ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", paddingRight: 36 }}>
+              <div>
+                <p style={{ fontSize: "0.68rem", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 700 }}>Estado de cuenta</p>
+                <h2 className="modal-title" style={{ marginBottom: 4 }}>{detalle.cliente.nombre}</h2>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                  {detalle.cliente.rfc ? `RFC ${detalle.cliente.rfc} · ` : ""}
+                  Corte al {fmtFecha(filtros.fechaCorte)}
+                  {detalle.cliente.diasCreditoCli ? ` · Crédito ${detalle.cliente.diasCreditoCli} días` : ""}
+                  {detalle.cliente.condicionesPago ? ` · ${detalle.cliente.condicionesPago}` : ""}
+                </p>
+              </div>
+              <button className="btn btn-primary" onClick={descargarCliente} disabled={generando !== ""}>
+                <Ico name="download" size={15} /> {generando === "cliente" ? "Generando…" : "Descargar estado de cuenta"}
+              </button>
             </div>
 
-            {/* Tabla de facturas */}
-            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>
-              Facturas pendientes ({detalle.facturas.length})
+            {/* Antigüedad del cliente */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, margin: "18px 0 20px" }}>
+              {AG_COLS.map(c => (
+                <div key={c.k} className="g-ag-cell" style={{ ["--c" as any]: c.color }}>
+                  <span className="g-ag-lbl">{c.k === "vigente" ? "Por vencer" : c.label} {c.k !== "vigente" && <small>días</small>}</span>
+                  <span className="g-ag-val">{mxn(detalle.aging?.[c.k] ?? 0)}</span>
+                </div>
+              ))}
+              {(detalle.aging?.sinDef ?? 0) > 0.004 && (
+                <div className="g-ag-cell" style={{ ["--c" as any]: "#94a3b8" }}>
+                  <span className="g-ag-lbl">Sin fecha</span><span className="g-ag-val">{mxn(detalle.aging.sinDef)}</span>
+                </div>
+              )}
+              <div className="g-ag-cell g-ag-total">
+                <span className="g-ag-lbl">Total adeudado</span>
+                <span className="g-ag-val">{mxn(detalle.aging?.total ?? detalle.resumen.saldoTotal)}</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8, letterSpacing: ".08em" }}>
+              Facturas pendientes ({detalle.facturas.length}) · último pago {fmtFecha(detalle.resumen.ultimoPago)}
             </p>
             <div style={{ overflowX: "auto" }}>
-              <table style={{ fontSize: "0.78rem", minWidth: 680 }}>
+              <table style={{ fontSize: "0.8rem", minWidth: 860 }}>
                 <thead>
                   <tr>
                     <th>Folio</th>
                     <th>Emisión</th>
-                    <th>Vencimiento</th>
+                    <th>Vence</th>
+                    <th style={{ minWidth: 220 }}>Concepto</th>
                     <th style={{ textAlign: "right" }}>Total</th>
                     <th style={{ textAlign: "right" }}>Pagado</th>
                     <th style={{ textAlign: "right" }}>Saldo</th>
-                    <th>Situación</th>
-                    <th>Rango</th>
-                    <th>Estado</th>
+                    <th>Atraso</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detalle.facturas.map(f => (
-                    <tr key={f._id}>
-                      <td style={{ fontWeight: 600 }}>
-                        {f.folioFactura || "Sin folio"}
-                        {f.uuid && <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontFamily: "monospace" }}>{f.uuid.slice(0, 18)}…</div>}
-                      </td>
-                      <td style={{ color: "var(--text-muted)" }}>{fmtFecha(f.fechaEmision)}</td>
-                      <td style={{ color: "var(--text-muted)" }}>
-                        {f.fechaVencimiento ? fmtFecha(f.fechaVencimiento) : <span style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>Por definir</span>}
-                        {f.diasCredito && <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{f.diasCredito} días</div>}
-                      </td>
-                      <td style={{ textAlign: "right" }}>{mxn(f.total)}</td>
-                      <td style={{ textAlign: "right", color: "var(--green)" }}>{f.montoPagado > 0 ? mxn(f.montoPagado) : "—"}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700, color: f.diasVencidos > 0 ? "var(--red)" : "var(--text)" }}>{mxn(f.saldo)}</td>
-                      <td style={{ whiteSpace: "nowrap", fontSize: "0.72rem", color: f.diasVencidos > 0 ? "var(--red)" : f.sinFechaVencimiento ? "var(--text-muted)" : "var(--green)" }}>
-                        {descVenc(f)}
-                      </td>
-                      <td><Badge color={RANGO_COLOR[f.rango]} label={RANGO_LABEL[f.rango]} /></td>
-                      <td><Badge color={ESTADO_COLOR[f.estado]} label={ESTADO_LABEL[f.estado]} /></td>
-                    </tr>
-                  ))}
+                  {detalle.facturas.map(f => {
+                    const cs = (f.conceptos ?? []).filter(c => c.descripcion);
+                    const col = f.sinFechaVencimiento ? "var(--text-muted)" : f.diasVencidos <= 0 ? "var(--green)"
+                      : f.diasVencidos <= 30 ? "#eab308" : f.diasVencidos <= 60 ? "#f97316" : f.diasVencidos <= 90 ? "#ef4444" : "#b91c1c";
+                    return (
+                      <tr key={f._id}>
+                        <td style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{f.folioFactura || "Sin folio"}</td>
+                        <td style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtFecha(f.fechaEmision)}</td>
+                        <td style={{ color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                          {f.fechaVencimiento ? fmtFecha(f.fechaVencimiento) : "Por definir"}
+                          {f.diasCredito ? <div style={{ fontSize: "0.65rem" }}>{f.diasCredito} días</div> : null}
+                        </td>
+                        <td style={{ fontSize: "0.74rem", color: "var(--text-muted)", whiteSpace: "normal", lineHeight: 1.35 }}>
+                          {cs.length ? (
+                            <>
+                              {cs.slice(0, 3).map((c, i) => <div key={i}>• {c.descripcion.length > 80 ? c.descripcion.slice(0, 80) + "…" : c.descripcion}</div>)}
+                              {cs.length > 3 && <div style={{ fontStyle: "italic" }}>+ {cs.length - 3} más</div>}
+                            </>
+                          ) : "—"}
+                        </td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{mxn(f.total)}</td>
+                        <td style={{ textAlign: "right", color: "var(--green)", whiteSpace: "nowrap" }}>{f.montoPagado > 0 ? mxn(f.montoPagado) : "—"}</td>
+                        <td style={{ textAlign: "right", fontWeight: 800, whiteSpace: "nowrap" }}>{mxn(f.saldo)}</td>
+                        <td><Badge color={col} label={f.sinFechaVencimiento ? "Sin fecha" : f.diasVencidos <= 0 ? "Al corriente" : `${f.diasVencidos} día${f.diasVencidos !== 1 ? "s" : ""}`} /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                <tfoot>
+                  <tr className="g-tfoot">
+                    <td colSpan={4}>TOTAL</td>
+                    <td style={{ textAlign: "right" }}>{mxn(detalle.facturas.reduce((a, f) => a + f.total, 0))}</td>
+                    <td style={{ textAlign: "right" }}>{mxn(detalle.facturas.reduce((a, f) => a + f.montoPagado, 0))}</td>
+                    <td style={{ textAlign: "right" }}>{mxn(detalle.aging?.total ?? detalle.resumen.saldoTotal)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
 
