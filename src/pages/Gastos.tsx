@@ -825,9 +825,10 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
         <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>{label}</span>
         {pagado && fechaPago && <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>}
         {parcial && (
-          <div style={{ marginTop: 4 }}>
-            <p style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--red)", lineHeight: 1.2 }}>Falta ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-            <p style={{ fontSize: "0.66rem", color: "var(--text-muted)", marginTop: 1 }}>Ya pagado ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+          <div style={{ marginTop: 6 }}>
+            <p style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)" }}>Falta por pagar</p>
+            <p style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--red)", lineHeight: 1.15, whiteSpace: "nowrap" }}>${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+            <p style={{ fontSize: "0.66rem", color: "var(--text-muted)", marginTop: 2, whiteSpace: "nowrap" }}>Ya pagado ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
           </div>
         )}
         {pagado && comprobantePago && <a href={urlArchivo(comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>📎 Descargar comprobante</a>}
@@ -965,7 +966,7 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
-                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 100px 100px 140px",
+                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 110px 120px 200px",
                       gap: 0, padding: "12px 20px", borderBottom: "1px solid var(--border)",
                       background: g.estatus === "cancelada" ? "rgba(107,114,128,0.04)" : g.estatus === "parcial" ? "rgba(245,158,11,0.03)" : pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.05)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem", opacity: g.estatus === "cancelada" ? 0.65 : 1,
@@ -997,18 +998,10 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        {g.estatus === "parcial" ? (
-                          <>
-                            <p style={{ fontWeight: 800, color: "var(--red)", whiteSpace: "nowrap", fontSize: "1rem" }}>
-                              ${Math.max(0, g.total - totalPagadoParcial(g)).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                            </p>
-                            <p style={{ fontSize: "0.66rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>falta · total ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                          </>
-                        ) : (
-                          <p style={{ fontWeight: 700, color: g.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
-                            ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                          </p>
-                        )}
+                        <p style={{ fontWeight: 700, color: g.estatus === "cancelada" || g.estatus === "parcial" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
+                          ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                        </p>
+                        {g.estatus === "parcial" && <p style={{ fontSize: "0.64rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".06em" }}>total factura</p>}
                         {g.moneda && g.moneda !== "MXN" && <span style={{ fontSize: "0.68rem", fontWeight: 700, background: "rgba(59,130,246,0.15)", color: "var(--blue)", padding: "1px 6px", borderRadius: 4, marginTop: 2, display: "inline-block" }}>{g.moneda}</span>}
                         {g.moneda === "MXN" && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>MXN</span>}
                       </div>
