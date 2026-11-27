@@ -468,7 +468,7 @@ export default function Gastos() {
 
   function abrirModalPago(id: string, tipo: "fiscal" | "nofiscal", gasto?: GastoFiscal) {
     setModalPago({ id, tipo, gasto });
-    setTipoPago(gasto?.estatus === "pagado" ? "parcial" : "total");
+    setTipoPago(gasto?.estatus === "pagado" || gasto?.estatus === "parcial" ? "parcial" : "total");
     setFormPago({
       fechaPago: new Date().toISOString().split("T")[0],
       comprobantePago: "",
@@ -543,6 +543,16 @@ export default function Gastos() {
       if (!formPago.monto || formPago.monto <= 0) {
         alert("Ingresa un monto válido para el pago parcial.");
         return;
+      }
+      {
+        const gAct = fiscales.find(x => x._id === modalPago.id);
+        if (gAct?.estatus === "parcial") {
+          const pend = gAct.total - totalPagadoParcial(gAct);
+          if (formPago.monto > pend + 0.01) {
+            alert(`El monto no puede ser mayor a lo que falta por pagar ($${pend.toLocaleString("es-MX", { minimumFractionDigits: 2 })}).`);
+            return;
+          }
+        }
       }
       setSavingPago(true);
       try {
@@ -814,7 +824,12 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
       <div>
         <span style={{ padding: "3px 8px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 600, background: bg, color, border: `1px solid ${border}`, whiteSpace: "nowrap" as const }}>{label}</span>
         {pagado && fechaPago && <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{fmt(fechaPago)}</p>}
-        {parcial && <p style={{ fontSize: "0.68rem", color: "var(--accent)", marginTop: 2 }}>Pagado: ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })} · Falta: ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>}
+        {parcial && (
+          <div style={{ marginTop: 4 }}>
+            <p style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--red)", lineHeight: 1.2 }}>Falta ${Math.max(0, pendiente).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+            <p style={{ fontSize: "0.66rem", color: "var(--text-muted)", marginTop: 1 }}>Ya pagado ${pagadoAcum.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+          </div>
+        )}
         {pagado && comprobantePago && <a href={urlArchivo(comprobantePago)} download target="_blank" rel="noreferrer" style={{ fontSize: "0.68rem", color: "var(--blue)", display: "block" }}>📎 Descargar comprobante</a>}
       </div>
     );
@@ -982,9 +997,18 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>IVA ${g.iva.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <p style={{ fontWeight: 700, color: g.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
-                          ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                        </p>
+                        {g.estatus === "parcial" ? (
+                          <>
+                            <p style={{ fontWeight: 800, color: "var(--red)", whiteSpace: "nowrap", fontSize: "1rem" }}>
+                              ${Math.max(0, g.total - totalPagadoParcial(g)).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                            </p>
+                            <p style={{ fontSize: "0.66rem", color: "var(--text-muted)", whiteSpace: "nowrap" }}>falta · total ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                          </>
+                        ) : (
+                          <p style={{ fontWeight: 700, color: g.estatus === "cancelada" ? "var(--text-muted)" : "var(--red)", whiteSpace: "nowrap", fontSize: "0.88rem" }}>
+                            ${g.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                          </p>
+                        )}
                         {g.moneda && g.moneda !== "MXN" && <span style={{ fontSize: "0.68rem", fontWeight: 700, background: "rgba(59,130,246,0.15)", color: "var(--blue)", padding: "1px 6px", borderRadius: 4, marginTop: 2, display: "inline-block" }}>{g.moneda}</span>}
                         {g.moneda === "MXN" && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2, display: "inline-block" }}>MXN</span>}
                       </div>
@@ -1415,8 +1439,8 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) { setModalPago(null); setPagoMultipleIds([]); } }}>
           <div className="modal" style={{ maxWidth: 500 }}>
             <button className="modal-close" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>✕</button>
-            <h2 className="modal-title">{modalPago.gasto?.estatus === "pagado" ? "➕ Complemento de pago" : "Registrar pago"}</h2>
-            {modalPago.tipo === "fiscal" && pagoMultipleIds.length === 1 && modalPago.gasto?.estatus !== "pagado" && (
+            <h2 className="modal-title">{modalPago.gasto?.estatus === "pagado" ? "➕ Complemento de pago" : modalPago.gasto?.estatus === "parcial" ? "Registrar siguiente pago" : "Registrar pago"}</h2>
+            {modalPago.tipo === "fiscal" && pagoMultipleIds.length === 1 && modalPago.gasto?.estatus !== "pagado" && modalPago.gasto?.estatus !== "parcial" && (
               <div style={{ display: "flex", gap: 0, marginBottom: 16, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", overflow: "hidden" }}>
                 {(["total", "parcial"] as const).map(t => (
                   <button key={t} onClick={() => setTipoPago(t)}
@@ -1430,6 +1454,42 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
               const g = fiscales.find(x => x._id === modalPago.id);
               const pagadoAcum = totalPagadoParcial(g ?? {} as GastoFiscal);
               const pendiente  = (g?.total ?? 0) - pagadoAcum;
+              if (g?.estatus === "parcial") {
+                const monto = Number(formPago.monto) || 0;
+                const restante = pendiente - monto;
+                const liquida = monto > 0 && restante <= 0.01;
+                const excede = restante < -0.01;
+                const mx = (n: number) => "$" + Math.max(0, n).toLocaleString("es-MX", { minimumFractionDigits: 2 });
+                return (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ textAlign: "center", padding: "18px 14px 14px", borderRadius: "var(--radius)", border: "1px solid rgba(239,68,68,0.35)", background: "linear-gradient(180deg,rgba(239,68,68,0.14),rgba(239,68,68,0.04))" }}>
+                      <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-muted)" }}>Falta por pagar</p>
+                      <p style={{ fontSize: "2.3rem", fontWeight: 800, color: "var(--red)", lineHeight: 1.15, margin: "4px 0 8px" }}>{mx(pendiente)}</p>
+                      <p style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>
+                        Total factura {mx(g?.total ?? 0)} · Saldo anterior pagado <span style={{ color: "var(--green)", fontWeight: 600 }}>{mx(pagadoAcum)}</span>
+                      </p>
+                    </div>
+                    <div className="form-group" style={{ margin: "14px 0 0" }}>
+                      <label className="form-label">Monto de este pago *</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input className="form-input" type="number" min={0} max={pendiente} step="0.01" value={formPago.monto || ""}
+                          onChange={e => setFormPago(p => ({ ...p, monto: +e.target.value }))} placeholder="Ej. 50000" style={{ flex: 1 }} />
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ whiteSpace: "nowrap" }}
+                          onClick={() => setFormPago(p => ({ ...p, monto: Math.round(pendiente * 100) / 100 }))}>
+                          Pagar lo que falta
+                        </button>
+                      </div>
+                      <p style={{ fontSize: "0.78rem", marginTop: 6, color: excede ? "var(--red)" : liquida ? "var(--green)" : "var(--text-muted)", fontWeight: liquida || excede ? 700 : 500 }}>
+                        {monto <= 0 ? "Captura cuánto vas a pagar ahora." : excede ? `El monto excede lo que falta por ${mx(-restante)}.` : liquida ? "✅ Con este pago la factura queda liquidada." : `Después de este pago quedarán ${mx(restante)} por pagar.`}
+                      </p>
+                    </div>
+                    <div className="form-group" style={{ margin: "8px 0 0" }}>
+                      <label className="form-label">Notas (opcional)</label>
+                      <input className="form-input" value={formPago.notas} onChange={e => setFormPago(p => ({ ...p, notas: e.target.value }))} placeholder="Ej. Segunda parcialidad" />
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div style={{ marginBottom: 12, padding: "12px 14px", background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "var(--radius-sm)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: "0.82rem" }}>
@@ -1511,10 +1571,15 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => { setModalPago(null); setPagoMultipleIds([]); }}>Cancelar</button>
               <button className="btn btn-primary" onClick={registrarPago}
-                disabled={savingPago || uploadingPago || pagoMultipleIds.length === 0}
+                disabled={savingPago || uploadingPago || pagoMultipleIds.length === 0 || (modalPago.gasto?.estatus === "parcial" && (!formPago.monto || formPago.monto <= 0))}
                 style={{ background: (tipoPago === "parcial" || modalPago.gasto?.estatus === "pagado") ? "var(--accent)" : "var(--green)", color: (tipoPago === "parcial" || modalPago.gasto?.estatus === "pagado") ? "#000" : "#fff" }}>
                 {savingPago ? "Registrando..."
                   : modalPago.gasto?.estatus === "pagado" ? "➕ Registrar complemento"
+                  : modalPago.gasto?.estatus === "parcial" ? (() => {
+                      const gg = fiscales.find(x => x._id === modalPago.id);
+                      const pend = (gg?.total ?? 0) - totalPagadoParcial(gg ?? {} as GastoFiscal);
+                      return formPago.monto > 0 && pend - formPago.monto <= 0.01 ? "✅ Liquidar saldo" : "🔶 Registrar pago parcial";
+                    })()
                   : tipoPago === "parcial" ? "🔶 Registrar pago parcial"
                   : pagoMultipleIds.length > 1 ? `✅ Pagar ${pagoMultipleIds.length} facturas`
                   : "✅ Confirmar pago"}
