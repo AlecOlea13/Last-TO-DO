@@ -966,8 +966,8 @@ ${reporteTipo === "general" ? `<div class="grand-total">TOTAL GENERAL: $${(total
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {paginadosF.map((g, idx) => (
                     <div key={g._id} style={{
-                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 110px 120px 200px",
-                      gap: 0, padding: "12px 20px", borderBottom: "1px solid var(--border)",
+                      display: "grid", gridTemplateColumns: "32px 110px 1fr 90px 1fr 110px 130px 200px",
+                      gap: 0, columnGap: 16, padding: "12px 20px", borderBottom: "1px solid var(--border)",
                       background: g.estatus === "cancelada" ? "rgba(107,114,128,0.04)" : g.estatus === "parcial" ? "rgba(245,158,11,0.03)" : pagoMultipleIds.includes(g._id) ? "rgba(34,197,94,0.05)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)",
                       alignItems: "start", fontSize: "0.8rem", opacity: g.estatus === "cancelada" ? 0.65 : 1,
                     }}>
